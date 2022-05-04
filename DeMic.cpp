@@ -458,7 +458,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     }
     data.uCallbackMessage = UM_NOTIFY;
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
-    StringCchCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], LoadStringRes(IDS_APP_TITLE).c_str());
+    StringCchCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], LoadStringRes(IDS_NOTIFICATION_TIP).c_str());
     if (!Shell_NotifyIconW(modify ? NIM_MODIFY : NIM_ADD, &data)) {
         SHOW_LAST_ERROR();
         return;

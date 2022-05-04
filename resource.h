@@ -10,6 +10,7 @@
 #define IDM_EXIT                        105
 #define IDS_HOTKEY                      105
 #define IDS_ALREADY_RUNNING             106
+#define IDS_NOTIFICATION_TIP            107
 #define IDC_DEMIC                       109
 #define IDR_MAINFRAME                   128
 #define IDI_MICPHONE                    138
