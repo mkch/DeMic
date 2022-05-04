@@ -57,9 +57,6 @@
     <Image Include="microphone_muted.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="icon1.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Iconsmind-Outline-Microphone-2.ico">
       <Filter>Resource Files</Filter>
     </Image>
