@@ -21,6 +21,7 @@
 #define IDC_NOTIF_MENU                  146
 #define IDR_RT_MANIFEST1                149
 #define IDR_241                         150
+#define IDR_MENU1                       152
 #define IDC_HOTKEY                      1004
 #define ID_MENU_HOTKEYSETTING           32771
 #define ID_MENU_EXIT                    32772
@@ -34,7 +35,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        152
+#define _APS_NEXT_RESOURCE_VALUE        153
 #define _APS_NEXT_COMMAND_VALUE         32776
 #define _APS_NEXT_CONTROL_VALUE         1005
 #define _APS_NEXT_SYMED_VALUE           110
