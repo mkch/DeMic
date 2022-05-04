@@ -264,17 +264,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
-            HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
-            menu = GetSubMenu(menu, 0);
-            CheckMenuItem(menu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
+            const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
+            const HMENU popupMenu = GetSubMenu(menu, 0);
+            CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
             GetCursorPos(&pt);
-            UINT_PTR cmd = TrackPopupMenu(menu,
+            UINT_PTR cmd = TrackPopupMenu(popupMenu,
                 TPM_RETURNCMD | GetSystemMetrics(SM_MENUDROPALIGNMENT),
                 pt.x, pt.y,
                 0,
                 hWnd, NULL);
-            DestroyMenu(menu);
+            if (!DestroyMenu(popupMenu)) {
+                SHOW_LAST_ERROR();
+            }
             if (cmd != 0) {
                 ProcessNotifyMenuCmd(hWnd, cmd);
             }
