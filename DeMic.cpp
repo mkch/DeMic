@@ -297,7 +297,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         break;
     case MicCtrl::WM_MUTED_STATE_CHANGED:
-        OutputDebugString(wParam == 1 ? L"Muted\n" : L"Unmuted\n");
+        //OutputDebugString(wParam == 1 ? L"Muted\n" : L"Unmuted\n");
         UpdateNotification(hWnd);
         break;
     default:

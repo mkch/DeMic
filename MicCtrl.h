@@ -59,14 +59,14 @@ private:
                 return S_OK; // State is not changed.
             }
             if (pNotify->bMuted) {
-                OutputDebugString(devName.c_str());
-                OutputDebugString(L" Muted\n");
+                //OutputDebugString(devName.c_str());
+                //OutputDebugString(L" Muted\n");
 
                 muted = 1;
             }
             else {
-                OutputDebugString(devName.c_str());
-                OutputDebugString(L" Unmuted\n");
+                //OutputDebugString(devName.c_str());
+                //OutputDebugString(L" Unmuted\n");
                 muted = 0;
             }
             SendMessage(mainWindow, WM_MUTED_STATE_CHANGED, muted, 0);
