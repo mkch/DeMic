@@ -10,6 +10,7 @@
 #include <string>
 #include <map>
 #include <strsafe.h>
+#include <windowsx.h>
 
 #include "MicCtrl.h"
 
@@ -44,6 +45,7 @@ void EnableStartOnBoot();
 void DisableStartOnBoot();
 bool ResetHotKey();
 static bool AlreadyRunning();
+void PlaySoundFile(LPCWSTR path);
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -51,9 +53,15 @@ std::wstring appTitle;                          // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 HWND mainWindow = NULL;
 HWND hotKeySettingWindow = NULL;
+HWND soundSettingsWindow = NULL;
 
 BYTE hotKeyVk = 0; // Current hotkey vk of the hotkey contorl.
-BYTE hotKeyMod = 0;// Current hotkey modifier of the hotkey control.
+BYTE hotKeyMod = 0; // Current hotkey modifier of the hotkey control.
+
+BOOL enableOnSound = FALSE; // Enable mic on notification sound.
+std::wstring onSoundPath; // The mic on notification sound file.
+BOOL enableOffSound = FALSE; // Enable mic off notification sound.
+std::wstring offSoundPath; // The sound file.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -61,6 +69,7 @@ BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 MicCtrl micCtrl;
 bool micMuted = false;
@@ -187,6 +196,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
        return FALSE;
    }
 
+   soundSettingsWindow = CreateDialog(hInst, MAKEINTRESOURCE(IDD_SOUND_SETTINGS), mainWindow, SoundSettings);
+   if (!soundSettingsWindow) {
+       return FALSE;
+   }
+
    //ShowWindow(mainWindow, nCmdShow);
    //UpdateWindow(mainWindow);
 
@@ -210,10 +224,36 @@ void ShowHotKeySettingWindow() {
     SendMessage(hotKey, HKM_SETHOTKEY, wParam, 0);
     ShowWindow(hotKeySettingWindow, SW_SHOW);
 }
+
+void ShowSoundSettingsWindow() {
+    HWND onEnable = GetDlgItem(soundSettingsWindow, IDC_ENABLE_ON_SOUND);
+    HWND onPath = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_PATH);
+    HWND onPathSelect = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_SELECT);
+    HWND onPlay = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_PLAY);
+
+    HWND offEnable = GetDlgItem(soundSettingsWindow, IDC_ENABLE_OFF_SOUND);
+    HWND offPath = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_PATH);
+    HWND offPathSelect = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_SELECT);
+    HWND offPlay = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_PLAY);
+
+    Button_SetCheck(onEnable, enableOnSound);
+    SetWindowTextW(onPath, onSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : onSoundPath.c_str());
+    SetWindowTextW(offPath, offSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : offSoundPath.c_str());
+
+    Button_SetCheck(offEnable, enableOffSound);
+    EnableWindow(onPlay, !onSoundPath.empty());
+    EnableWindow(offPlay, !offSoundPath.empty());
+
+    ShowWindow(soundSettingsWindow, SW_SHOW);
+}
+
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
     case ID_MENU_HOTKEYSETTING:
         ShowHotKeySettingWindow();
+        break;
+    case ID_MENU_SOUND_SETTINGS:
+        ShowSoundSettingsWindow();
         break;
     case ID_MENU_START_ON_BOOT:
         if (StartOnBootEnabled()) {
@@ -229,6 +269,25 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     }
 }
 
+void PlaySoundFile(LPCWSTR path) {
+    PlaySoundW(path, NULL,
+        SND_FILENAME | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
+}
+
+void ToggleMuted() {
+    const auto muted = micCtrl.GetMuted();
+    if (muted) {
+        if (enableOnSound && !onSoundPath.empty()) {
+            PlaySoundFile(onSoundPath.c_str());
+        }
+    } else {
+        if (enableOffSound && !offSoundPath.empty()) {
+            PlaySoundFile(offSoundPath.c_str());
+        }
+    }
+    micCtrl.SetMuted(!muted);
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
@@ -237,7 +296,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case WM_HOTKEY:
         if (wParam == HOTKEY_ID) {
-            micCtrl.SetMuted(!micCtrl.GetMuted());
+            ToggleMuted();
         }
         break;
     case WM_DEVICECHANGE:
@@ -282,7 +341,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 ProcessNotifyMenuCmd(hWnd, cmd);
             }
         } else if (lParam == WM_LBUTTONUP) {
-            micCtrl.SetMuted(!micCtrl.GetMuted());
+            ToggleMuted();
         }
         return 0;
     case WM_PAINT: {
@@ -362,7 +421,7 @@ bool ResetHotKey() {
     return true;
 }
 
-// Message handler for about box.
+// Message handler for hotkey setting box.
 INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
@@ -406,6 +465,85 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     }
     return (INT_PTR)FALSE;
 }
+
+bool SelectSoundFile(HWND owner, std::wstring& path) {
+    wchar_t buf[1024] = { 0 };
+    OPENFILENAMEW ofn = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = owner;
+    ofn.lpstrFilter = L"*.wav\0*.wav\0*.*\0*.*\0";
+    ofn.lpstrFile = buf;
+    ofn.nMaxFile = sizeof(buf) / sizeof(buf[0]);
+    ofn.Flags = OFN_FILEMUSTEXIST;
+    if (!GetOpenFileNameW(&ofn)) {
+        DWORD err = GetLastError();
+        if (err != 0) {
+            SHOW_ERROR(err);
+        }
+        return false;
+    }
+    path = buf;
+    return true;
+}
+
+// Message handler for sound settings box.
+INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        return (INT_PTR)TRUE;
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDC_ON_SOUND_SELECT:{
+            PlaySoundFile(NULL); // Giving a chance to stop playing.
+            if (!SelectSoundFile(hDlg, onSoundPath)) {
+                break;
+            }
+            SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), onSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : onSoundPath.c_str());
+            EnableWindow(GetDlgItem(hDlg, IDC_ON_SOUND_PLAY), !onSoundPath.empty());
+            break;
+        }
+        case IDC_OFF_SOUND_SELECT: {
+            PlaySoundFile(NULL); // Giving a chance to stop playing.
+            if (!SelectSoundFile(hDlg, offSoundPath)) {
+                break;
+            }
+            SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), offSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : offSoundPath.c_str());
+            EnableWindow(GetDlgItem(hDlg, IDC_OFF_SOUND_PLAY), !offSoundPath.empty());
+            break;
+        }
+        case IDC_ON_SOUND_PLAY:
+            PlaySoundFile(onSoundPath.c_str());
+            break;
+        case IDC_OFF_SOUND_PLAY:
+            PlaySoundFile(offSoundPath.c_str());
+            break;
+        case IDOK: {
+            enableOnSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND));
+            wchar_t buf[1024] = { 0 };
+            GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
+            onSoundPath = buf;
+            
+            enableOffSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_OFF_SOUND));
+            buf[0] = 0;
+            GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
+            offSoundPath = buf;
+
+            WriteConfig();
+        }
+        EndDialog(hDlg, LOWORD(wParam));
+        return (INT_PTR)TRUE;
+    case IDCANCEL:
+        EndDialog(hDlg, LOWORD(wParam));
+        return (INT_PTR)TRUE;
+    }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
 
 void ShowError(const wchar_t* msg) {
     MessageBoxW(NULL, msg, LoadStringRes(IDS_APP_TITLE).c_str(), MB_ICONERROR);
@@ -490,6 +628,12 @@ static const auto CONFIG_HOTKEY = L"HotKey";
 // ini key.
 static const auto CONFIG_VALUE = L"Value";
 
+static const auto CONFIG_SOUND = L"Sound";
+static const auto CONFIG_ON_ENABLE = L"OnEnable";
+static const auto CONFIG_ON_PATH = L"OnPath";
+static const auto CONFIG_OFF_ENABLE = L"OffEnable";
+static const auto CONFIG_OFF_PATH = L"OffPath";
+
 // Read settings from config file.
 void ReadConfig() {
     if (!PathFileExistsW(configFilePath.c_str())) {
@@ -498,12 +642,34 @@ void ReadConfig() {
     const int value = GetPrivateProfileIntW(CONFIG_HOTKEY, CONFIG_VALUE, 0, configFilePath.c_str());
     hotKeyVk = LOBYTE(LOWORD(value));
     hotKeyMod = HIBYTE(LOWORD(value));
+
+    enableOnSound = GetPrivateProfileIntW(CONFIG_SOUND, CONFIG_ON_ENABLE, 0, configFilePath.c_str());
+    wchar_t buf[1024] = { 0 };
+    GetPrivateProfileStringW(CONFIG_SOUND, CONFIG_ON_PATH, L"", buf, sizeof(buf)/sizeof(buf[0]), configFilePath.c_str());
+    onSoundPath = buf;
+
+    enableOffSound = GetPrivateProfileIntW(CONFIG_SOUND, CONFIG_OFF_ENABLE, 0, configFilePath.c_str());
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_SOUND, CONFIG_OFF_PATH, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    offSoundPath = buf;
 }
 
 // Write settings to config file.
 void WriteConfig() {
     WritePrivateProfileStringW(CONFIG_HOTKEY, CONFIG_VALUE,
         std::to_wstring(MAKEWORD(hotKeyVk, hotKeyMod)).c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_ON_ENABLE,
+        std::to_wstring(enableOnSound).c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_OFF_ENABLE,
+        std::to_wstring(enableOffSound).c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_ON_PATH,
+        onSoundPath.c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_OFF_PATH,
+        offSoundPath.c_str(),
         configFilePath.c_str());
 }
 
