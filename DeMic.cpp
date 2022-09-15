@@ -490,6 +490,7 @@ bool SelectSoundFile(HWND owner, std::wstring& path) {
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
+    wchar_t buf[1024] = { 0 };
     switch (message)
     {
     case WM_INITDIALOG:
@@ -498,31 +499,37 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
         switch (LOWORD(wParam)) {
         case IDC_ON_SOUND_SELECT:{
             PlaySoundFile(NULL); // Giving a chance to stop playing.
-            if (!SelectSoundFile(hDlg, onSoundPath)) {
+            std::wstring path;
+            if (!SelectSoundFile(hDlg, path)) {
                 break;
             }
-            SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), onSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : onSoundPath.c_str());
-            EnableWindow(GetDlgItem(hDlg, IDC_ON_SOUND_PLAY), !onSoundPath.empty());
+            SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
+            EnableWindow(GetDlgItem(hDlg, IDC_ON_SOUND_PLAY), !path.empty());
             break;
         }
         case IDC_OFF_SOUND_SELECT: {
             PlaySoundFile(NULL); // Giving a chance to stop playing.
-            if (!SelectSoundFile(hDlg, offSoundPath)) {
+            std::wstring path;
+            if (!SelectSoundFile(hDlg, path)) {
                 break;
             }
-            SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), offSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : offSoundPath.c_str());
-            EnableWindow(GetDlgItem(hDlg, IDC_OFF_SOUND_PLAY), !offSoundPath.empty());
+            SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
+            EnableWindow(GetDlgItem(hDlg, IDC_OFF_SOUND_PLAY), !path.empty());
             break;
         }
         case IDC_ON_SOUND_PLAY:
-            PlaySoundFile(onSoundPath.c_str());
+            buf[0] = 0;
+            GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
+            PlaySoundFile(buf);
             break;
         case IDC_OFF_SOUND_PLAY:
-            PlaySoundFile(offSoundPath.c_str());
+            buf[0] = 0;
+            GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
+            PlaySoundFile(buf);
             break;
         case IDOK: {
             enableOnSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND));
-            wchar_t buf[1024] = { 0 };
+            buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
             onSoundPath = buf;
             
