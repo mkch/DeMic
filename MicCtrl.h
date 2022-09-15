@@ -5,7 +5,6 @@
 #include <cassert>
 #include <Mmdeviceapi.h>
 #include <Endpointvolume.h>
-#include <atlbase.h>
 
 // The title of application.
 extern std::wstring appTitle;
@@ -25,8 +24,6 @@ private:
         AudioEndpointVolumeCallback(const std::wstring& dev) :
             _cRef(1), devName(dev) {
         }
-
-        ~AudioEndpointVolumeCallback(){}
 
         ULONG STDMETHODCALLTYPE AddRef(){
             return InterlockedIncrement(&_cRef);
@@ -73,9 +70,9 @@ private:
             return S_OK;
         }
     };
-	typedef std::pair<CComPtr<IAudioEndpointVolume>, CComPtr<AudioEndpointVolumeCallback>> AudioVolumeCallback;
+	typedef std::pair<IAudioEndpointVolume*, AudioEndpointVolumeCallback*> AudioVolumeCallback;
 private:
-    CComPtr<IMMDeviceEnumerator> devEnum;
+    IMMDeviceEnumerator* devEnum;
     std::vector<AudioVolumeCallback> audioCallbacks;
 public:
 	MicCtrl();

@@ -5,6 +5,7 @@
 #include "resource.h"
 #include "DeMic.h"
 #include <Commctrl.h>
+#include <shlwapi.h>
 #include <Dbt.h>
 #include <string>
 #include <map>
