@@ -31,6 +31,7 @@
 #define IDC_ON_SOUND_PLAY               1006
 #define IDC_ON_SOUND_SELECT             1007
 #define IDC_ON_SOUND_PATH               1008
+#define IDC_OFF_SOUND_PATH				1009
 #define IDC_ENABLE_OFF_SOUND            1011
 #define IDC_OFF_SOUND_PLAY              1012
 #define IDC_OFF_SOUND_SELECT            1013
@@ -44,7 +45,6 @@
 #define ID_MENU_SOUND_SETTINGS          32778
 #define ID_MENU_SOUNDSETTINGS32779      32779
 #define IDC_HOTKEY_STATIC               -1
-#define IDC_OFF_SOUND_PATH              -1
 
 // Next default values for new objects
 // 
@@ -53,7 +53,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        155
 #define _APS_NEXT_COMMAND_VALUE         32780
-#define _APS_NEXT_CONTROL_VALUE         1009
+#define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

@@ -45,7 +45,8 @@ void EnableStartOnBoot();
 void DisableStartOnBoot();
 bool ResetHotKey();
 static bool AlreadyRunning();
-void PlaySoundFile(LPCWSTR path);
+void PlayOnSound(const std::wstring&);
+void PlayOffSound(const std::wstring&);
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -241,8 +242,6 @@ void ShowSoundSettingsWindow() {
     SetWindowTextW(offPath, offSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : offSoundPath.c_str());
 
     Button_SetCheck(offEnable, enableOffSound);
-    EnableWindow(onPlay, !onSoundPath.empty());
-    EnableWindow(offPlay, !offSoundPath.empty());
 
     ShowWindow(soundSettingsWindow, SW_SHOW);
 }
@@ -274,15 +273,19 @@ void PlaySoundFile(LPCWSTR path) {
         SND_FILENAME | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
 
+void PlaySystemSound(DWORD sndID) {
+    PlaySound((LPCTSTR)sndID, NULL, SND_ALIAS_ID | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
+}
+
 void ToggleMuted() {
     const auto muted = micCtrl.GetMuted();
     if (muted) {
-        if (enableOnSound && !onSoundPath.empty()) {
-            PlaySoundFile(onSoundPath.c_str());
+        if (enableOnSound){
+            PlayOnSound(onSoundPath);
         }
     } else {
-        if (enableOffSound && !offSoundPath.empty()) {
-            PlaySoundFile(offSoundPath.c_str());
+        if (enableOffSound) {
+            PlayOffSound(offSoundPath);
         }
     }
     micCtrl.SetMuted(!muted);
@@ -467,6 +470,13 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 }
 
 bool SelectSoundFile(HWND owner, std::wstring& path) {
+    std::wstring winMediaDir;
+    wchar_t winDir[MAX_PATH] = { 0 };
+    const UINT r = GetWindowsDirectoryW(winDir, MAX_PATH);
+    if (r > 0 && r < MAX_PATH) {
+        winMediaDir = std::wstring(winDir) + L"\\Media";
+    }
+
     wchar_t buf[1024] = { 0 };
     OPENFILENAMEW ofn = { 0 };
     ofn.lStructSize = sizeof(ofn);
@@ -474,6 +484,7 @@ bool SelectSoundFile(HWND owner, std::wstring& path) {
     ofn.lpstrFilter = L"*.wav\0*.wav\0*.*\0*.*\0";
     ofn.lpstrFile = buf;
     ofn.nMaxFile = sizeof(buf) / sizeof(buf[0]);
+    ofn.lpstrInitialDir = winMediaDir.c_str();
     ofn.Flags = OFN_FILEMUSTEXIST;
     if (!GetOpenFileNameW(&ofn)) {
         DWORD err = GetLastError();
@@ -486,10 +497,28 @@ bool SelectSoundFile(HWND owner, std::wstring& path) {
     return true;
 }
 
+void PlayOnSound(const std::wstring& path) {
+    if (path.empty()) {
+        // Play default.
+        PlaySystemSound(SND_ALIAS_SYSTEMDEFAULT);
+    } else {
+        PlaySoundFile(path.c_str());
+    }
+}
+
+void PlayOffSound(const std::wstring& path) {
+    if (path.empty()) {
+        // Play default.
+        PlaySystemSound(SND_ALIAS_SYSTEMHAND);
+    }
+    else {
+        PlaySoundFile(path.c_str());
+    }
+}
+
 // Message handler for sound settings box.
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    UNREFERENCED_PARAMETER(lParam);
     wchar_t buf[1024] = { 0 };
     switch (message)
     {
@@ -497,6 +526,16 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
         return (INT_PTR)TRUE;
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
+        case IDC_ON_SOUND_PATH:
+            if (HIWORD(wParam) == STN_DBLCLK) {
+                SetWindowTextW((HWND)lParam, LoadStringRes(IDS_NAN).c_str());
+            }
+            break;
+        case IDC_OFF_SOUND_PATH:
+            if (HIWORD(wParam) == STN_DBLCLK) {
+                SetWindowTextW((HWND)lParam, LoadStringRes(IDS_NAN).c_str());
+            }
+            break;
         case IDC_ON_SOUND_SELECT:{
             PlaySoundFile(NULL); // Giving a chance to stop playing.
             std::wstring path;
@@ -504,7 +543,6 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
                 break;
             }
             SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
-            EnableWindow(GetDlgItem(hDlg, IDC_ON_SOUND_PLAY), !path.empty());
             break;
         }
         case IDC_OFF_SOUND_SELECT: {
@@ -514,38 +552,38 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
                 break;
             }
             SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
-            EnableWindow(GetDlgItem(hDlg, IDC_OFF_SOUND_PLAY), !path.empty());
             break;
         }
-        case IDC_ON_SOUND_PLAY:
+        case IDC_ON_SOUND_PLAY: {
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            PlaySoundFile(buf);
+            PlayOnSound(std::wstring(LoadStringRes(IDS_NAN) == buf ? L"" : buf));
             break;
-        case IDC_OFF_SOUND_PLAY:
+        }
+        case IDC_OFF_SOUND_PLAY:{}
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            PlaySoundFile(buf);
+            PlayOffSound(std::wstring(LoadStringRes(IDS_NAN) == buf ? L"" : buf));
             break;
         case IDOK: {
             enableOnSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND));
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            onSoundPath = buf;
+            onSoundPath = LoadStringRes(IDS_NAN) == buf ? L"" : buf;
             
             enableOffSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_OFF_SOUND));
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            offSoundPath = buf;
+            offSoundPath = LoadStringRes(IDS_NAN) == buf ? L"" : buf;
 
             WriteConfig();
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
         }
-        EndDialog(hDlg, LOWORD(wParam));
-        return (INT_PTR)TRUE;
-    case IDCANCEL:
-        EndDialog(hDlg, LOWORD(wParam));
-        return (INT_PTR)TRUE;
-    }
+        case IDCANCEL:
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
         break;
     }
     return (INT_PTR)FALSE;
