@@ -605,8 +605,9 @@ void ShowError(DWORD lastError, const wchar_t* file, int line) {
     wchar_t* msg = NULL;
     FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         NULL, lastError, 0, (LPWSTR)&msg, 0, NULL);
-    ShowError(msg, file, line);
+    const std::wstring message = (std::wostringstream() << lastError << L": " << (msg ? msg : L"<unknown>")).str();
     LocalFree(msg);
+    ShowError(message.c_str(), file, line);
 }
 
 static std::map<UINT, std::wstring> stringResMap;
