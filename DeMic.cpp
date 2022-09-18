@@ -131,7 +131,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        if (IsDialogMessage(hotKeySettingWindow, &msg)) {
+        if (IsDialogMessage(hotKeySettingWindow, &msg) || 
+            IsDialogMessage(soundSettingsWindow, &msg)) {
             continue;
         }
         if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
