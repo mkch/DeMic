@@ -82,7 +82,9 @@ MicCtrl::MicCtrl() {
 }
 
 MicCtrl::~MicCtrl() {
-	devEnum->Release();
+	if (devEnum) {
+		devEnum->Release();
+	}
 }
 
 void MicCtrl::Init() {
