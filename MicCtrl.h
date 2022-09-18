@@ -72,7 +72,7 @@ private:
     };
 	typedef std::pair<IAudioEndpointVolume*, AudioEndpointVolumeCallback*> AudioVolumeCallback;
 private:
-    IMMDeviceEnumerator* devEnum;
+    IMMDeviceEnumerator* devEnum = NULL;
     std::vector<AudioVolumeCallback> audioCallbacks;
 public:
 	MicCtrl();
