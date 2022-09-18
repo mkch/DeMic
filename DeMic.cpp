@@ -275,7 +275,7 @@ void PlaySoundFile(LPCWSTR path) {
 }
 
 void PlaySystemSound(DWORD sndID) {
-    PlaySound((LPCTSTR)sndID, NULL, SND_ALIAS_ID | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
+    PlaySound((LPCTSTR)(size_t)sndID, NULL, SND_ALIAS_ID | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
 
 void ToggleMuted() {
