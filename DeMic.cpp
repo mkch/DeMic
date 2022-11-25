@@ -52,9 +52,9 @@ void PlayOnSound(const std::wstring&);
 void PlayOffSound(const std::wstring&);
 
 // Global Variables:
-HINSTANCE hInst;                                // current instance
-std::wstring appTitle;                          // The title bar text
-WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+HINSTANCE hInst;                                    // current instance
+std::wstring appTitle;                              // The title bar text
+LPCWSTR szWindowClass = L"github.com/mkch/DeMic";   // the main window class name
 HWND mainWindow = NULL;
 HWND hotKeySettingWindow = NULL;
 HWND soundSettingsWindow = NULL;
@@ -120,7 +120,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     WCHAR szTitle[MAX_LOADSTRING] = { 0 };
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     appTitle = &szTitle[0];
-    LoadStringW(hInstance, IDC_DEMIC, szWindowClass, MAX_LOADSTRING);
 
     if (AlreadyRunning()) {
         if (cmd != CMD_NONE) {
