@@ -20,6 +20,9 @@
 static const UINT UM_NOTIFY = WM_USER + 1;
 static const int HOTKEY_ID = 1;
 
+// Microphone command message used by command line args.
+static const UINT UM_MIC_CMD = WM_USER + 2;
+
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
 #define _WT(str) L""##str
@@ -77,6 +80,14 @@ bool micMuted = false;
 std::wstring configFilePath, startOnBootCmd;
 bool silentMode = false;
 
+// Command line args of microphone commands.
+enum MIC_CMD {
+    CMD_NONE,   // No command.
+    CMD_ON,     // Turn on microphone.
+    CMD_OFF,    // Turn off microphone.
+    CMD_TOGGLE, // Toggle on/off.
+};
+
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPWSTR    lpCmdLine,
@@ -84,20 +95,46 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    // TODO: Place code here.
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
+
+    MIC_CMD  cmd = CMD_NONE;
+
+    if (argc > 1) {
+        const auto argv1 = std::wstring(argv[1]);
+        if (argv1 == L"/silent" || argv1 == L"-silent") {
+            silentMode = true;
+        } else if (argv1 == L"/on" || argv1 == L"-on") {
+            silentMode = true;
+            cmd = CMD_ON;
+        } else if (argv1 == L"/off" || argv1 == L"-off") {
+            silentMode = true;
+            cmd = CMD_OFF;
+        } else if (argv1 == L"/toggle" || argv1 == L"-toggle") {
+            silentMode = true;
+            cmd = CMD_TOGGLE;
+        }
+    }
+
+    // Initialize global strings
+    WCHAR szTitle[MAX_LOADSTRING] = { 0 };
+    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+    appTitle = &szTitle[0];
+    LoadStringW(hInstance, IDC_DEMIC, szWindowClass, MAX_LOADSTRING);
 
     if (AlreadyRunning()) {
+        if (cmd != CMD_NONE) {
+            // Find the main window of running process.
+            const HWND hwnd = FindWindowW(szWindowClass, appTitle.c_str());
+            if (hwnd != NULL) {
+                PostMessage(hwnd, UM_MIC_CMD, cmd, 0);
+                return 0;
+            }
+        }
         MessageBoxW(NULL, LoadStringRes(IDS_ALREADY_RUNNING).c_str(), LoadStringRes(IDS_APP_TITLE).c_str(), MB_ICONERROR);
         return 1;
     }
 
-    int argc = 0;
-    wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
-
-    if (argc > 1) {
-        const auto argv1 = std::wstring(argv[1]);
-        silentMode = (argv1 == L"/silent" || argv1 == L"-silent");
-    }
 
     // Initialize configFilePath.
     std::wstring moduleFilePath = argv[0];
@@ -110,11 +147,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     micCtrl.Init();
 
-    // Initialize global strings
-    WCHAR szTitle[MAX_LOADSTRING]={0};
-    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    appTitle = &szTitle[0];
-    LoadStringW(hInstance, IDC_DEMIC, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
 
     // Perform application initialization:
@@ -128,6 +160,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_DEMIC));
 
     MSG msg;
+
+    // Process microphone comands from command line.
+    if (cmd != CMD_NONE) {
+        PostMessage(mainWindow, UM_MIC_CMD, cmd, 0);
+    }
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {
@@ -278,16 +315,38 @@ void PlaySystemSound(DWORD sndID) {
     PlaySound((LPCTSTR)(size_t)sndID, NULL, SND_ALIAS_ID | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
 
+void PlayOnSound() {
+    if (enableOnSound) {
+        PlayOnSound(onSoundPath);
+    }
+}
+
+void PlayOffSound() {
+    if (enableOffSound) {
+        PlayOffSound(offSoundPath);
+    }
+}
+
+void TurnOnMic() {
+    if (micCtrl.GetMuted()) {
+        micCtrl.SetMuted(false);
+        PlayOnSound();
+    }
+}
+
+void TurnOffMic() {
+    if (!micCtrl.GetMuted()) {
+        micCtrl.SetMuted(true);
+        PlayOffSound();
+    }
+}
+
 void ToggleMuted() {
     const auto muted = micCtrl.GetMuted();
     if (muted) {
-        if (enableOnSound){
-            PlayOnSound(onSoundPath);
-        }
+        PlayOnSound();
     } else {
-        if (enableOffSound) {
-            PlayOffSound(offSoundPath);
-        }
+        PlayOffSound(offSoundPath);
     }
     micCtrl.SetMuted(!muted);
 }
@@ -295,6 +354,19 @@ void ToggleMuted() {
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
+    case UM_MIC_CMD:
+        switch (wParam) {
+            case CMD_ON:
+                TurnOnMic();
+                break;
+            case CMD_OFF:
+                TurnOffMic();
+                break;
+            case CMD_TOGGLE:
+                ToggleMuted();
+                break;
+        }
+        break;
     case WM_CREATE:
         ShowNotification(hWnd, silentMode);
         break;
