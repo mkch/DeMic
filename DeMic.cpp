@@ -345,7 +345,7 @@ void ToggleMuted() {
     if (muted) {
         PlayOnSound();
     } else {
-        PlayOffSound(offSoundPath);
+        PlayOffSound();
     }
     micCtrl.SetMuted(!muted);
 }
