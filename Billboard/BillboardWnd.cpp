@@ -28,9 +28,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
         return 0;
-    case WM_LBUTTONDOWN:
-        host->ToggleMuted(state);
+    case WM_LBUTTONDOWN: {
+        static const int PADDING = 4;
+        RECT rect = { 0 };
+        GetClientRect(hWnd, &rect);
+        InflateRect(&rect, -PADDING*2, -PADDING*2);
+        POINT pt = { 0 };
+        pt.x = LOWORD(lParam);
+        pt.y = HIWORD(lParam);
+        if (PtInRect(&rect, pt)) {
+            host->ToggleMuted(state);
+        }
         break;
+    }
     case WM_PAINT: {
             PAINTSTRUCT ps = { 0 };
             HDC hDC = BeginPaint(hWnd, &ps);
