@@ -13,6 +13,10 @@
 #include <windowsx.h>
 
 #include "MicCtrl.h"
+#include "Plugin.h"
+
+// Currrent version of DeMic.
+static const wchar_t* VERSION = L"0.4";
 
 #define MAX_LOADSTRING 1024
 
@@ -25,18 +29,6 @@ static const UINT UM_MIC_CMD = WM_USER + 2;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
-#define _WT(str) L""##str
-// Should be:
-// #define W__FILE__ L""##__FILE__
-// But the linter of VSCode does not like it(bug?).
-#define W__FILE__ _WT(__FILE__)
-
-#define SHOW_ERROR(err) ShowError(err, W__FILE__, __LINE__)
-#define SHOW_LAST_ERROR() SHOW_ERROR(GetLastError())
-
-void ShowError(const wchar_t* msg);
-void ShowError(const wchar_t* msg, const wchar_t* file, int line);
-void ShowError(DWORD lastError, const wchar_t* file, int line);
 const std::wstring& LoadStringRes(UINT resId);
 void ShowNotification(HWND hwnd, bool silent);
 void UpdateNotification(HWND hwnd);
@@ -79,6 +71,8 @@ MicCtrl micCtrl;
 bool micMuted = false;
 std::wstring configFilePath, startOnBootCmd;
 bool silentMode = false;
+
+HMENU popupMenu = NULL;
 
 // Command line args of microphone commands.
 enum MIC_CMD {
@@ -239,6 +233,12 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
        return FALSE;
    }
 
+   // This menu is never destroyed via my code.
+   const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
+   popupMenu = GetSubMenu(menu, 0);
+
+   LoadPlugins();
+
    //ShowWindow(mainWindow, nCmdShow);
    //UpdateWindow(mainWindow);
 
@@ -302,6 +302,9 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     case ID_MENU_EXIT:
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
         break;
+    default:
+        ProcessPluginMenuCmd((UINT)cmd);
+        break;
     }
 }
 
@@ -348,6 +351,10 @@ void ToggleMuted() {
         PlayOffSound();
     }
     micCtrl.SetMuted(!muted);
+}
+
+BOOL IsMuted() {
+    return micCtrl.GetMuted();
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -399,8 +406,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
-            const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
-            const HMENU popupMenu = GetSubMenu(menu, 0);
             CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
             GetCursorPos(&pt);
@@ -409,9 +414,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 pt.x, pt.y,
                 0,
                 hWnd, NULL);
-            if (!DestroyMenu(popupMenu)) {
-                SHOW_LAST_ERROR();
-            }
             if (cmd != 0) {
                 ProcessNotifyMenuCmd(hWnd, cmd);
             }
@@ -432,8 +434,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         break;
     case MicCtrl::WM_MUTED_STATE_CHANGED:
-        //OutputDebugString(wParam == 1 ? L"Muted\n" : L"Unmuted\n");
         UpdateNotification(hWnd);
+        CallPluginStateListeners();
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -710,12 +712,12 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     if (!silent) {
         data.uFlags |= NIF_INFO;
         StringCbCopyW(data.szInfo, sizeof(data.szInfo), LoadStringRes(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
-        StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), LoadStringRes(IDS_APP_TITLE).c_str());
+        StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (LoadStringRes(IDS_APP_TITLE) + L" " + VERSION).c_str());
         data.dwInfoFlags = NIIF_INFO;
     }
     data.uCallbackMessage = UM_NOTIFY;
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
-    StringCchCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], LoadStringRes(IDS_NOTIFICATION_TIP).c_str());
+    wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], LoadStringRes(IDS_NOTIFICATION_TIP).c_str(), VERSION);
     if (!Shell_NotifyIconW(modify ? NIM_MODIFY : NIM_ADD, &data)) {
         SHOW_LAST_ERROR();
         return;

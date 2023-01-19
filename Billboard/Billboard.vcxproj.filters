@@ -18,59 +18,46 @@
     <ClInclude Include="framework.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="targetver.h">
+    <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Resource.h">
+    <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DeMic.h">
+    <ClInclude Include="Billboard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MicCtrl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\DemicPlugin.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugin.h">
+    <ClInclude Include="BillboardWnd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DeMic.cpp">
+    <ClCompile Include="Billboard.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MicCtrl.cpp">
+    <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Plugin.cpp">
+    <ClCompile Include="BillboardWnd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="DeMic.rc">
+    <None Include="Billboard.def">
+      <Filter>Source Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Billboard.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="small.ico">
+    <Image Include="Microphone.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="DeMic.ico">
+    <Image Include="MicrophoneMuted.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="microphone.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="microphone_muted.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Iconsmind-Outline-Microphone-2.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <Xml Include="manifest.xml" />
   </ItemGroup>
 </Project>
