@@ -31,15 +31,7 @@ void LoadPlugins() {
 	WIN32_FIND_DATA findData = { 0 };
 	HANDLE hFind = FindFirstFileW((plugInDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
 	if (hFind == INVALID_HANDLE_VALUE) {
-		DWORD lastError = GetLastError();
-		if (lastError) {
-			if (lastError == ERROR_FILE_NOT_FOUND) {
-				// No match file
-				return;
-			}
-			SHOW_ERROR(lastError);
-			return;
-		}
+		return;
 	}
 
 	while(TRUE) {
