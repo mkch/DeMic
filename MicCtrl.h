@@ -60,8 +60,7 @@ private:
                 //OutputDebugString(L" Muted\n");
 
                 muted = 1;
-            }
-            else {
+            } else {
                 //OutputDebugString(devName.c_str());
                 //OutputDebugString(L" Unmuted\n");
                 muted = 0;
@@ -84,4 +83,5 @@ public:
 	bool GetMuted();
 	// SetMuted sets muted state of all active microphone devices.
 	void SetMuted(bool mute);
+
 };
