@@ -6,13 +6,18 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <fstream>
+#include <codecvt>
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <strsafe.h>
 #include <shlwapi.h>
+#include "nlohmann/json.hpp"
 
-static const wchar_t* const CONFIG_FILE_NAME = L"Profile.ini";
+using json = nlohmann::json;
+
+static const wchar_t* const CONFIG_FILE_NAME = L"Profile.json";
 std::wstring configFilePath;
 
 StringRes* strRes = NULL;
@@ -86,47 +91,41 @@ std::unordered_map<UINT, std::pair<std::wstring, std::wstring>> menuID2Dev;
 // Empyt map: all devices.
 std::unordered_map<std::wstring, std::wstring> selectedDev;
 
-const static wchar_t CONFIG_DEVICES_DEL = L',';
-const static std::wstring CONFIG_DEV_ID_NAME_DEL = L"|||";
-const static wchar_t* const CONFIG_DEFAULT_PROFILE = L"Default";
-const static wchar_t* const CONFIG_DEVICES = L"Devices";
+const static char* const CONFIG_DEFAULT_PROFILE_NAME = "Default";
+const static char* const CONFIG_DEVICES = "Devices";
+const static char* const CONFIG_ID = "ID";
+const static char* const CONFIG_NAME = "Name";
 
+static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
 
 void ReadConfig() {
-    if (!PathFileExistsW(configFilePath.c_str())) {
+    std::ifstream in(configFilePath);
+    if (!in) {
         return;
     }
-    wchar_t buf[2048] = { 0 };
-    const auto bufSize = sizeof(buf) / sizeof(buf[0]);
-    const auto gpps = GetPrivateProfileStringW(CONFIG_DEFAULT_PROFILE, CONFIG_DEVICES, L"", buf, bufSize, configFilePath.c_str());
-    if (gpps == 0) {
-        return;
-    }
-    if (gpps == bufSize - 1) {
-        SHOW_LAST_ERROR();
-        return;
-    }
-    std::wstringstream stream(buf);
-    std::wstring devItem;
-    while (!stream.eof()) {
-        std::getline(stream, devItem, CONFIG_DEVICES_DEL);
-        const auto sep = devItem.find_first_of(CONFIG_DEV_ID_NAME_DEL);
-        selectedDev[devItem.substr(0, sep)] = devItem.substr(sep+CONFIG_DEV_ID_NAME_DEL.size());
+    try {
+        json config = json::parse(in);
+        auto& devices = config[CONFIG_DEFAULT_PROFILE_NAME];
+        for_each(devices.begin(), devices.end(), [](const json& dev) {
+            auto id = dev[CONFIG_ID].get<std::string>();
+            auto name = dev[CONFIG_NAME].get<std::string>();
+            selectedDev[wstrconv.from_bytes(id)] = wstrconv.from_bytes(name);
+        });
+    } catch (json::exception e) {
+        ShowError((strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
     }
 }
 
 void WriteConfig() {
-    std::wostringstream stream;
-    if (!selectedDev.empty()) {
-        auto it = selectedDev.begin();
-        stream << it->first << CONFIG_DEV_ID_NAME_DEL << it->second;
-        it++;
-        for (; it != selectedDev.end(); ++it) {
-            stream << CONFIG_DEVICES_DEL << it->first << CONFIG_DEV_ID_NAME_DEL << it->second;
-        }
-    }
-    if (!WritePrivateProfileStringW(CONFIG_DEFAULT_PROFILE, CONFIG_DEVICES, stream.str().c_str(), configFilePath.c_str())) {
-        SHOW_LAST_ERROR();
+    auto devices = json::array();
+    std::for_each(selectedDev.begin(), selectedDev.end(), [&devices](auto const& dev) {
+        devices.push_back({ {CONFIG_ID, wstrconv.to_bytes(dev.first)}, {CONFIG_NAME, wstrconv.to_bytes(dev.second) }});
+    });
+    json config = { {CONFIG_DEFAULT_PROFILE_NAME, devices} };
+    std::ofstream out(configFilePath);
+    out << std::setw(2) << config;
+    if (out.fail()) {
+        ShowError(strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
     }
 }
 

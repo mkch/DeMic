@@ -7,6 +7,9 @@
 #define IDS_ALL_MICROPHONES             103
 #define IDS_APPLY_TO_ALL                104
 #define IDS_APP_NAME                    105
+#define IDS_SAVE_CONFIG_FAILED          106
+#define READ_CONFIG_FAILED              107
+#define IDS_READ_CONFIG_FAILED          107
 
 // Next default values for new objects
 // 
