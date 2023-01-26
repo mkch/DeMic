@@ -7,19 +7,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-
-#define VERIFY(exp) { \
-	if ((exp) != true) { \
-		std::wstringstream buf; \
-		buf << __FILE__ << ":" << __LINE__ << std::endl \
-            << _CRT_WIDE(#exp); \
-		MessageBoxW(NULL, buf.str().c_str(), appTitle.c_str(), MB_ICONERROR); \
-		DebugBreak(); \
-	} \
-}
-
-#define VERIFY_OK(exp) VERIFY((exp) == S_OK)
-#define VERIFY_SUCCEEDED(expr) VERIFY(SUCCEEDED(expr))
+#include "Util.h"
 
 static const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 static const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -77,7 +65,7 @@ static const IID IID_ISimpleAudioVolume = __uuidof(ISimpleAudioVolume);
 //	hr = volume->SetMute(bMute, NULL);
 //}
 
-MicCtrl::MicCtrl() {
+MicCtrl::MicCtrl() :devFilter(NULL) {
 
 }
 
@@ -136,6 +124,12 @@ bool MicCtrl::GetMuted() {
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
 		VERIFY_OK(devCollection->Item(i, &dev));
+		LPWSTR id = NULL;
+		VERIFY_OK(dev->GetId(&id));
+		if (devFilter && !devFilter(id)) {
+			dev->Release();
+			continue;
+		}
 		IAudioEndpointVolume* volume = NULL;
 		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
@@ -157,6 +151,12 @@ void MicCtrl::SetMuted(bool mute) {
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
 		VERIFY_OK(devCollection->Item(i, &dev));
+		LPWSTR id = NULL;
+		VERIFY_OK(dev->GetId(&id));
+		if (devFilter && !devFilter(id)) {
+			dev->Release();
+			continue;
+		}
 		IAudioEndpointVolume* volume = NULL;
 		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
@@ -164,4 +164,71 @@ void MicCtrl::SetMuted(bool mute) {
 		volume->Release();
 	}
 	devCollection->Release();
+}
+
+std::vector<std::wstring> MicCtrl::GetActiveDevices() {
+	IMMDeviceCollection* devCollection = NULL;
+	VERIFY_OK(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
+	UINT devCount = 0;
+	VERIFY_OK(devCollection->GetCount(&devCount));
+	std::vector<std::wstring> ids;
+	for (UINT i = 0; i < devCount; i++) {
+		IMMDevice* dev = NULL;
+		VERIFY_OK(devCollection->Item(i, &dev));
+		
+		LPWSTR id = NULL;
+		VERIFY_OK(dev->GetId(&id));
+		ids.push_back(id);
+
+		dev->Release();
+	}
+	devCollection->Release();
+	return ids;
+}
+
+std::wstring MicCtrl::GetDevName(const wchar_t* devID) {
+	IMMDevice* dev = NULL;
+	if (devEnum->GetDevice(devID, &dev) != S_OK) {
+		return L"";
+	}
+	IPropertyStore* propStore = NULL;
+	VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
+	dev->Release();
+	PROPVARIANT name;
+	VERIFY_OK(propStore->GetValue(PKEY_Device_FriendlyName, &name));
+	propStore->Release();
+	return name.pwszVal;
+}
+
+std::wstring MicCtrl::GetDevIfaceName(const wchar_t* devID) {
+	IMMDevice* dev = NULL;
+	if (devEnum->GetDevice(devID, &dev) != S_OK) {
+		return L"";
+	}
+	IPropertyStore* propStore = NULL;
+	VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
+	dev->Release();
+	PROPVARIANT name;
+	VERIFY_OK(propStore->GetValue(PKEY_DeviceInterface_FriendlyName, &name));
+	propStore->Release();
+	return name.pwszVal;
+}
+
+int MicCtrl::GetDevMuted(const wchar_t* devID) {
+	IMMDevice* dev = NULL;
+	if (devEnum->GetDevice(devID, &dev) != S_OK) {
+		return -1;
+	}
+	DWORD state = 0;
+	VERIFY_OK(dev->GetState(&state));
+	if (state != DEVICE_STATE_ACTIVE) {
+		return -1;
+	}
+	IAudioEndpointVolume* volume = NULL;
+	VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
+	dev->Release();
+	BOOL mute = FALSE;
+	VERIFY_OK(volume->GetMute(&mute));
+	volume->Release();
+	return mute ? 1 : 0;
 }

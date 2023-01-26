@@ -4,6 +4,7 @@
 #include <algorithm>
 #include "Plugin.h"
 #include "DeMic.h"
+#include "Util.h"
 #include "sdk/DeMicPlugin.h"
 
 const static wchar_t* const PLUGIN_DIR_NAME = L"plugin";
@@ -65,7 +66,8 @@ struct PluginState {
 	const UINT RootMenuItemID;
 	const UINT FirstMenuItemID;
 	const UINT LastMenuItemID;
-	DeMic_MicStateListener MicStateListener = NULL;
+	void(*MicStateListener)() = NULL;
+	void (*InitMenuListener)() = NULL;
 };
 
 static std::map<std::wstring, PluginState*> plugins;
@@ -95,7 +97,12 @@ void LoadPlugin(const std::wstring& path) {
 	}
 	if (plugin->SDKVersion < 1) {
 		FreeLibrary(hModule);
-		ShowError((path + L"\nPlease update SDK!").c_str());
+		ShowError((path + L"\nInvalid SDK Version!").c_str());
+		return;
+	}
+	if (plugin->SDKVersion > DEMIC_CURRENT_SDK_VERSION) {
+		FreeLibrary(hModule);
+		ShowError((path + L"\nRequires a higher SDK Version! Please update DeMic!").c_str());
 		return;
 	}
 
@@ -140,20 +147,72 @@ BOOL HostCreateRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	MENUITEMINFOW mi = *lpmi;
 	mi.fMask |= MIIM_ID;
 	mi.wID = state->RootMenuItemID;
-	const auto ok = InsertMenuItemW(popupMenu, 0, true, &mi);
-	if (ok) {
-		state->RootMenuItemCreated = true;
+	if (!InsertMenuItemW(popupMenu, 0, true, &mi)) {
+		return FALSE;
 	}
-	return ok;
+	state->RootMenuItemCreated = true;
+	return TRUE;
+}
+
+BOOL HostModifyRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
+	const auto state = (PluginState*)st;
+	if (!state->RootMenuItemCreated) {
+		return FALSE;
+	}
+	MENUITEMINFOW mi = *lpmi;
+	mi.fMask &= ~MIIM_ID; // Menu item id can't be modified.
+	return SetMenuItemInfoW(popupMenu, state->RootMenuItemID, FALSE, &mi);
 }
 
 BOOL HostIsMuted() {
 	return IsMuted();
 }
 
-void HostSetMicStateListener(void* st, DeMic_MicStateListener listener) {
+void HostSetMicStateListener(void* st, void(*listener)()) {
 	PluginState* state = (PluginState*)st;
 	state->MicStateListener = listener;
+}
+
+void HostGetActiveDevices(void (*callback)(const wchar_t* devID, void* userData), void* userData) {
+	const auto devices = micCtrl.GetActiveDevices();
+	std::for_each(devices.begin(), devices.end(), [callback, userData](const auto id) {
+		callback(id.c_str(), userData);
+	});
+}
+
+void HostGetDevName(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
+	callback(micCtrl.GetDevName(devID).c_str(), userData);
+}
+
+void HostGetDevIfaceName (const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
+	callback(micCtrl.GetDevIfaceName(devID).c_str(), userData);
+}
+
+BOOL HostGetDevMuted(const wchar_t* devID) {
+	return micCtrl.GetDevMuted(devID);
+}
+
+void HostSetDevFilter(BOOL(*filter)(const wchar_t* devID)) {
+	micCtrl.SetDevFilter(filter);
+}
+
+void HostSetInitMenuListener(void* st, void(*listener)()) {
+	auto state = (PluginState*)st;
+	state->InitMenuListener = listener;
+}
+
+void HostNotifyMicStateChanged() {
+	PostMessage(mainWindow, MicCtrl::WM_MUTED_STATE_CHANGED, 0, 0);
+}
+
+void CallPluginInitMenuListeners() {
+	std::for_each(plugins.begin(), plugins.end(),
+		[](const auto pair) {
+			const auto plugin = pair.second;
+			if (plugin->InitMenuListener) {
+				plugin->InitMenuListener();
+			}
+		});
 }
 
 void CallPluginStateListeners() {
@@ -186,4 +245,12 @@ static DeMic_Host host = {
 	HostToggleMuted,
 	HostIsMuted,
 	HostSetMicStateListener,
+	HostModifyRootMenuItem,
+	HostGetActiveDevices,
+	HostGetDevName,
+	HostGetDevIfaceName,
+	HostGetDevMuted,
+	HostSetDevFilter,
+	HostSetInitMenuListener,
+	HostNotifyMicStateChanged,
 };

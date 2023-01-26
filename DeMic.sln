@@ -10,6 +10,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Billboard", "Billboard\Bill
 		{C47EE243-F4CF-4331-9566-A6CDA754BE26} = {C47EE243-F4CF-4331-9566-A6CDA754BE26}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Profile", "Profile\Profile.vcxproj", "{A4758A80-4A03-41B4-9487-EFC2309A0D16}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C47EE243-F4CF-4331-9566-A6CDA754BE26} = {C47EE243-F4CF-4331-9566-A6CDA754BE26}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -34,6 +39,14 @@ Global
 		{4A6683A2-4E77-4255-9481-7BD473521C19}.Release|x64.Build.0 = Release|x64
 		{4A6683A2-4E77-4255-9481-7BD473521C19}.Release|x86.ActiveCfg = Release|Win32
 		{4A6683A2-4E77-4255-9481-7BD473521C19}.Release|x86.Build.0 = Release|Win32
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Debug|x64.ActiveCfg = Debug|x64
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Debug|x64.Build.0 = Debug|x64
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Debug|x86.ActiveCfg = Debug|Win32
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Debug|x86.Build.0 = Debug|Win32
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Release|x64.ActiveCfg = Release|x64
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Release|x64.Build.0 = Release|x64
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Release|x86.ActiveCfg = Release|Win32
+		{A4758A80-4A03-41B4-9487-EFC2309A0D16}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

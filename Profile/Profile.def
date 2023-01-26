@@ -1,0 +1,3 @@
+LIBRARY Profile
+EXPORTS
+	GetPluginInfo

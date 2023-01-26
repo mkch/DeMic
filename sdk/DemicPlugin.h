@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <Windows.h>
 
 extern "C" {
@@ -32,24 +32,43 @@ extern "C" {
 		void (*OnMenuItemCmd)(UINT id);
 	};
 
-	typedef void(*DeMic_MicStateListener)();
-
 	// Interface for plugin to call DeMic.
 	struct DeMic_Host {
-		// Create the root menu item of this plugin.
+		// Creates the root menu item of this plugin.
 		// MIIM_ID and wID of lpmi.fMask is ignored.
 		BOOL(*CreateRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
-		// Turn on microphones.
+		// Turns on microphones.
 		void (*TurnOnMic)(void* state);
-		// Turn off microphones.
+		// Turns off microphones.
 		void (*TurnOffMic)(void* state);
-		// Toggle on off.
+		// Toggles on off.
 		void (*ToggleMuted)(void* state);
-		// Get the microphone state.
+		// Gets the microphone state.
 		BOOL(*IsMuted)();
-		// Set a listener to be called when micphone
+		// Sets a listener to be called when micphone
 		// state is changed.
-		void (*SetMicStateListener)(void* state, DeMic_MicStateListener listener);
+		void (*SetMicStateListener)(void* state, void(*listener)());
+		// Modifies the root menu item of this plugin.
+		// MIIM_ID and wID of lpmi.fMaks is ignored.
+		BOOL(*ModifyRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
+		// Enumerates all activate microphone devices.
+		void (*GetActiveDevices)(void (*callback)(const wchar_t* devID, void* userData), void* userData);
+		// Gets the friendly name of the endpoint device
+		// (for example, "Speakers (XYZ Audio Adapter)").
+		void (*GetDevName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
+		// Gets the friendly name of the audio adapter to which the endpoint device is attached
+		// (for example, "XYZ Audio Adapter")
+		void (*GetDevIfaceName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
+		// Gets whether a microphone device is muted.
+		BOOL(*GetDevMuted)(const wchar_t* devID);
+		// Sets a filter function which defines the set of microphone devices
+		// to operate.
+		void (*SetDevFilter)(BOOL(*filter)(const wchar_t* devID));
+		// Sets a listener to be called when the system try menu is about
+		// to open.
+		void (*SetInitMenuListener)(void* state, void(*listener)());
+		// Forces DeMic to call micphone state changed handler.
+		void (*NotifyMicStateChanged)();
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

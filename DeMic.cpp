@@ -4,6 +4,7 @@
 #include "framework.h"
 #include "resource.h"
 #include "DeMic.h"
+#include "Util.h"
 #include <Commctrl.h>
 #include <shlwapi.h>
 #include <Dbt.h>
@@ -12,7 +13,6 @@
 #include <strsafe.h>
 #include <windowsx.h>
 
-#include "MicCtrl.h"
 #include "Plugin.h"
 
 // Currrent version of DeMic.
@@ -29,7 +29,8 @@ static const UINT UM_MIC_CMD = WM_USER + 2;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
-const std::wstring& LoadStringRes(UINT resId);
+StringRes* strRes = NULL;
+
 void ShowNotification(HWND hwnd, bool silent);
 void UpdateNotification(HWND hwnd);
 void RemoveNotification(HWND hwnd);
@@ -114,6 +115,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     WCHAR szTitle[MAX_LOADSTRING] = { 0 };
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     appTitle = &szTitle[0];
+    utilAppName = appTitle;
+    strRes = new StringRes(hInstance);
 
     if (AlreadyRunning()) {
         if (cmd != CMD_NONE) {
@@ -124,7 +127,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 return 0;
             }
         }
-        MessageBoxW(NULL, LoadStringRes(IDS_ALREADY_RUNNING).c_str(), LoadStringRes(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        MessageBoxW(NULL, strRes->Load(IDS_ALREADY_RUNNING).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
         return 1;
     }
 
@@ -140,7 +143,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     micCtrl.Init();
 
-    MyRegisterClass(hInstance);
+    if (!MyRegisterClass(hInstance)) {
+        SHOW_LAST_ERROR();
+        return FALSE;
+    }
 
     // Perform application initialization:
     if (!InitInstance (hInstance, nCmdShow)) {
@@ -254,6 +260,7 @@ void CALLBACK DelayDeviceChangeTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD
     KillTimer(hwnd, DELAY_DEVICE_CHANGE_TIMER);  // Make it one time timer.
     micCtrl.ReloadDevices();
     UpdateNotification(hwnd);
+    CallPluginStateListeners();
 }
 
 void ShowHotKeySettingWindow() {
@@ -275,8 +282,8 @@ void ShowSoundSettingsWindow() {
     HWND offPlay = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_PLAY);
 
     Button_SetCheck(onEnable, enableOnSound);
-    SetWindowTextW(onPath, onSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : onSoundPath.c_str());
-    SetWindowTextW(offPath, offSoundPath.empty() ? LoadStringRes(IDS_NAN).c_str() : offSoundPath.c_str());
+    SetWindowTextW(onPath, onSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : onSoundPath.c_str());
+    SetWindowTextW(offPath, offSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : offSoundPath.c_str());
 
     Button_SetCheck(offEnable, enableOffSound);
 
@@ -405,6 +412,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
+            CallPluginInitMenuListeners();
             SetForegroundWindow(hWnd);
             CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
@@ -602,12 +610,12 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
         switch (LOWORD(wParam)) {
         case IDC_ON_SOUND_PATH:
             if (HIWORD(wParam) == STN_DBLCLK) {
-                SetWindowTextW((HWND)lParam, LoadStringRes(IDS_NAN).c_str());
+                SetWindowTextW((HWND)lParam, strRes->Load(IDS_NAN).c_str());
             }
             break;
         case IDC_OFF_SOUND_PATH:
             if (HIWORD(wParam) == STN_DBLCLK) {
-                SetWindowTextW((HWND)lParam, LoadStringRes(IDS_NAN).c_str());
+                SetWindowTextW((HWND)lParam, strRes->Load(IDS_NAN).c_str());
             }
             break;
         case IDC_ON_SOUND_SELECT:{
@@ -616,7 +624,7 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             if (!SelectSoundFile(hDlg, path)) {
                 break;
             }
-            SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
+            SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), path.empty() ? strRes->Load(IDS_NAN).c_str() : path.c_str());
             break;
         }
         case IDC_OFF_SOUND_SELECT: {
@@ -625,30 +633,30 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             if (!SelectSoundFile(hDlg, path)) {
                 break;
             }
-            SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), path.empty() ? LoadStringRes(IDS_NAN).c_str() : path.c_str());
+            SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), path.empty() ? strRes->Load(IDS_NAN).c_str() : path.c_str());
             break;
         }
         case IDC_ON_SOUND_PLAY: {
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            PlayOnSound(std::wstring(LoadStringRes(IDS_NAN) == buf ? L"" : buf));
+            PlayOnSound(std::wstring(strRes->Load(IDS_NAN) == buf ? L"" : buf));
             break;
         }
         case IDC_OFF_SOUND_PLAY:{}
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            PlayOffSound(std::wstring(LoadStringRes(IDS_NAN) == buf ? L"" : buf));
+            PlayOffSound(std::wstring(strRes->Load(IDS_NAN) == buf ? L"" : buf));
             break;
         case IDOK: {
             enableOnSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND));
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            onSoundPath = LoadStringRes(IDS_NAN) == buf ? L"" : buf;
+            onSoundPath = strRes->Load(IDS_NAN) == buf ? L"" : buf;
             
             enableOffSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_OFF_SOUND));
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
-            offSoundPath = LoadStringRes(IDS_NAN) == buf ? L"" : buf;
+            offSoundPath = strRes->Load(IDS_NAN) == buf ? L"" : buf;
 
             WriteConfig();
             EndDialog(hDlg, LOWORD(wParam));
@@ -663,43 +671,6 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     return (INT_PTR)FALSE;
 }
 
-
-void ShowError(const wchar_t* msg) {
-    MessageBoxW(NULL, msg, LoadStringRes(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-}
-
-void ShowError(const wchar_t* msg, const wchar_t* file, int line) {
-    wchar_t message[1024] = { 0 };
-    StringCbPrintfW(message, sizeof message, L"%s:%d\n%s", file, line, msg);
-    ShowError(message);
-}
-
-// Show a message box with the error description of lastError.
-void ShowError(DWORD lastError, const wchar_t* file, int line) {
-    wchar_t* msg = NULL;
-    FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL, lastError, 0, (LPWSTR)&msg, 0, NULL);
-    const std::wstring message = (std::wostringstream() << lastError << L": " << (msg ? msg : L"<unknown>")).str();
-    LocalFree(msg);
-    ShowError(message.c_str(), file, line);
-}
-
-static std::map<UINT, std::wstring> stringResMap;
-const std::wstring& LoadStringRes(UINT resId) {
-    const auto it = stringResMap.find(resId);
-    if (it != stringResMap.end()) {
-        return it->second;
-    }
-    wchar_t* buf = NULL;
-    const int n = LoadStringW(hInst, resId, (LPWSTR)&buf, 0);
-    if (n == 0) {
-        SHOW_LAST_ERROR();
-        std::exit(1);
-    }
-    stringResMap[resId] = std::wstring(buf, n);
-    return stringResMap[resId];
-}
-
 // ID of Shell_NotifyIconW.
 static const UINT NOTIFY_ID = 1;
 
@@ -711,13 +682,13 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
     if (!silent) {
         data.uFlags |= NIF_INFO;
-        StringCbCopyW(data.szInfo, sizeof(data.szInfo), LoadStringRes(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
-        StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (LoadStringRes(IDS_APP_TITLE) + L" " + VERSION).c_str());
+        StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
+        StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + VERSION).c_str());
         data.dwInfoFlags = NIIF_INFO;
     }
     data.uCallbackMessage = UM_NOTIFY;
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
-    wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], LoadStringRes(IDS_NOTIFICATION_TIP).c_str(), VERSION);
+    wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_NOTIFICATION_TIP).c_str(), VERSION);
     if (!Shell_NotifyIconW(modify ? NIM_MODIFY : NIM_ADD, &data)) {
         SHOW_LAST_ERROR();
         return;
