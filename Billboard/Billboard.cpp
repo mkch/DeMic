@@ -47,7 +47,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	rootMenuItem.cch = lstrlenW(title);
 	host->CreateRootMenuItem(state, &rootMenuItem);
 
-	host->SetMicStateListener(state, InvalidateBillboardWnd);
+	host->SetMicMuteStateListener(state, InvalidateBillboardWnd);
 	return TRUE;
 }
 

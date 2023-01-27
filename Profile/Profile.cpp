@@ -60,6 +60,10 @@ UINT lastMenuItemID = 0;
 void InitMenuListener();
 BOOL MicDevFilter(const wchar_t* devID);
 
+void DefaultDevChangedListener() {
+    host->NotifyMicStateChanged();
+}
+
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
@@ -68,6 +72,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 
     host->SetInitMenuListener(state, InitMenuListener);
     host->SetDevFilter(MicDevFilter);
+    host->SetDefaultDevChangedListener(state, DefaultDevChangedListener);
 
     MENUITEMINFOW rootMenuItem = { sizeof(rootMenuItem), 0 };
     rootMenuItem.fMask = MIIM_STRING;
@@ -129,9 +134,24 @@ void WriteConfig() {
     }
 }
 
+// Dummy device ID for default microphone.
+const static wchar_t* DEFAULT_MIC_DEV_ID = L"<DEFAULT_MICROPHONE>";
+
+void IsDefaultDev(const wchar_t* devID, void* userData) {
+    auto data = (std::pair<const wchar_t*, int>*)userData;
+    data->second = lstrcmpW(devID, data->first);
+}
+
 BOOL MicDevFilter(const wchar_t* devID) {
-    return selectedDev.empty() || // Empty: All devices.
-        selectedDev.find(devID) != selectedDev.end();
+    if (selectedDev.empty()) { // Empty: All devices.
+        return TRUE;
+    }
+    if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
+        auto userData = std::pair<const wchar_t*, int>(devID, 0);
+        host->GetDefaultDevID(IsDefaultDev, &userData);
+        return userData.second == 0;
+    }
+    return selectedDev.find(devID) != selectedDev.end();
 }
 
 void DevNameString(const wchar_t* name, void* userData) {
@@ -169,22 +189,31 @@ void InitMenuListener() {
         menuID2Dev.clear();
     }
     devicesMenu = CreatePopupMenu();
-    UINT flags = MF_STRING;
-    if (selectedDev.empty()) {
-        flags |= MF_CHECKED;
-    }
+
     UINT menuItemID = firstMenuItemID;
     allDevMenuID = menuItemID;
-    VERIFY(AppendMenu(devicesMenu, flags, allDevMenuID, strRes->Load(IDS_ALL_MICROPHONES).c_str()));
+    VERIFY(AppendMenu(devicesMenu, 
+        MF_STRING | (selectedDev.empty()? MF_CHECKED : 0), 
+        allDevMenuID, strRes->Load(IDS_ALL_MICROPHONES).c_str()));
     menuItemID++;
+
     VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+    
+    VERIFY(AppendMenu(devicesMenu, 
+        MF_STRING | (selectedDev.size() == 1 && selectedDev.count(DEFAULT_MIC_DEV_ID) ? MF_CHECKED : 0),
+        menuItemID, strRes->Load(IDS_DEFAULT_MICROPHONE).c_str()));
+    menuID2Dev[menuItemID] = std::pair<std::wstring, std::wstring>(DEFAULT_MIC_DEV_ID, L"");
+    menuItemID++;
+
+    VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+
     EnumDevProcData data = { menuItemID };
     host->GetActiveDevices(EnumDevProc, &data);
 
     // Append extra items in selectedDevID as menu items with
     // device ID as title.
     std::for_each(selectedDev.begin(), selectedDev.end(), [&data](const auto& dev) {
-        if (data.EnumedDevID.find(dev.first) != data.EnumedDevID.end()) {
+        if (dev.first == DEFAULT_MIC_DEV_ID || data.EnumedDevID.find(dev.first) != data.EnumedDevID.end()) {
             return;
         }
         VERIFY(AppendMenu(devicesMenu, MF_STRING|MF_CHECKED, data.ItemID, dev.second.c_str()));
@@ -198,9 +227,12 @@ void InitMenuListener() {
         rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ALL));
     }
     else if (selectedDev.size() == 1) {
-        rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
-    }
-    else {
+        if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
+            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_DEFAULT));
+        } else {
+            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
+         }
+    } else {
         rootTitle.assign(255, 0);
         StringCchPrintfW(&rootTitle[0], rootTitle.size(), strRes->Load(IDS_APPLY_TO).c_str(), selectedDev.size());
     }
@@ -218,8 +250,12 @@ static void OnMenuItemCmd(UINT id) {
     if (id == allDevMenuID) {
         selectedDev.clear();
     } else {
+        selectedDev.erase(DEFAULT_MIC_DEV_ID);
         auto dev = menuID2Dev[id];
-        if (selectedDev.find(dev.first) != selectedDev.end()) {
+        if (dev.first == DEFAULT_MIC_DEV_ID) {
+            selectedDev.clear();
+            selectedDev[dev.first] = dev.second;
+        } else if (selectedDev.count(dev.first)) {
             selectedDev.erase(dev.first);
         } else {
             selectedDev[dev.first] = dev.second;

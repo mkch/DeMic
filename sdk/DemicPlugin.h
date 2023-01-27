@@ -45,9 +45,9 @@ extern "C" {
 		void (*ToggleMuted)(void* state);
 		// Gets the microphone state.
 		BOOL(*IsMuted)();
-		// Sets a listener to be called when micphone
+		// Sets a listener to be called when micphone mute
 		// state is changed.
-		void (*SetMicStateListener)(void* state, void(*listener)());
+		void (*SetMicMuteStateListener)(void* state, void(*listener)());
 		// Modifies the root menu item of this plugin.
 		// MIIM_ID and wID of lpmi.fMaks is ignored.
 		BOOL(*ModifyRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
@@ -69,6 +69,11 @@ extern "C" {
 		void (*SetInitMenuListener)(void* state, void(*listener)());
 		// Forces DeMic to call micphone state changed handler.
 		void (*NotifyMicStateChanged)();
+		// Get the devault microphone device ID.
+		// Empty string if not found.
+		void (*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
+		// Set a listener called when default microphone device is changed.
+		void (*SetDefaultDevChangedListener)(void* state, void(*listener)());
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

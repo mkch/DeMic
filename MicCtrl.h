@@ -14,9 +14,11 @@ extern HWND mainWindow;
 class MicCtrl {
 public:
     // The window message sent to mainWindow when micophone muted state is changed.
-    static const int WM_MUTED_STATE_CHANGED = WM_USER + 100;
-    // The window message sent to mainWindow when audo device state is changed. 
-    static const int WM_DEVICE_STATE_CHANGED = WM_USER + 101;
+    static const UINT WM_MUTED_STATE_CHANGED = WM_USER + 100;
+    // The window message sent to mainWindow when audio device state is changed. 
+    static const UINT WM_DEVICE_STATE_CHANGED = WM_USER + 101;
+    // The window message sent to mainWindow when default microphone device is changed.
+    static const UINT WM_DEFAULT_DEVICE_CHANGED = WM_USER + 102;
 private:
     class AudioEndpointVolumeCallback : public IAudioEndpointVolumeCallback {
     private:
@@ -103,6 +105,9 @@ private:
         }
 
         HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId ) {
+            if (flow == eCapture) {
+                PostMessageW(mainWindow, WM_DEFAULT_DEVICE_CHANGED, 0, 0);
+            }
             return S_OK;
         }
 
@@ -159,4 +164,7 @@ public:
     // Sets a filter function which defines the set of microphone devices
     // to operate.
     void SetDevFilter(BOOL (*f)(const wchar_t*)) { devFilter = f; }
+    // Returns the device id of the system default microphone.
+    // Returns empty string if failed.
+    std::wstring GetDefaultMicphone();
 };

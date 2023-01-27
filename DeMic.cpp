@@ -258,7 +258,7 @@ void CALLBACK DelayDeviceChangeTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD
     KillTimer(hwnd, DELAY_DEVICE_CHANGE_TIMER);  // Make it one time timer.
     micCtrl.ReloadDevices();
     UpdateNotification(hwnd);
-    CallPluginStateListeners();
+    CallPluginMicStateListeners();
 }
 
 void ShowHotKeySettingWindow() {
@@ -391,6 +391,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             SHOW_LAST_ERROR();
         }
         break;
+    case MicCtrl::WM_DEFAULT_DEVICE_CHANGED:
+        CallPluginDefaultDevChangedListeners();
+        break;
     case WM_COMMAND: {
             int wmId = LOWORD(wParam);
             // Parse the menu selections:
@@ -439,7 +442,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case MicCtrl::WM_MUTED_STATE_CHANGED:
         UpdateNotification(hWnd);
-        CallPluginStateListeners();
+        CallPluginMicStateListeners();
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);

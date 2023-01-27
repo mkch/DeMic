@@ -1,12 +1,14 @@
 #pragma once
 
-// Load all the plugins in plugin dir.
+// Loads all the plugins in plugin dir.
 void LoadPlugins();
 // Process menu commands of plugins.
 // Returns processed or not.
 bool ProcessPluginMenuCmd(UINT id);
-// Call all the plugin state listeners
+// Calls all the mic state changed listeners of plugins.
 // when microphone state is changed.
-void CallPluginStateListeners();
-// Call all the init menu listeners in plugins.
+void CallPluginMicStateListeners();
+// Calls all the init menu listeners of plugins.
 void CallPluginInitMenuListeners();
+// Calls all the default device changed listeners in plugin.
+void CallPluginDefaultDevChangedListeners();

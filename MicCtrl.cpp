@@ -86,7 +86,7 @@ void MicCtrl::UnregisterAudioCallbacks() {
 			VERIFY_OK(callback.first->UnregisterControlChangeNotify(callback.second));
 			callback.first->Release();
 			callback.second->Release();
-		});
+	});
 }
 
 // Reload microphone devices. Should be called when device changed.
@@ -129,9 +129,11 @@ bool MicCtrl::GetMuted() {
 		LPWSTR id = NULL;
 		VERIFY_OK(dev->GetId(&id));
 		if (devFilter && !devFilter(id)) {
+			CoTaskMemFree(id);
 			dev->Release();
 			continue;
 		}
+		CoTaskMemFree(id);
 		IAudioEndpointVolume* volume = NULL;
 		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
@@ -156,9 +158,11 @@ void MicCtrl::SetMuted(bool mute) {
 		LPWSTR id = NULL;
 		VERIFY_OK(dev->GetId(&id));
 		if (devFilter && !devFilter(id)) {
-			dev->Release();
+			CoTaskMemFree(id);
+			dev->Release();;
 			continue;
 		}
+		CoTaskMemFree(id);
 		IAudioEndpointVolume* volume = NULL;
 		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
@@ -181,6 +185,7 @@ std::vector<std::wstring> MicCtrl::GetActiveDevices() {
 		LPWSTR id = NULL;
 		VERIFY_OK(dev->GetId(&id));
 		ids.push_back(id);
+		CoTaskMemFree(id);
 
 		dev->Release();
 	}
@@ -233,4 +238,19 @@ int MicCtrl::GetDevMuted(const wchar_t* devID) {
 	VERIFY_OK(volume->GetMute(&mute));
 	volume->Release();
 	return mute ? 1 : 0;
+}
+
+std::wstring MicCtrl::GetDefaultMicphone() {
+	IMMDevice* dev = NULL;
+	auto ret = devEnum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev);
+	if (ret == S_OK) {
+		LPWSTR devID = NULL;
+		VERIFY_OK(dev->GetId(&devID));
+		dev->Release();
+		std::wstring strDevID(devID);
+		CoTaskMemFree(devID);
+		return strDevID;
+	}
+	VERIFY(ret == E_NOTFOUND);
+	return L"";
 }

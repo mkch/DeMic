@@ -66,8 +66,9 @@ struct PluginState {
 	const UINT RootMenuItemID;
 	const UINT FirstMenuItemID;
 	const UINT LastMenuItemID;
-	void(*MicStateListener)() = NULL;
+	void (*MicMuteStateListener)() = NULL;
 	void (*InitMenuListener)() = NULL;
+	void (*DefaultDevChangedListener)() = NULL;
 };
 
 static std::map<std::wstring, PluginState*> plugins;
@@ -168,9 +169,19 @@ BOOL HostIsMuted() {
 	return IsMuted();
 }
 
-void HostSetMicStateListener(void* st, void(*listener)()) {
+void HostSetMicMuteStateListener(void* st, void(*listener)()) {
 	PluginState* state = (PluginState*)st;
-	state->MicStateListener = listener;
+	state->MicMuteStateListener = listener;
+}
+
+void CallPluginMicStateListeners() {
+	std::for_each(plugins.begin(), plugins.end(),
+		[](const auto pair) {
+			const auto plugin = pair.second;
+		if (plugin->MicMuteStateListener) {
+			plugin->MicMuteStateListener();
+		}
+	});
 }
 
 void HostGetActiveDevices(void (*callback)(const wchar_t* devID, void* userData), void* userData) {
@@ -201,30 +212,38 @@ void HostSetInitMenuListener(void* st, void(*listener)()) {
 	state->InitMenuListener = listener;
 }
 
-void HostNotifyMicStateChanged() {
-	PostMessage(mainWindow, MicCtrl::WM_MUTED_STATE_CHANGED, 0, 0);
-}
-
 void CallPluginInitMenuListeners() {
 	std::for_each(plugins.begin(), plugins.end(),
 		[](const auto pair) {
 			const auto plugin = pair.second;
-			if (plugin->InitMenuListener) {
-				plugin->InitMenuListener();
-			}
-		});
+		if (plugin->InitMenuListener) {
+			plugin->InitMenuListener();
+		}
+	});
 }
 
-void CallPluginStateListeners() {
+void HostNotifyMicStateChanged() {
+	PostMessage(mainWindow, MicCtrl::WM_MUTED_STATE_CHANGED, 0, 0);
+}
+
+void HostGetDefaultDevID (void(*callback)(const wchar_t* devID, void* userData), void* userData) {
+	callback(micCtrl.GetDefaultMicphone().c_str(), userData);
+}
+
+void HostSetDefaultDevChangedListener(void* st, void(*listener)()) {
+	auto state = (PluginState*)st;
+	state->DefaultDevChangedListener = listener;
+}
+
+void CallPluginDefaultDevChangedListeners() {
 	std::for_each(plugins.begin(), plugins.end(),
 		[](const auto pair) {
 			const auto plugin = pair.second;
-			if (plugin->MicStateListener) {
-				plugin->MicStateListener();
-			}
-		});
+		if (plugin->DefaultDevChangedListener) {
+			plugin->DefaultDevChangedListener();
+		}
+	});
 }
-
 
 bool ProcessPluginMenuCmd(UINT id) {;
 	std::for_each(plugins.begin(), plugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
@@ -244,7 +263,7 @@ static DeMic_Host host = {
 	HostTurnOffMic,
 	HostToggleMuted,
 	HostIsMuted,
-	HostSetMicStateListener,
+	HostSetMicMuteStateListener,
 	HostModifyRootMenuItem,
 	HostGetActiveDevices,
 	HostGetDevName,
@@ -253,4 +272,6 @@ static DeMic_Host host = {
 	HostSetDevFilter,
 	HostSetInitMenuListener,
 	HostNotifyMicStateChanged,
+	HostGetDefaultDevID,
+	HostSetDefaultDevChangedListener,
 };
