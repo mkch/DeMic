@@ -65,31 +65,33 @@ static const IID IID_ISimpleAudioVolume = __uuidof(ISimpleAudioVolume);
 //	hr = volume->SetMute(bMute, NULL);
 //}
 
-MicCtrl::MicCtrl() :devFilter(NULL) {
-
-}
-
-MicCtrl::~MicCtrl() {
-	if (devEnum) {
-		devEnum->Release();
-	}
-}
-
-void MicCtrl::Init() {
+MicCtrl::MicCtrl() :notifClient(new MMNotificationClient()) {
 	VERIFY_OK(CoInitialize(NULL));
 	VERIFY_OK(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
 		IID_IMMDeviceEnumerator, (void**)&devEnum));
+	VERIFY_OK(devEnum->RegisterEndpointNotificationCallback(notifClient));
 	ReloadDevices();
 }
 
-// Reload microphone devices. Should be called when device changed.
-void MicCtrl::ReloadDevices() {
-	std::for_each(audioCallbacks.begin(), audioCallbacks.end(), 
+MicCtrl::~MicCtrl() {
+	UnregisterAudioCallbacks();
+	VERIFY_OK(devEnum->UnregisterEndpointNotificationCallback(notifClient));
+	notifClient->Release();
+	devEnum->Release();
+}
+
+void MicCtrl::UnregisterAudioCallbacks() {
+	std::for_each(audioCallbacks.begin(), audioCallbacks.end(),
 		[](auto& callback) {
 			VERIFY_OK(callback.first->UnregisterControlChangeNotify(callback.second));
 			callback.first->Release();
 			callback.second->Release();
 		});
+}
+
+// Reload microphone devices. Should be called when device changed.
+void MicCtrl::ReloadDevices() {
+	UnregisterAudioCallbacks();
 	audioCallbacks.clear();
 
 	IMMDeviceCollection* devCollection = NULL;

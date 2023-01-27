@@ -13,16 +13,19 @@ extern HWND mainWindow;
 
 class MicCtrl {
 public:
-    // The window message posted to mainWindow when micophone muted state is changed.
+    // The window message sent to mainWindow when micophone muted state is changed.
     static const int WM_MUTED_STATE_CHANGED = WM_USER + 100;
+    // The window message sent to mainWindow when audo device state is changed. 
+    static const int WM_DEVICE_STATE_CHANGED = WM_USER + 101;
 private:
     class AudioEndpointVolumeCallback : public IAudioEndpointVolumeCallback {
-        LONG _cRef;
+    private:
+        LONG _cRef = 1;
         std::wstring devName;
         int muted = -1; // -1: uninitialized, 0: false, 1: true
     public:
         AudioEndpointVolumeCallback(const std::wstring& dev) :
-            _cRef(1), devName(dev) {
+            devName(dev) {
         }
 
         ULONG STDMETHODCALLTYPE AddRef(){
@@ -40,10 +43,10 @@ private:
         HRESULT STDMETHODCALLTYPE QueryInterface(REFIID  riid,VOID** ppvInterface){
             if (IID_IUnknown == riid){
                 AddRef();
-                *ppvInterface = (IUnknown*)this;
+                *ppvInterface = this;
             }else if (__uuidof(IAudioEndpointVolumeCallback) == riid){
                 AddRef();
-                *ppvInterface = (IAudioEndpointVolumeCallback*)this;
+                *ppvInterface = this;
             }else{
                 *ppvInterface = NULL;
                 return E_NOINTERFACE;
@@ -56,29 +59,83 @@ private:
                 return S_OK; // State is not changed.
             }
             if (pNotify->bMuted) {
-                //OutputDebugString(devName.c_str());
-                //OutputDebugString(L" Muted\n");
-
                 muted = 1;
             } else {
-                //OutputDebugString(devName.c_str());
-                //OutputDebugString(L" Unmuted\n");
                 muted = 0;
             }
-            SendMessage(mainWindow, WM_MUTED_STATE_CHANGED, 0, 0);
+            SendMessageW(mainWindow, WM_MUTED_STATE_CHANGED, 0, 0);
             return S_OK;
         }
     };
+
+    class MMNotificationClient : public IMMNotificationClient {
+    private:
+        LONG _cRef = 1;
+    public:
+        MMNotificationClient() {}
+
+        ULONG STDMETHODCALLTYPE AddRef() {
+            return InterlockedIncrement(&_cRef);
+        }
+
+        ULONG STDMETHODCALLTYPE Release() {
+            ULONG ulRef = InterlockedDecrement(&_cRef);
+            if (0 == ulRef) {
+                delete this;
+            }
+            return ulRef;
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(REFIID  riid, VOID** ppvInterface) {
+            if (IID_IUnknown == riid) {
+                AddRef();
+                *ppvInterface = this;
+            }
+            else if (__uuidof(IMMNotificationClient) == riid) {
+                AddRef();
+                *ppvInterface = this;
+            }
+            else {
+                *ppvInterface = NULL;
+                return E_NOINTERFACE;
+            }
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId ) {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId) {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR pwstrDeviceId) {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
+            // Do not use SendMessage!
+            PostMessageW(mainWindow, WM_DEVICE_STATE_CHANGED, 0, 0);
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
+            return S_OK;
+        }
+    };
+
 	typedef std::pair<IAudioEndpointVolume*, AudioEndpointVolumeCallback*> AudioVolumeCallback;
 private:
     IMMDeviceEnumerator* devEnum = NULL;
+    MMNotificationClient* notifClient;
     std::vector<AudioVolumeCallback> audioCallbacks;
-    BOOL (*devFilter)(const wchar_t* devName);
-public:
+    BOOL (*devFilter)(const wchar_t* devName) = NULL;
+private:
+    void UnregisterAudioCallbacks();
 public:
 	MicCtrl();
 	~MicCtrl();
-    void Init();
 	// Reload microphone devices. Should be called when device changed.
 	void ReloadDevices();
 	// Returns whether all active microphone devices are muted.

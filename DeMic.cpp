@@ -141,8 +141,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
     startOnBootCmd = std::wstring(L"\"") + moduleFilePath + L"\" /silent";
 
-    micCtrl.Init();
-
     if (!MyRegisterClass(hInstance)) {
         SHOW_LAST_ERROR();
         return FALSE;
@@ -251,7 +249,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
-// Timer id for delaying the WM_DEVICECHANGE message processing.
+// Timer id for delaying the MicCtrl::WM_DEVICE_STATE_CHANGED message processing.
 static const UINT_PTR DELAY_DEVICE_CHANGE_TIMER = 1;
 // Batch interval of  WM_DEVICECHANGE message processing.
 static const UINT DEVICE_CHANGE_DELAY = 1000;
@@ -388,11 +386,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ToggleMuted();
         }
         break;
-    case WM_DEVICECHANGE:
-        if (wParam == DBT_DEVNODES_CHANGED) {
-            if (!SetTimer(hWnd, DELAY_DEVICE_CHANGE_TIMER, DEVICE_CHANGE_DELAY, DelayDeviceChangeTimerProc)) {
-                SHOW_LAST_ERROR();
-            }
+    case MicCtrl::WM_DEVICE_STATE_CHANGED:
+        if (!SetTimer(hWnd, DELAY_DEVICE_CHANGE_TIMER, DEVICE_CHANGE_DELAY, DelayDeviceChangeTimerProc)) {
+            SHOW_LAST_ERROR();
         }
         break;
     case WM_COMMAND: {
