@@ -71,7 +71,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     lastMenuItemID = args->LastMenuItemID;
 
     host->SetInitMenuListener(state, InitMenuListener);
-    host->SetDevFilter(MicDevFilter);
+    host->SetDevFilter(state, MicDevFilter);
     host->SetDefaultDevChangedListener(state, DefaultDevChangedListener);
 
     MENUITEMINFOW rootMenuItem = { sizeof(rootMenuItem), 0 };

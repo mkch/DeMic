@@ -10,5 +10,7 @@ bool ProcessPluginMenuCmd(UINT id);
 void CallPluginMicStateListeners();
 // Calls all the init menu listeners of plugins.
 void CallPluginInitMenuListeners();
-// Calls all the default device changed listeners in plugin.
+// Calls all the default device changed listeners in plugins.
 void CallPluginDefaultDevChangedListeners();
+// Calls the first device filter in plugins.
+BOOL CallPluginDevFilter(const wchar_t* devID);

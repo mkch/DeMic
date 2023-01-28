@@ -63,7 +63,7 @@ extern "C" {
 		BOOL(*GetDevMuted)(const wchar_t* devID);
 		// Sets a filter function which defines the set of microphone devices
 		// to operate.
-		void (*SetDevFilter)(BOOL(*filter)(const wchar_t* devID));
+		void (*SetDevFilter)(void* state, BOOL(*filter)(const wchar_t* devID));
 		// Sets a listener to be called when the system try menu is about
 		// to open.
 		void (*SetInitMenuListener)(void* state, void(*listener)());

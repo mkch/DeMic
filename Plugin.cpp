@@ -69,6 +69,7 @@ struct PluginState {
 	void (*MicMuteStateListener)() = NULL;
 	void (*InitMenuListener)() = NULL;
 	void (*DefaultDevChangedListener)() = NULL;
+	BOOL(*DevFilter)(const wchar_t*) = NULL;
 };
 
 static std::map<std::wstring, PluginState*> plugins;
@@ -203,8 +204,20 @@ BOOL HostGetDevMuted(const wchar_t* devID) {
 	return micCtrl.GetDevMuted(devID);
 }
 
-void HostSetDevFilter(BOOL(*filter)(const wchar_t* devID)) {
-	micCtrl.SetDevFilter(filter);
+void HostSetDevFilter(void* st, BOOL(*filter)(const wchar_t* devID)) {
+	((PluginState*)st)->DevFilter = filter;
+}
+
+BOOL CallPluginDevFilter(const wchar_t* devID) {
+	BOOL result = TRUE;
+	for (auto it = plugins.begin(); it != plugins.end(); it++) {
+		const auto plugin = it->second;
+		if (plugin->DevFilter) {
+			result = plugin->DevFilter(devID);
+			break;
+		}
+	}
+	return result;
 }
 
 void HostSetInitMenuListener(void* st, void(*listener)()) {
@@ -216,9 +229,9 @@ void CallPluginInitMenuListeners() {
 	std::for_each(plugins.begin(), plugins.end(),
 		[](const auto pair) {
 			const auto plugin = pair.second;
-		if (plugin->InitMenuListener) {
-			plugin->InitMenuListener();
-		}
+			if (plugin->InitMenuListener) {
+				plugin->InitMenuListener();
+			}
 	});
 }
 

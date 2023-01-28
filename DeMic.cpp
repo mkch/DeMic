@@ -43,6 +43,7 @@ bool ResetHotKey();
 static bool AlreadyRunning();
 void PlayOnSound(const std::wstring&);
 void PlayOffSound(const std::wstring&);
+BOOL devFilter(const wchar_t* devID);
 
 // Global Variables:
 HINSTANCE hInst;                                    // current instance
@@ -89,6 +90,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    micCtrl.SetDevFilter(devFilter);
 
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
@@ -176,6 +179,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     return (int) msg.wParam;
+}
+
+BOOL devFilter(const wchar_t* devID) {
+    return CallPluginDevFilter(devID);
 }
 
 
