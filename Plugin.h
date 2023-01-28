@@ -1,5 +1,7 @@
 #pragma once
 
+static const UINT ID_NO_PLUGIN = 99;
+
 // Loads all the plugins in plugin dir.
 void LoadPlugins();
 // Process menu commands of plugins.
@@ -17,3 +19,5 @@ void CallPluginDefaultDevChangedListeners();
 BOOL CallPluginDevFilter(const wchar_t* devID);
 // Called when plugin menu item is selected.
 void OnPluginMenuItemCmd(UINT cmd);
+// Gets the plugin dir.
+std::wstring GetPluginDir();

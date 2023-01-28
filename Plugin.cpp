@@ -5,7 +5,6 @@
 #include <algorithm>
 #include "Plugin.h"
 #include "DeMic.h"
-#include "Util.h"
 #include "sdk/DeMicPlugin.h"
 
 const static wchar_t* const PLUGIN_DIR_NAME = L"plugin";
@@ -17,25 +16,32 @@ extern std::unordered_map<std::wstring, PluginState*> plugins;
 bool LoadPlugin(const std::wstring& path);
 void NotifyMicStateChanged();
 
-void LoadPlugins() {
+std::wstring GetPluginDir() {
 	static const int BUF_SIZE = 1024;
 	wchar_t fileName[BUF_SIZE];
 	if (GetModuleFileNameW(NULL, fileName, BUF_SIZE) == BUF_SIZE) {
 		DWORD lastError = GetLastError();
 		if (lastError) {
 			SHOW_ERROR(lastError);
-			return;
+			return L"";
 		}
 	}
 
-	std::wstring plugInDir(fileName);
-	const auto sep = plugInDir.find_last_of(L'\\');
+	std::wstring pluginDir(fileName);
+	const auto sep = pluginDir.find_last_of(L'\\');
 	if (sep != std::wstring::npos) {
-		plugInDir = plugInDir.substr(0, sep + 1) + PLUGIN_DIR_NAME;
+		pluginDir = pluginDir.substr(0, sep + 1) + PLUGIN_DIR_NAME;
 	}
+	return pluginDir;
+}
 
+void LoadPlugins() {
+	VERIFY(AppendMenuW(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()));
+
+	
+	const auto pluginDir = GetPluginDir();
 	WIN32_FIND_DATA findData = { 0 };
-	HANDLE hFind = FindFirstFileW((plugInDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
+	HANDLE hFind = FindFirstFileW((pluginDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
 	if (hFind == INVALID_HANDLE_VALUE) {
 		return;
 	}
@@ -43,7 +49,7 @@ void LoadPlugins() {
 	bool pluginLoaded = false;
 	while(TRUE) {
 		// Load the plugin.
-		if (LoadPlugin(plugInDir + L"\\" + findData.cFileName)) {
+		if (LoadPlugin(pluginDir + L"\\" + findData.cFileName)) {
 			pluginLoaded = true;
 		}
 
@@ -62,10 +68,7 @@ void LoadPlugins() {
 	FindClose(hFind);
 
 	if (pluginLoaded) {
-		MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_STATE, 0, MFS_ENABLED, 0, NULL };
-		if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
-			SHOW_LAST_ERROR();
-		}
+		RemoveMenu(pluginMenu, ID_NO_PLUGIN, MF_BYCOMMAND);
 	}
 }
 
@@ -97,7 +100,7 @@ static std::unordered_map<std::wstring, PluginState*> plugins;
 extern DeMic_Host host;
 
 // The auto-generated cmd id is started somewhat 32771.
-static UINT NextMenuItemID = 100;
+static UINT NextMenuItemID = ID_NO_PLUGIN+1;
 // A plugin can create no more than MAX_MENU_ITEM_COUNT menu items.
 static UINT MAX_MENU_ITEM_COUNT = 16;
 
@@ -122,7 +125,24 @@ static std::wstring GetLastPathComponent(std::wstring path) {
 	return path.substr(pos + 1);
 }
 
-bool LoadPlugin(const std::wstring& path) {
+static std::pair<UINT,UINT> GetFreeMenuItemID() {
+	UINT firstID = NextMenuItemID;
+	UINT lastID = firstID + MAX_MENU_ITEM_COUNT;
+	for (auto it = plugins.begin(); it != plugins.end(); it++) {
+		auto state = it->second;
+		if (firstID >= state->LastMenuItemID && firstID <= state->FirstMenuItemID 
+			|| lastID >= state->LastMenuItemID && lastID <= state->FirstMenuItemID) {
+			firstID = state->LastMenuItemID + 1;
+			lastID = firstID + MAX_MENU_ITEM_COUNT;
+		}
+	}
+	return std::pair<UINT, UINT>(firstID, lastID);
+}
+
+static bool LoadPlugin(const std::wstring& path) {
+	if (plugins.count(path)) {
+		return true;
+	}
 	HMODULE hModule = LoadLibraryW(path.c_str());
 	if (!hModule) {
 		SHOW_LAST_ERROR();
@@ -146,7 +166,7 @@ bool LoadPlugin(const std::wstring& path) {
 		FreeLibrary(hModule);
 		pluginInfo = NULL;
 		hModule = NULL;
-	}else {
+	} else {
 		if (pluginInfo->SDKVersion < 1) {
 			FreeLibrary(hModule);
 			ShowError((path + L"\nInvalid SDK Version!").c_str());
@@ -158,8 +178,9 @@ bool LoadPlugin(const std::wstring& path) {
 			return false;
 		}
 
-		const auto firstID = NextMenuItemID;
-		const auto lastID = NextMenuItemID + MAX_MENU_ITEM_COUNT;
+		auto idRange = GetFreeMenuItemID();
+		const auto firstID = idRange.first;
+		const auto lastID = idRange.second;
 		const auto OldNextMenuItemID = NextMenuItemID;
 		NextMenuItemID = lastID + 1;
 		PluginState* pluginState = new PluginState(path, hModule, pluginInfo, firstID, lastID);
@@ -189,8 +210,11 @@ void UnloadPlugin(const std::wstring& path) {
 	PluginState* state = it->second;
 	plugins.erase(path);
 	FreeLibrary(state->hModule);
+	const auto firstMenuItemID = state->FirstMenuItemID;
 	const UINT rootMenuItemID = state->RootMenuItemID;
 	delete state;
+
+	NextMenuItemID = firstMenuItemID;
 
 	for (int i = 0; i < GetMenuItemCount(popupMenu); i++) {
 		MENUITEMINFOW info = { sizeof(info), MIIM_ID, 0 };

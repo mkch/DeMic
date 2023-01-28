@@ -4,7 +4,6 @@
 #include "framework.h"
 #include "resource.h"
 #include "DeMic.h"
-#include "Util.h"
 #include <Commctrl.h>
 #include <shlwapi.h>
 #include <Dbt.h>
@@ -248,7 +247,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
    popupMenu = GetSubMenu(menu, 0);
    pluginMenu = CreatePopupMenu();
-   MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU|MIIM_STATE, 0, MFS_DISABLED, 0, pluginMenu, 0};
+   MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, pluginMenu, 0 };
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
        SHOW_LAST_ERROR();
    }
@@ -318,6 +317,9 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         break;
     case ID_MENU_EXIT:
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
+        break;
+    case ID_NO_PLUGIN:
+        MessageBoxW(hWnd, (strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
