@@ -9,7 +9,6 @@
 #include <shlwapi.h>
 #include <Dbt.h>
 #include <string>
-#include <map>
 #include <strsafe.h>
 #include <windowsx.h>
 
@@ -75,6 +74,7 @@ std::wstring configFilePath, startOnBootCmd;
 bool silentMode = false;
 
 HMENU popupMenu = NULL;
+HMENU pluginMenu = NULL;
 
 // Command line args of microphone commands.
 enum MIC_CMD {
@@ -247,6 +247,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    // This menu is never destroyed via my code.
    const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
    popupMenu = GetSubMenu(menu, 0);
+   pluginMenu = CreatePopupMenu();
+   MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU|MIIM_STATE, 0, MFS_DISABLED, 0, pluginMenu, 0};
+   if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
+       SHOW_LAST_ERROR();
+   }
 
    LoadPlugins();
 
@@ -315,6 +320,10 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
         break;
     default:
+        if (cmd >= APS_NextPluginCmdID) {
+            OnPluginMenuItemCmd((UINT)cmd);
+            break;
+        }
         ProcessPluginMenuCmd((UINT)cmd);
         break;
     }
@@ -418,7 +427,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
-            CallPluginInitMenuListeners();
             SetForegroundWindow(hWnd);
             CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
@@ -450,6 +458,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case MicCtrl::WM_MUTED_STATE_CHANGED:
         UpdateNotification(hWnd);
         CallPluginMicStateListeners();
+        break;
+    case WM_INITMENUPOPUP:
+        if ((HMENU)wParam == popupMenu) {
+            CallPluginInitMenuPopupListener(NULL);
+        } else {
+            CallPluginInitMenuPopupListener((HMENU)wParam);
+        }
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);

@@ -19,10 +19,13 @@ using json = nlohmann::json;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"Profile.json";
 std::wstring configFilePath;
-
 StringRes* strRes = NULL;
+HMENU devicesMenu = NULL;
 
 void ReadConfig();
+
+extern DeMic_PluginInfo plugin;
+std::vector<wchar_t> pluginName;
 
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
@@ -33,6 +36,8 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     case DLL_PROCESS_ATTACH: {
         strRes = new StringRes(hModule);
         utilAppName = strRes->Load(IDS_APP_NAME);
+        pluginName = DupCStr(utilAppName);
+        plugin.Name = &pluginName[0];
         
         wchar_t configFile[1024] = { 0 };
         const DWORD gmfn = GetModuleFileNameW(hModule, configFile, sizeof(configFile) / sizeof(configFile[0]));
@@ -47,6 +52,9 @@ BOOL APIENTRY DllMain( HMODULE hModule,
             break; // do not do cleanup if process termination scenario
         }
         // Perform any necessary cleanup.
+        if (devicesMenu) {
+            DestroyMenu(devicesMenu);
+        }
         break;
     }
     return TRUE;
@@ -57,7 +65,8 @@ void* state = NULL;
 UINT firstMenuItemID = 0;
 UINT lastMenuItemID = 0;
 
-void InitMenuListener();
+void MainMenuPopupListener(HMENU menu);
+void SubMenuPopupListener(HMENU menu);
 BOOL MicDevFilter(const wchar_t* devID);
 
 void DefaultDevChangedListener() {
@@ -70,20 +79,22 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     firstMenuItemID = args->FirstMenuItemID;
     lastMenuItemID = args->LastMenuItemID;
 
-    host->SetInitMenuListener(state, InitMenuListener);
+    host->SetInitMenuPopupListener(state, NULL, MainMenuPopupListener);
+    devicesMenu = CreatePopupMenu();
+    host->SetInitMenuPopupListener(state, devicesMenu, SubMenuPopupListener);
     host->SetDevFilter(state, MicDevFilter);
     host->SetDefaultDevChangedListener(state, DefaultDevChangedListener);
 
     MENUITEMINFOW rootMenuItem = { sizeof(rootMenuItem), 0 };
-    rootMenuItem.fMask = MIIM_STRING;
+    rootMenuItem.fMask = MIIM_STRING | MIIM_SUBMENU;
     auto title = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
     rootMenuItem.dwTypeData = &title[0];
     rootMenuItem.cch = UINT(title.size() - 1);
+    rootMenuItem.hSubMenu = devicesMenu;
     VERIFY(host->CreateRootMenuItem(state, &rootMenuItem));
     return TRUE;
 }
 
-HMENU devicesMenu = NULL;
 UINT allDevMenuID = 0; // Menu item id of "All".
 
 // Key: Menu item id.
@@ -183,23 +194,48 @@ void EnumDevProc(const wchar_t* devID, void* userData) {
     data->ItemID++;
 }
 
-void InitMenuListener() {
+void MainMenuPopupListener(HMENU menu) {
+    // Updates the menu item of this plugin in main menu.
+    std::vector<wchar_t> rootTitle;
+    if (selectedDev.empty()) {
+        rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ALL));
+    } else if (selectedDev.size() == 1) {
+        if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
+            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_DEFAULT));
+        }
+        else {
+            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
+        }
+    }
+    else {
+        rootTitle.assign(255, 0);
+        StringCchPrintfW(&rootTitle[0], rootTitle.size(), strRes->Load(IDS_APPLY_TO).c_str(), selectedDev.size());
+    }
+    MENUITEMINFOW info = { sizeof(info), 0 };
+    info.fMask = MIIM_STRING | MIIM_SUBMENU;
+    info.hSubMenu = devicesMenu;
+    info.dwTypeData = &rootTitle[0];
+    VERIFY(host->ModifyRootMenuItem(state, &info));
+}
+
+void SubMenuPopupListener(HMENU menu) {
     if (devicesMenu) {
-        DestroyMenu(devicesMenu);
+        while(GetMenuItemCount(devicesMenu)) {
+            RemoveMenu(devicesMenu, 0, MF_BYPOSITION);
+        }
         menuID2Dev.clear();
     }
-    devicesMenu = CreatePopupMenu();
 
     UINT menuItemID = firstMenuItemID;
     allDevMenuID = menuItemID;
-    VERIFY(AppendMenu(devicesMenu, 
-        MF_STRING | (selectedDev.empty()? MF_CHECKED : 0), 
+    VERIFY(AppendMenu(devicesMenu,
+        MF_STRING | (selectedDev.empty() ? MF_CHECKED : 0),
         allDevMenuID, strRes->Load(IDS_ALL_MICROPHONES).c_str()));
     menuItemID++;
 
     VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
-    
-    VERIFY(AppendMenu(devicesMenu, 
+
+    VERIFY(AppendMenu(devicesMenu,
         MF_STRING | (selectedDev.size() == 1 && selectedDev.count(DEFAULT_MIC_DEV_ID) ? MF_CHECKED : 0),
         menuItemID, strRes->Load(IDS_DEFAULT_MICROPHONE).c_str()));
     menuID2Dev[menuItemID] = std::pair<std::wstring, std::wstring>(DEFAULT_MIC_DEV_ID, L"");
@@ -216,31 +252,10 @@ void InitMenuListener() {
         if (dev.first == DEFAULT_MIC_DEV_ID || data.EnumedDevID.find(dev.first) != data.EnumedDevID.end()) {
             return;
         }
-        VERIFY(AppendMenu(devicesMenu, MF_STRING|MF_CHECKED, data.ItemID, dev.second.c_str()));
+        VERIFY(AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
         menuID2Dev[data.ItemID] = dev;
         data.ItemID++;
     });
-    
-
-    std::vector<wchar_t> rootTitle;
-    if (selectedDev.empty()) {
-        rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ALL));
-    }
-    else if (selectedDev.size() == 1) {
-        if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
-            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_DEFAULT));
-        } else {
-            rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
-         }
-    } else {
-        rootTitle.assign(255, 0);
-        StringCchPrintfW(&rootTitle[0], rootTitle.size(), strRes->Load(IDS_APPLY_TO).c_str(), selectedDev.size());
-    }
-    MENUITEMINFOW info = { sizeof(info), 0 };
-    info.fMask = MIIM_STRING | MIIM_SUBMENU;
-    info.hSubMenu = devicesMenu;
-    info.dwTypeData = &rootTitle[0];
-    VERIFY(host->ModifyRootMenuItem(state, &info));
 }
 
 static void OnMenuItemCmd(UINT id) {
@@ -267,7 +282,7 @@ static void OnMenuItemCmd(UINT id) {
 
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
-    L"Profile",	    /*Name*/
+    NULL,	        /*Name*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };

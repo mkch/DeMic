@@ -87,6 +87,7 @@ static void Paint(HWND hWnd, HDC hDC) {
     DeleteDC(hMemDC);
 }
 
+
 ATOM MyRegisterClass() {
     WNDCLASSEXW wcex = { 0 };
 
@@ -110,17 +111,25 @@ static HWND BillboardWnd = NULL;
 
 BOOL CreateBillboardWnd() {
     if (!MyRegisterClass()) {
+        SHOW_LAST_ERROR();
         return FALSE;
     }
-    wchar_t* title = NULL;
-    LoadStringW(hInstance, IDS_BILLBOARD, (LPWSTR)&title, 0);
-    BillboardWnd = CreateWindowW(szWindowClass, title, WS_OVERLAPPEDWINDOW,
+    BillboardWnd = CreateWindowW(szWindowClass, strRes->Load(IDS_BILLBOARD).c_str(), WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 550, 400, nullptr, nullptr, hInstance, nullptr);
 
     if (!BillboardWnd) {
+        SHOW_LAST_ERROR();
         return FALSE;
     }
     return TRUE;
+}
+
+void DestroyBillboardWnd() {
+    if (BillboardWnd) {
+        DestroyWindow(BillboardWnd);
+        UnregisterClassW(szWindowClass, hInstance);
+    }
+    BillboardWnd = NULL;
 }
 
 void ShowBillboardWnd() {

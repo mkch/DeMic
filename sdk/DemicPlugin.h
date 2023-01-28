@@ -64,15 +64,16 @@ extern "C" {
 		// Sets a filter function which defines the set of microphone devices
 		// to operate.
 		void (*SetDevFilter)(void* state, BOOL(*filter)(const wchar_t* devID));
-		// Sets a listener to be called when the system try menu is about
-		// to open.
-		void (*SetInitMenuListener)(void* state, void(*listener)());
+		// Sets a listener called when a menu is about to popup.
+		// NULL menu means the main system tray menu.
+		// Setting a NULL listener removes the listening of the menu.
+		void (*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
 		// Forces DeMic to call micphone state changed handler.
 		void (*NotifyMicStateChanged)();
 		// Get the devault microphone device ID.
 		// Empty string if not found.
 		void (*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
-		// Set a listener called when default microphone device is changed.
+		// Sets a listener called when default microphone device is changed.
 		void (*SetDefaultDevChangedListener)(void* state, void(*listener)());
 	};
 

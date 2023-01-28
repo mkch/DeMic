@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 extern std::wstring utilAppName;
@@ -30,7 +30,7 @@ private:
 	StringRes(const StringRes&);
 private:
 	const HMODULE hInstance;
-	std::map<UINT, std::wstring> stringResMap;
+	std::unordered_map<UINT, std::wstring> stringResMap;
 public:
 	const std::wstring& Load(UINT resId);
 };

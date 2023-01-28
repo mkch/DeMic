@@ -5,6 +5,8 @@
 #define IDS_OPEN_BILLBOARD              101
 #define IDS_BILLBOARD                   102
 #define IDB_MICROPHONE                  103
+#define IDS_APP_NAME                    103
+#define IDS_STRING103                   103
 #define IDB_BITMAP2                     104
 #define IDB_MICROPHONE_MUTED            104
 

@@ -3,8 +3,14 @@
 #include "../sdk/DemicPlugin.h"
 #include "resource.h"
 #include "BillboardWnd.h"
+#include "Billboard.h"
 
 HINSTANCE hInstance = NULL;
+
+StringRes* strRes = NULL;
+
+extern DeMic_PluginInfo plugin;
+std::vector<wchar_t> plugInName;
 
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,  // handle to DLL module
@@ -15,15 +21,17 @@ BOOL WINAPI DllMain(
     {
 	case DLL_PROCESS_ATTACH:
 		hInstance = hinstDLL;
-		if (!CreateBillboardWnd()) {
-			return FALSE;
-		}
+		strRes = new StringRes(hinstDLL);
+		utilAppName = strRes->Load(IDS_APP_NAME);
+		plugInName = DupCStr(utilAppName);
+		plugin.Name = &plugInName[0];
         break;
     case DLL_PROCESS_DETACH:
         if (lpvReserved != nullptr) {
             break; // do not do cleanup if process termination scenario
         }
         // Perform any necessary cleanup.
+		DestroyBillboardWnd();
         break;
     }
     return TRUE;
@@ -39,16 +47,13 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 
 	MENUITEMINFOW rootMenuItem = {sizeof(rootMenuItem), 0};
 	rootMenuItem.fMask = MIIM_STRING;
-	wchar_t* title = NULL;
-	if (LoadStringW(hInstance, IDS_BILLBOARD, (LPWSTR)&title, 0) == 0) {
-		return FALSE;
-	}
-	rootMenuItem.dwTypeData = title;
-	rootMenuItem.cch = lstrlenW(title);
+	auto title = DupCStr(strRes->Load(IDS_OPEN_BILLBOARD));
+	rootMenuItem.dwTypeData = &title[0];
+	rootMenuItem.cch = UINT(title.size() - 1);
 	host->CreateRootMenuItem(state, &rootMenuItem);
 
 	host->SetMicMuteStateListener(state, InvalidateBillboardWnd);
-	return TRUE;
+	return CreateBillboardWnd();
 }
 
 static void OnMenuItemCmd(UINT id) {
@@ -61,7 +66,7 @@ static void OnMenuItemCmd(UINT id) {
 
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
-	L"Billboard",	/*Name*/
+	NULL,			/*Name*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
