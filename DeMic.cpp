@@ -155,6 +155,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     ReadConfig();
     ResetHotKey();
+    LoadPlugins();
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_DEMIC));
 
@@ -251,8 +252,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
        SHOW_LAST_ERROR();
    }
-
-   LoadPlugins();
 
    //ShowWindow(mainWindow, nCmdShow);
    //UpdateWindow(mainWindow);
@@ -747,6 +746,9 @@ static const auto CONFIG_ON_ENABLE = L"OnEnable";
 static const auto CONFIG_ON_PATH = L"OnPath";
 static const auto CONFIG_OFF_ENABLE = L"OffEnable";
 static const auto CONFIG_OFF_PATH = L"OffPath";
+static const auto CONFIG_PLUGIN = L"Plugin";
+// Delimiter of plugin files.
+static const auto CONFIG_PLUGIN_DEL = L"|";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -766,6 +768,10 @@ void ReadConfig() {
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_SOUND, CONFIG_OFF_PATH, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
     offSoundPath = buf;
+
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    Split(buf, CONFIG_PLUGIN_DEL, [](const auto& plugin) { configuredPluginFiles.insert(plugin); });
 }
 
 // Write settings to config file.
@@ -784,6 +790,9 @@ void WriteConfig() {
         configFilePath.c_str());
     WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_OFF_PATH,
         offSoundPath.c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN,
+        Join(configuredPluginFiles.begin(), configuredPluginFiles.end(), CONFIG_PLUGIN_DEL).c_str(),
         configFilePath.c_str());
 }
 

@@ -1,6 +1,9 @@
 #pragma once
+#include <unordered_set>
 
 static const UINT ID_NO_PLUGIN = 99;
+
+extern std::unordered_set<std::wstring> configuredPluginFiles;
 
 // Loads all the plugins in plugin dir.
 void LoadPlugins();

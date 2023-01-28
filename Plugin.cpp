@@ -1,7 +1,6 @@
 #include "framework.h"
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <algorithm>
 #include "Plugin.h"
 #include "DeMic.h"
@@ -100,10 +99,12 @@ static std::unordered_map<std::wstring, PluginState*> plugins;
 extern DeMic_Host host;
 
 // The auto-generated cmd id is started somewhat 32771.
-static UINT NextMenuItemID = ID_NO_PLUGIN+1;
+static UINT nextMenuItemID = ID_NO_PLUGIN+1;
 // A plugin can create no more than MAX_MENU_ITEM_COUNT menu items.
-static UINT MAX_MENU_ITEM_COUNT = 16;
+static const UINT MAX_MENU_ITEM_COUNT = 16;
 
+// File names of selected plugins,
+// which will be saved to config file.
 std::unordered_set<std::wstring> configuredPluginFiles;
 std::unordered_map<UINT, std::wstring> menuCmd2PluginPath;
 
@@ -126,7 +127,7 @@ static std::wstring GetLastPathComponent(std::wstring path) {
 }
 
 static std::pair<UINT,UINT> GetFreeMenuItemID() {
-	UINT firstID = NextMenuItemID;
+	UINT firstID = nextMenuItemID;
 	UINT lastID = firstID + MAX_MENU_ITEM_COUNT;
 	for (auto it = plugins.begin(); it != plugins.end(); it++) {
 		auto state = it->second;
@@ -181,8 +182,8 @@ static bool LoadPlugin(const std::wstring& path) {
 		auto idRange = GetFreeMenuItemID();
 		const auto firstID = idRange.first;
 		const auto lastID = idRange.second;
-		const auto OldNextMenuItemID = NextMenuItemID;
-		NextMenuItemID = lastID + 1;
+		const auto OldNextMenuItemID = nextMenuItemID;
+		nextMenuItemID = lastID + 1;
 		PluginState* pluginState = new PluginState(path, hModule, pluginInfo, firstID, lastID);
 
 		DeMic_OnLoadedArgs args = { pluginState, pluginState->FirstMenuItemID + 1, pluginState->LastMenuItemID };
@@ -190,7 +191,7 @@ static bool LoadPlugin(const std::wstring& path) {
 		if (!pluginInfo->OnLoaded(&host, &args)) {
 			FreeLibrary(hModule);
 			delete pluginState;
-			NextMenuItemID = OldNextMenuItemID;
+			nextMenuItemID = OldNextMenuItemID;
 			return false;
 		}
 
@@ -214,7 +215,7 @@ void UnloadPlugin(const std::wstring& path) {
 	const UINT rootMenuItemID = state->RootMenuItemID;
 	delete state;
 
-	NextMenuItemID = firstMenuItemID;
+	nextMenuItemID = firstMenuItemID;
 
 	for (int i = 0; i < GetMenuItemCount(popupMenu); i++) {
 		MENUITEMINFOW info = { sizeof(info), MIIM_ID, 0 };
@@ -251,6 +252,7 @@ void OnPluginMenuItemCmd(UINT cmd) {
 	}
 
 	NotifyMicStateChanged();
+	WriteConfig();
 }
 
 static void HostTurnOnMic(void* st) {

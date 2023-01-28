@@ -17,3 +17,4 @@ void TurnOnMic();
 void TurnOffMic();
 void ToggleMuted();
 BOOL IsMuted();
+void WriteConfig();
