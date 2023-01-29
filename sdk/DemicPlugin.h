@@ -38,43 +38,45 @@ extern "C" {
 		// MIIM_ID and wID of lpmi.fMask is ignored.
 		BOOL(*CreateRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
 		// Turns on microphones.
-		void (*TurnOnMic)(void* state);
+		void(*TurnOnMic)(void* state);
 		// Turns off microphones.
-		void (*TurnOffMic)(void* state);
+		void(*TurnOffMic)(void* state);
 		// Toggles on off.
-		void (*ToggleMuted)(void* state);
+		void(*ToggleMuted)(void* state);
 		// Gets the microphone state.
 		BOOL(*IsMuted)();
 		// Sets a listener to be called when micphone mute
 		// state is changed.
-		void (*SetMicMuteStateListener)(void* state, void(*listener)());
+		void(*SetMicMuteStateListener)(void* state, void(*listener)());
 		// Modifies the root menu item of this plugin.
 		// MIIM_ID and wID of lpmi.fMaks is ignored.
 		BOOL(*ModifyRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
 		// Enumerates all activate microphone devices.
-		void (*GetActiveDevices)(void (*callback)(const wchar_t* devID, void* userData), void* userData);
+		void(*GetActiveDevices)(void (*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Gets the friendly name of the endpoint device
 		// (for example, "Speakers (XYZ Audio Adapter)").
-		void (*GetDevName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
+		void(*GetDevName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
 		// Gets the friendly name of the audio adapter to which the endpoint device is attached
 		// (for example, "XYZ Audio Adapter")
-		void (*GetDevIfaceName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
+		void(*GetDevIfaceName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
 		// Gets whether a microphone device is muted.
 		BOOL(*GetDevMuted)(const wchar_t* devID);
 		// Sets a filter function which defines the set of microphone devices
 		// to operate.
-		void (*SetDevFilter)(void* state, BOOL(*filter)(const wchar_t* devID));
+		void(*SetDevFilter)(void* state, BOOL(*filter)(const wchar_t* devID));
 		// Sets a listener called when a menu is about to popup.
 		// NULL menu means the main system tray menu.
 		// Setting a NULL listener removes the listening of the menu.
-		void (*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
+		void(*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
 		// Forces DeMic to call micphone state changed handler.
-		void (*NotifyMicStateChanged)();
+		void(*NotifyMicStateChanged)();
 		// Get the devault microphone device ID.
 		// Empty string if not found.
-		void (*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
+		void(*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Sets a listener called when default microphone device is changed.
-		void (*SetDefaultDevChangedListener)(void* state, void(*listener)());
+		void(*SetDefaultDevChangedListener)(void* state, void(*listener)());
+		// Deletes the root menu item added by 
+		BOOL(*DeleteRootMenuItem)(void* state);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

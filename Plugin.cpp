@@ -10,9 +10,9 @@ const static wchar_t* const PLUGIN_DIR_NAME = L"plugin";
 const static wchar_t* const PLUGIN_EXT = L"plugin";
 
 struct PluginState;
-extern std::unordered_map<std::wstring, PluginState*> plugins;
+extern std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 
-bool LoadPlugin(const std::wstring& path);
+bool LoadPlugin(const std::wstring& path, std::wstring* name = NULL);
 void NotifyMicStateChanged();
 
 std::wstring GetPluginDir() {
@@ -34,10 +34,14 @@ std::wstring GetPluginDir() {
 	return pluginDir;
 }
 
-void LoadPlugins() {
-	VERIFY(AppendMenuW(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()));
+// All successfully loaded plugins.
+static std::unordered_map<std::wstring, PluginState*> loadedPlugins;
+// All valid plugin file paths.
+// Path -> name
+static std::unordered_map<std::wstring, std::wstring> validPlugins;
 
-	
+void LoadPlugins() {
+	validPlugins.clear();
 	const auto pluginDir = GetPluginDir();
 	WIN32_FIND_DATA findData = { 0 };
 	HANDLE hFind = FindFirstFileW((pluginDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
@@ -45,13 +49,13 @@ void LoadPlugins() {
 		return;
 	}
 
-	bool pluginLoaded = false;
 	while(TRUE) {
 		// Load the plugin.
-		if (LoadPlugin(pluginDir + L"\\" + findData.cFileName)) {
-			pluginLoaded = true;
+		auto path = pluginDir + L"\\" + findData.cFileName;
+		std::wstring name;
+		if (LoadPlugin(path, &name)) {
+			validPlugins[path] = name;
 		}
-
 		if (!FindNextFileW(hFind, &findData)) {
 			DWORD lastError = GetLastError();
 			if (lastError) {
@@ -65,10 +69,6 @@ void LoadPlugins() {
 		}
 	}
 	FindClose(hFind);
-
-	if (pluginLoaded) {
-		RemoveMenu(pluginMenu, ID_NO_PLUGIN, MF_BYCOMMAND);
-	}
 }
 
 struct PluginState {
@@ -94,8 +94,6 @@ struct PluginState {
 	std::unordered_map<HMENU, void(*)(HMENU)> InitMenuPopupListeners;
 };
 
-static std::unordered_map<std::wstring, PluginState*> plugins;
-
 extern DeMic_Host host;
 
 // The auto-generated cmd id is started somewhat 32771.
@@ -108,7 +106,7 @@ static const UINT MAX_MENU_ITEM_COUNT = 16;
 std::unordered_set<std::wstring> configuredPluginFiles;
 std::unordered_map<UINT, std::wstring> menuCmd2PluginPath;
 
-UINT NextPluginMenuCmd() {
+UINT GetNextPluginMenuCmd() {
 	UINT cmd = APS_NextPluginCmdID;
 	while(menuCmd2PluginPath.count(cmd)){
 		cmd++;
@@ -129,19 +127,28 @@ static std::wstring GetLastPathComponent(std::wstring path) {
 static std::pair<UINT,UINT> GetFreeMenuItemID() {
 	UINT firstID = nextMenuItemID;
 	UINT lastID = firstID + MAX_MENU_ITEM_COUNT;
-	for (auto it = plugins.begin(); it != plugins.end(); it++) {
-		auto state = it->second;
-		if (firstID >= state->LastMenuItemID && firstID <= state->FirstMenuItemID 
-			|| lastID >= state->LastMenuItemID && lastID <= state->FirstMenuItemID) {
-			firstID = state->LastMenuItemID + 1;
-			lastID = firstID + MAX_MENU_ITEM_COUNT;
+	while (true) {
+		if (std::none_of(loadedPlugins.begin(), loadedPlugins.end(),
+			[firstID, lastID](const auto& pair) {
+				PluginState* state = pair.second;
+				return firstID >= state->FirstMenuItemID && firstID <= state->LastMenuItemID
+					|| lastID >= state->FirstMenuItemID && lastID <= state->LastMenuItemID;
+			})) {
+			break; 
 		}
+		firstID = lastID + 1;
+		lastID = firstID + MAX_MENU_ITEM_COUNT;
 	}
+
 	return std::pair<UINT, UINT>(firstID, lastID);
 }
 
-static bool LoadPlugin(const std::wstring& path) {
-	if (plugins.count(path)) {
+static bool LoadPlugin(const std::wstring& path, std::wstring* name) {
+	auto it = loadedPlugins.find(path);
+	if(it != loadedPlugins.end()) {
+		if (name) {
+			*name = it->second->PluginInfo->Name;
+		}
 		return true;
 	}
 	HMODULE hModule = LoadLibraryW(path.c_str());
@@ -160,8 +167,10 @@ static bool LoadPlugin(const std::wstring& path) {
 		return false;
 	}
 
-	std::wstring name = pluginInfo->Name;
-	UINT menuItemFlags = MF_STRING;
+	if (name) {
+		*name = pluginInfo->Name;
+	}
+
 	const auto file = GetLastPathComponent(path);
 	if (!configuredPluginFiles.count(file)) {
 		FreeLibrary(hModule);
@@ -195,62 +204,95 @@ static bool LoadPlugin(const std::wstring& path) {
 			return false;
 		}
 
-		plugins[path] = pluginState;
-		menuItemFlags |= MF_CHECKED;
-	}
-	if (!std::any_of(menuCmd2PluginPath.begin(), menuCmd2PluginPath.end(), [&path](auto pair) { return pair.second == path; })) {
-		const auto menuItemID = NextPluginMenuCmd();
-		AppendMenuW(pluginMenu, menuItemFlags, menuItemID, (name+ L"(" + file + L")").c_str());
-		menuCmd2PluginPath[menuItemID] = path;
+		loadedPlugins[path] = pluginState;
 	}
 	return true;
 }
 
-void UnloadPlugin(const std::wstring& path) {
-	auto it = plugins.find(path);
-	PluginState* state = it->second;
-	plugins.erase(path);
-	FreeLibrary(state->hModule);
-	const auto firstMenuItemID = state->FirstMenuItemID;
-	const UINT rootMenuItemID = state->RootMenuItemID;
-	delete state;
+static BOOL DeletePluginRootMenuItem(PluginState* state) {
+	if (!state->RootMenuItemCreated) {
+		return FALSE;
+	}
 
-	nextMenuItemID = firstMenuItemID;
+	nextMenuItemID = state->FirstMenuItemID;
 
 	for (int i = 0; i < GetMenuItemCount(popupMenu); i++) {
 		MENUITEMINFOW info = { sizeof(info), MIIM_ID, 0 };
 		if (!GetMenuItemInfoW(popupMenu, i, TRUE, &info)) {
 			SHOW_LAST_ERROR();
-			return;
+			return FALSE;
 		}
-		if (rootMenuItemID == info.wID) {
+		if (state->RootMenuItemID == info.wID) {
 			RemoveMenu(popupMenu, i, MF_BYPOSITION); // Remove the root item.
 			RemoveMenu(popupMenu, i, MF_BYPOSITION); // Remove the separator.
 			break;
 		}
 	}
+	return TRUE;
+}
+
+static void UnloadPlugin(const std::wstring& path) {
+	auto it = loadedPlugins.find(path);
+	if (it == loadedPlugins.end()) {
+		return;
+	}
+	PluginState* state = it->second;
+	loadedPlugins.erase(path);
+	FreeLibrary(state->hModule);
+	DeletePluginRootMenuItem(state);
+	delete state;
+}
+
+void OnPluginMenuInitPopup() {
+	while (GetMenuItemCount(pluginMenu)) {
+		RemoveMenu(pluginMenu, 0, MF_BYPOSITION);
+	}
+	menuCmd2PluginPath.clear();
+
+	LoadPlugins();
+	if (validPlugins.empty()) {
+		VERIFY(AppendMenu(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()))
+		return;
+	}
+
+	std::for_each(validPlugins.begin(), validPlugins.end(), [](const auto& pair) {
+		const auto& path = pair.first;
+		const auto& name = pair.second;
+		const auto id = GetNextPluginMenuCmd();
+		VERIFY(AppendMenuW(pluginMenu,
+			MF_STRING | (loadedPlugins.count(path) ? MF_CHECKED : 0),
+			id,
+			(name + L"(" + GetLastPathComponent(path) + L")").c_str()));
+		menuCmd2PluginPath[id] = path;
+	});
+
+	// Process the renamed loaded plugins(Yes, it's possible to rename a loaded DLL!)
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [](const auto& pair) {
+		const auto& path = pair.first;
+		const auto name = pair.second->PluginInfo->Name;
+		const auto id = GetNextPluginMenuCmd();
+		if (std::none_of(validPlugins.begin(), validPlugins.end(), [path](const auto pair) { return pair.first == path; })) {
+			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, name));
+			menuCmd2PluginPath[id] = path; // Path does not exist, but it's OK.
+		}
+	});
 }
 
 void OnPluginMenuItemCmd(UINT cmd) {
 	const auto& path = menuCmd2PluginPath[cmd];
 	auto file = GetLastPathComponent(path);
 	auto it = configuredPluginFiles.find(file);
-	MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_STATE, 0};
 	if(it != configuredPluginFiles.end()) {
 		configuredPluginFiles.erase(it);
 		UnloadPlugin(path);
 	} else {
 		configuredPluginFiles.insert(file);
 		if(!LoadPlugin(path)) {
-			SHOW_ERROR(L"Can't load plugin!");
+			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+			configuredPluginFiles.erase(file);
 			return;
 		}
-		menuInfo.fState = MFS_CHECKED;
 	}
-	if (!SetMenuItemInfoW(pluginMenu, cmd, FALSE, &menuInfo)) {
-		SHOW_LAST_ERROR();
-	}
-
 	NotifyMicStateChanged();
 	WriteConfig();
 }
@@ -268,7 +310,7 @@ static void HostToggleMuted(void* st) {
 }
 
 
-BOOL HostCreateRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
+static BOOL HostCreateRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	PluginState* state = (PluginState*)st;
 	if (state->RootMenuItemCreated) {
 		return FALSE;
@@ -284,7 +326,7 @@ BOOL HostCreateRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	return TRUE;
 }
 
-BOOL HostModifyRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
+static BOOL HostModifyRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	const auto state = (PluginState*)st;
 	if (!state->RootMenuItemCreated) {
 		return FALSE;
@@ -294,17 +336,17 @@ BOOL HostModifyRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	return SetMenuItemInfoW(popupMenu, state->RootMenuItemID, FALSE, &mi);
 }
 
-BOOL HostIsMuted() {
+static BOOL HostIsMuted() {
 	return IsMuted();
 }
 
-void HostSetMicMuteStateListener(void* st, void(*listener)()) {
+static void HostSetMicMuteStateListener(void* st, void(*listener)()) {
 	PluginState* state = (PluginState*)st;
 	state->MicMuteStateListener = listener;
 }
 
 void CallPluginMicStateListeners() {
-	std::for_each(plugins.begin(), plugins.end(),
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(),
 		[](const auto pair) {
 			const auto plugin = pair.second;
 		if (plugin->MicMuteStateListener) {
@@ -313,32 +355,32 @@ void CallPluginMicStateListeners() {
 	});
 }
 
-void HostGetActiveDevices(void (*callback)(const wchar_t* devID, void* userData), void* userData) {
+static void HostGetActiveDevices(void (*callback)(const wchar_t* devID, void* userData), void* userData) {
 	const auto devices = micCtrl.GetActiveDevices();
 	std::for_each(devices.begin(), devices.end(), [callback, userData](const auto id) {
 		callback(id.c_str(), userData);
 	});
 }
 
-void HostGetDevName(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
+static void HostGetDevName(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
 	callback(micCtrl.GetDevName(devID).c_str(), userData);
 }
 
-void HostGetDevIfaceName (const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
+static void HostGetDevIfaceName (const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
 	callback(micCtrl.GetDevIfaceName(devID).c_str(), userData);
 }
 
-BOOL HostGetDevMuted(const wchar_t* devID) {
+static BOOL HostGetDevMuted(const wchar_t* devID) {
 	return micCtrl.GetDevMuted(devID);
 }
 
-void HostSetDevFilter(void* st, BOOL(*filter)(const wchar_t* devID)) {
+static void HostSetDevFilter(void* st, BOOL(*filter)(const wchar_t* devID)) {
 	((PluginState*)st)->DevFilter = filter;
 }
 
 BOOL CallPluginDevFilter(const wchar_t* devID) {
 	BOOL result = TRUE;
-	for (auto it = plugins.begin(); it != plugins.end(); it++) {
+	for (auto it = loadedPlugins.begin(); it != loadedPlugins.end(); it++) {
 		const auto plugin = it->second;
 		if (plugin->DevFilter) {
 			result = plugin->DevFilter(devID);
@@ -348,7 +390,7 @@ BOOL CallPluginDevFilter(const wchar_t* devID) {
 	return result;
 }
 
-void HostSetInitMenuPopupListener(void* st, HMENU menu, void(*listener)(HMENU menu)) {
+static void HostSetInitMenuPopupListener(void* st, HMENU menu, void(*listener)(HMENU menu)) {
 	auto state = (PluginState*)st;
 	if (listener) {
 		state->InitMenuPopupListeners[menu] = listener;
@@ -359,7 +401,7 @@ void HostSetInitMenuPopupListener(void* st, HMENU menu, void(*listener)(HMENU me
 }
 
 void CallPluginInitMenuPopupListener(HMENU menu) {
-	std::for_each(plugins.begin(), plugins.end(),
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(),
 		[menu](const auto pair) {
 			const auto plugin = pair.second;
 	const auto it = plugin->InitMenuPopupListeners.find(menu);
@@ -373,21 +415,21 @@ void NotifyMicStateChanged() {
 	PostMessage(mainWindow, MicCtrl::WM_MUTED_STATE_CHANGED, 0, 0);
 }
 
-void HostNotifyMicStateChanged() {
+static void HostNotifyMicStateChanged() {
 	NotifyMicStateChanged();
 }
 
-void HostGetDefaultDevID (void(*callback)(const wchar_t* devID, void* userData), void* userData) {
+static void HostGetDefaultDevID (void(*callback)(const wchar_t* devID, void* userData), void* userData) {
 	callback(micCtrl.GetDefaultMicphone().c_str(), userData);
 }
 
-void HostSetDefaultDevChangedListener(void* st, void(*listener)()) {
+static void HostSetDefaultDevChangedListener(void* st, void(*listener)()) {
 	auto state = (PluginState*)st;
 	state->DefaultDevChangedListener = listener;
 }
 
 void CallPluginDefaultDevChangedListeners() {
-	std::for_each(plugins.begin(), plugins.end(),
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(),
 		[](const auto pair) {
 			const auto plugin = pair.second;
 		if (plugin->DefaultDevChangedListener) {
@@ -396,8 +438,12 @@ void CallPluginDefaultDevChangedListeners() {
 	});
 }
 
+static BOOL HostDeleteRootMenuItem(void* st) {
+	return DeletePluginRootMenuItem((PluginState*)st);
+}
+
 bool ProcessPluginMenuCmd(UINT id) {;
-	std::for_each(plugins.begin(), plugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
 		const auto state = plugin.second;
 		if (id >= state->FirstMenuItemID && id <= state->LastMenuItemID) {
 			state->PluginInfo->OnMenuItemCmd(id == state->FirstMenuItemID ? 0 : id);
@@ -425,4 +471,5 @@ static DeMic_Host host = {
 	HostNotifyMicStateChanged,
 	HostGetDefaultDevID,
 	HostSetDefaultDevChangedListener,
+	HostDeleteRootMenuItem,
 };

@@ -464,6 +464,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         if ((HMENU)wParam == popupMenu) {
             CallPluginInitMenuPopupListener(NULL);
         } else {
+            if ((HMENU)wParam == pluginMenu) {
+                OnPluginMenuInitPopup();
+            }
             CallPluginInitMenuPopupListener((HMENU)wParam);
         }
         break;

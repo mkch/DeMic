@@ -32,6 +32,9 @@ BOOL WINAPI DllMain(
         }
         // Perform any necessary cleanup.
 		DestroyBillboardWnd();
+		if (host && state) {
+			host->DeleteRootMenuItem(state);
+		}
         break;
     }
     return TRUE;
@@ -50,10 +53,15 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	auto title = DupCStr(strRes->Load(IDS_OPEN_BILLBOARD));
 	rootMenuItem.dwTypeData = &title[0];
 	rootMenuItem.cch = UINT(title.size() - 1);
-	host->CreateRootMenuItem(state, &rootMenuItem);
-
+	if (!host->CreateRootMenuItem(state, &rootMenuItem)) {
+		return FALSE;
+	}
 	host->SetMicMuteStateListener(state, InvalidateBillboardWnd);
-	return CreateBillboardWnd();
+	BOOL ok = CreateBillboardWnd();
+	if (!ok) {
+		host->DeleteRootMenuItem(state);
+	}
+	return ok;
 }
 
 static void OnMenuItemCmd(UINT id) {

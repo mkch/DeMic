@@ -17,6 +17,9 @@
 
 using json = nlohmann::json;
 
+DeMic_Host* host = NULL;
+void* state = NULL;
+
 static const wchar_t* const CONFIG_FILE_NAME = L"Profile.json";
 std::wstring configFilePath;
 StringRes* strRes = NULL;
@@ -55,13 +58,14 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         if (devicesMenu) {
             DestroyMenu(devicesMenu);
         }
+        if (host && state) {
+            host->DeleteRootMenuItem(state);
+        }
         break;
     }
     return TRUE;
 }
 
-DeMic_Host* host = NULL;
-void* state = NULL;
 UINT firstMenuItemID = 0;
 UINT lastMenuItemID = 0;
 

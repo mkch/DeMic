@@ -16,6 +16,7 @@
 #define IDS_NO_PLUGIN                   109
 #define IDS_SOUND_FILE_FILTER           110
 #define IDS_PLUGIN_INSTRUCTION          110
+#define IDS_CAN_NOT_LOAD_PLUGIN         111
 #define IDR_MAINFRAME                   128
 #define IDI_MICPHONE                    138
 #define IDI_ICON2                       141

@@ -24,3 +24,5 @@ BOOL CallPluginDevFilter(const wchar_t* devID);
 void OnPluginMenuItemCmd(UINT cmd);
 // Gets the plugin dir.
 std::wstring GetPluginDir();
+// Called when plugin menu is about to popup;
+void OnPluginMenuInitPopup();
