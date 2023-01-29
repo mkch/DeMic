@@ -12,7 +12,7 @@ const static wchar_t* const PLUGIN_EXT = L"plugin";
 struct PluginState;
 extern std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 
-bool LoadPlugin(const std::wstring& path, std::wstring* name = NULL);
+bool LoadPlugin(const std::wstring& path, bool loadNew, std::wstring* name = NULL);
 void NotifyMicStateChanged();
 
 std::wstring GetPluginDir() {
@@ -40,7 +40,10 @@ static std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 // Path -> name
 static std::unordered_map<std::wstring, std::wstring> validPlugins;
 
-void LoadPlugins() {
+// Reloads all plugins in plugin dir.
+// If loadNew is false, OnLoaded of newly found plugins
+// will not be called.
+static void ReloadPlugins(bool loadNew) {
 	validPlugins.clear();
 	const auto pluginDir = GetPluginDir();
 	WIN32_FIND_DATA findData = { 0 };
@@ -53,7 +56,7 @@ void LoadPlugins() {
 		// Load the plugin.
 		auto path = pluginDir + L"\\" + findData.cFileName;
 		std::wstring name;
-		if (LoadPlugin(path, &name)) {
+		if (LoadPlugin(path, loadNew, &name)) {
 			validPlugins[path] = name;
 		}
 		if (!FindNextFileW(hFind, &findData)) {
@@ -69,6 +72,10 @@ void LoadPlugins() {
 		}
 	}
 	FindClose(hFind);
+}
+
+void LoadPlugins() {
+	ReloadPlugins(true);
 }
 
 struct PluginState {
@@ -143,7 +150,11 @@ static std::pair<UINT,UINT> GetFreeMenuItemID() {
 	return std::pair<UINT, UINT>(firstID, lastID);
 }
 
-static bool LoadPlugin(const std::wstring& path, std::wstring* name) {
+// Loads a plugin if it is not loaded. 
+// If name is not NULL and true is returned, *name is the name of plugin.
+// If loadNew is false, the plugin will not be loaded(OnLoaded not called).
+// Return true if the plugin is valid.
+static bool LoadPlugin(const std::wstring& path, bool loadNew, std::wstring* name) {
 	auto it = loadedPlugins.find(path);
 	if(it != loadedPlugins.end()) {
 		if (name) {
@@ -172,7 +183,7 @@ static bool LoadPlugin(const std::wstring& path, std::wstring* name) {
 	}
 
 	const auto file = GetLastPathComponent(path);
-	if (!configuredPluginFiles.count(file)) {
+	if (!loadNew || !configuredPluginFiles.count(file)) {
 		FreeLibrary(hModule);
 		pluginInfo = NULL;
 		hModule = NULL;
@@ -249,7 +260,7 @@ void OnPluginMenuInitPopup() {
 	}
 	menuCmd2PluginPath.clear();
 
-	LoadPlugins();
+	ReloadPlugins(false);
 	if (validPlugins.empty()) {
 		VERIFY(AppendMenu(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()))
 		return;
@@ -269,10 +280,10 @@ void OnPluginMenuInitPopup() {
 	// Process the renamed loaded plugins(Yes, it's possible to rename a loaded DLL!)
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [](const auto& pair) {
 		const auto& path = pair.first;
-		const auto name = pair.second->PluginInfo->Name;
+		const std::wstring name = pair.second->PluginInfo->Name;
 		const auto id = GetNextPluginMenuCmd();
 		if (std::none_of(validPlugins.begin(), validPlugins.end(), [path](const auto pair) { return pair.first == path; })) {
-			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, name));
+			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, (name + L"(" + GetLastPathComponent(path) + L") ?").c_str()));
 			menuCmd2PluginPath[id] = path; // Path does not exist, but it's OK.
 		}
 	});
@@ -280,16 +291,30 @@ void OnPluginMenuInitPopup() {
 
 void OnPluginMenuItemCmd(UINT cmd) {
 	const auto& path = menuCmd2PluginPath[cmd];
-	auto file = GetLastPathComponent(path);
+	auto const file = GetLastPathComponent(path);
 	auto it = configuredPluginFiles.find(file);
-	if(it != configuredPluginFiles.end()) {
-		configuredPluginFiles.erase(it);
-		UnloadPlugin(path);
-	} else {
-		configuredPluginFiles.insert(file);
-		if(!LoadPlugin(path)) {
+
+	auto load = [path, &file]() {
+		if (!LoadPlugin(path, true)) {
 			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
 			configuredPluginFiles.erase(file);
+			return false;
+		}
+		return true;
+	};
+
+	if(it != configuredPluginFiles.end()) {
+		if (!loadedPlugins.count(path)) {
+			if (!load()) {
+				return;
+			}
+		} else {
+			configuredPluginFiles.erase(it);
+			UnloadPlugin(path);
+		}
+	} else {
+		configuredPluginFiles.insert(file);
+		if (!load()) {
 			return;
 		}
 	}
