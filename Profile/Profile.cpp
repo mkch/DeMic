@@ -223,12 +223,10 @@ void MainMenuPopupListener(HMENU menu) {
 }
 
 void SubMenuPopupListener(HMENU menu) {
-    if (devicesMenu) {
-        while(GetMenuItemCount(devicesMenu)) {
-            RemoveMenu(devicesMenu, 0, MF_BYPOSITION);
-        }
-        menuID2Dev.clear();
+    while(GetMenuItemCount(devicesMenu)) {
+        RemoveMenu(devicesMenu, 0, MF_BYPOSITION);
     }
+    menuID2Dev.clear();
 
     UINT menuItemID = firstMenuItemID;
     allDevMenuID = menuItemID;

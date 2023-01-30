@@ -12,7 +12,6 @@ const static wchar_t* const PLUGIN_EXT = L"plugin";
 struct PluginState;
 extern std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 
-bool LoadPlugin(const std::wstring& path, bool loadNew, std::wstring* name = NULL);
 void NotifyMicStateChanged();
 
 std::wstring GetPluginDir() {
@@ -39,44 +38,6 @@ static std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 // All valid plugin file paths.
 // Path -> name
 static std::unordered_map<std::wstring, std::wstring> validPlugins;
-
-// Reloads all plugins in plugin dir.
-// If loadNew is false, OnLoaded of newly found plugins
-// will not be called.
-static void ReloadPlugins(bool loadNew) {
-	validPlugins.clear();
-	const auto pluginDir = GetPluginDir();
-	WIN32_FIND_DATA findData = { 0 };
-	HANDLE hFind = FindFirstFileW((pluginDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
-	if (hFind == INVALID_HANDLE_VALUE) {
-		return;
-	}
-
-	while(TRUE) {
-		// Load the plugin.
-		auto path = pluginDir + L"\\" + findData.cFileName;
-		std::wstring name;
-		if (LoadPlugin(path, loadNew, &name)) {
-			validPlugins[path] = name;
-		}
-		if (!FindNextFileW(hFind, &findData)) {
-			DWORD lastError = GetLastError();
-			if (lastError) {
-				if (lastError == ERROR_NO_MORE_FILES) {
-					break;
-				}
-				SHOW_ERROR(lastError);
-				FindClose(hFind);
-				return;
-			}
-		}
-	}
-	FindClose(hFind);
-}
-
-void LoadPlugins() {
-	ReloadPlugins(true);
-}
 
 struct PluginState {
 	PluginState(const std::wstring& path, HMODULE hDll, DeMic_PluginInfo* pluginInfo, UINT firstMenuItemID, UINT lastMenuItemID) :
@@ -150,18 +111,12 @@ static std::pair<UINT,UINT> GetFreeMenuItemID() {
 	return std::pair<UINT, UINT>(firstID, lastID);
 }
 
-// Loads a plugin if it is not loaded. 
-// If name is not NULL and true is returned, *name is the name of plugin.
-// If loadNew is false, the plugin will not be loaded(OnLoaded not called).
-// Return true if the plugin is valid.
-static bool LoadPlugin(const std::wstring& path, bool loadNew, std::wstring* name) {
-	auto it = loadedPlugins.find(path);
-	if(it != loadedPlugins.end()) {
-		if (name) {
-			*name = it->second->PluginInfo->Name;
-		}
-		return true;
-	}
+// Loads a plugin file. Returns true if the plugin is valid,
+// false otherwise.
+// If the plugin is valid, the HMODULE and the return value
+// of GetPluginInfo is set to param info.
+// It is the caller's responsibility to call FreeLibrary(info.first);
+static bool LoadPluginInfo(const std::wstring& path, std::pair<HMODULE, DeMic_PluginInfo*>& info) {
 	HMODULE hModule = LoadLibraryW(path.c_str());
 	if (!hModule) {
 		SHOW_LAST_ERROR();
@@ -177,47 +132,105 @@ static bool LoadPlugin(const std::wstring& path, bool loadNew, std::wstring* nam
 		FreeLibrary(hModule);
 		return false;
 	}
+	info.first = hModule;
+	info.second = pluginInfo;
+	return true;
+}
 
-	if (name) {
-		*name = pluginInfo->Name;
+// Loads a plugin if it is not loaded. 
+static bool LoadPlugin(const std::wstring& path) {
+	std::pair<HMODULE, DeMic_PluginInfo*> info;
+	if (!LoadPluginInfo(path, info)) {
+		return false;
 	}
 
 	const auto file = GetLastPathComponent(path);
-	if (!loadNew || !configuredPluginFiles.count(file)) {
-		FreeLibrary(hModule);
-		pluginInfo = NULL;
-		hModule = NULL;
-	} else {
-		if (pluginInfo->SDKVersion < 1) {
-			FreeLibrary(hModule);
-			ShowError((path + L"\nInvalid SDK Version!").c_str());
-			return false;
-		}
-		if (pluginInfo->SDKVersion > DEMIC_CURRENT_SDK_VERSION) {
-			FreeLibrary(hModule);
-			ShowError((path + L"\nRequires a higher SDK Version! Please update DeMic!").c_str());
-			return false;
-		}
-
-		auto idRange = GetFreeMenuItemID();
-		const auto firstID = idRange.first;
-		const auto lastID = idRange.second;
-		const auto OldNextMenuItemID = nextMenuItemID;
-		nextMenuItemID = lastID + 1;
-		PluginState* pluginState = new PluginState(path, hModule, pluginInfo, firstID, lastID);
-
-		DeMic_OnLoadedArgs args = { pluginState, pluginState->FirstMenuItemID + 1, pluginState->LastMenuItemID };
-
-		if (!pluginInfo->OnLoaded(&host, &args)) {
-			FreeLibrary(hModule);
-			delete pluginState;
-			nextMenuItemID = OldNextMenuItemID;
-			return false;
-		}
-
-		loadedPlugins[path] = pluginState;
+	if (info.second->SDKVersion < 1) {
+		FreeLibrary(info.first);
+		ShowError((path + L"\nInvalid SDK Version!").c_str());
+		return false;
 	}
+	if (info.second->SDKVersion > DEMIC_CURRENT_SDK_VERSION) {
+		FreeLibrary(info.first);
+		ShowError((path + L"\nRequires a higher SDK Version! Please update DeMic!").c_str());
+		return false;
+	}
+
+	auto idRange = GetFreeMenuItemID();
+	const auto firstID = idRange.first;
+	const auto lastID = idRange.second;
+	const auto OldNextMenuItemID = nextMenuItemID;
+	nextMenuItemID = lastID + 1;
+	PluginState* pluginState = new PluginState(path, info.first, info.second, firstID, lastID);
+
+	DeMic_OnLoadedArgs args = { pluginState, pluginState->FirstMenuItemID + 1, pluginState->LastMenuItemID };
+
+	if (!info.second->OnLoaded(&host, &args)) {
+		FreeLibrary(info.first);
+		delete pluginState;
+		nextMenuItemID = OldNextMenuItemID;
+		return false;
+	}
+
+	loadedPlugins[path] = pluginState;
 	return true;
+}
+
+template<typename F>
+void EnumPluginDir(const F& f) {
+	const auto pluginDir = GetPluginDir();
+	WIN32_FIND_DATA findData = { 0 };
+	HANDLE hFind = FindFirstFileW((pluginDir + L"\\*." + PLUGIN_EXT).c_str(), &findData);
+	if (hFind == INVALID_HANDLE_VALUE) {
+		return;
+	}
+
+	while (TRUE) {
+		// Load the plugin.
+		auto path = pluginDir + L"\\" + findData.cFileName;
+		if (!f(path)) {
+			break;
+		}
+		if (!FindNextFileW(hFind, &findData)) {
+			DWORD lastError = GetLastError();
+			if (lastError) {
+				if (lastError == ERROR_NO_MORE_FILES) {
+					break;
+				}
+				SHOW_ERROR(lastError);
+				FindClose(hFind);
+				return;
+			}
+		}
+	}
+	FindClose(hFind);
+}
+
+void LoadPlugins() {
+	assert(loadedPlugins.empty());
+	EnumPluginDir([] (auto& path){
+		if (!configuredPluginFiles.count(GetLastPathComponent(path))) {
+			return true;
+		}
+		if (!LoadPlugin(path)) {
+			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+		}
+		return true;
+	});
+}
+
+// Reads all the plugins in plugin dir without loading them.
+static std::unordered_map<std::wstring, std::wstring>ReadPluginDir() {
+	std::unordered_map<std::wstring, std::wstring> ret;
+	EnumPluginDir([&ret](auto& path) {
+		std::pair<HMODULE, DeMic_PluginInfo*> info;
+		if (LoadPluginInfo(path, info)) {
+			ret[path] = info.second->Name;
+		}
+		FreeLibrary(info.first);
+		return true;
+	});
+	return ret;
 }
 
 static BOOL DeletePluginRootMenuItem(PluginState* state) {
@@ -260,7 +273,7 @@ void OnPluginMenuInitPopup() {
 	}
 	menuCmd2PluginPath.clear();
 
-	ReloadPlugins(false);
+	validPlugins = ReadPluginDir();
 	if (validPlugins.empty()) {
 		VERIFY(AppendMenu(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()))
 		return;
@@ -295,7 +308,7 @@ void OnPluginMenuItemCmd(UINT cmd) {
 	auto it = configuredPluginFiles.find(file);
 
 	auto load = [path, &file]() {
-		if (!LoadPlugin(path, true)) {
+		if (!LoadPlugin(path)) {
 			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
 			configuredPluginFiles.erase(file);
 			return false;
