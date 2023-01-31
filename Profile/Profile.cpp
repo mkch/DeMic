@@ -1,6 +1,6 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
-#include "../sdk/DemicPlugin.h"
+#include "../sdk/DeMicPlugin.h"
 #include "../Util.h"
 #include "resource.h"
 #include <vector>
