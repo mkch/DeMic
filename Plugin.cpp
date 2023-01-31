@@ -1,5 +1,6 @@
 #include "framework.h"
 #include <string>
+#include <sstream>
 #include <unordered_map>
 #include <algorithm>
 #include "Plugin.h"
@@ -35,9 +36,6 @@ std::wstring GetPluginDir() {
 
 // All successfully loaded plugins.
 static std::unordered_map<std::wstring, PluginState*> loadedPlugins;
-// All valid plugin file paths.
-// Path -> name
-static std::unordered_map<std::wstring, std::wstring> validPlugins;
 
 struct PluginState {
 	PluginState(const std::wstring& path, HMODULE hDll, DeMic_PluginInfo* pluginInfo, UINT firstMenuItemID, UINT lastMenuItemID) :
@@ -219,15 +217,24 @@ void LoadPlugins() {
 	});
 }
 
+static std::wstring GetPluginDisplayName(const std::wstring& path, const DeMic_PluginInfo* info) {
+	return (std::wostringstream() << info->Name
+		<< L" v" << info->Version.Major << L"." << info->Version.Minor
+		<< L" (" << GetLastPathComponent(path) << L")").str();
+}
+
 // Reads all the plugins in plugin dir without loading them.
+// Path -> display name.
 static std::unordered_map<std::wstring, std::wstring>ReadPluginDir() {
 	std::unordered_map<std::wstring, std::wstring> ret;
 	EnumPluginDir([&ret](auto& path) {
-		std::pair<HMODULE, DeMic_PluginInfo*> info;
-		if (LoadPluginInfo(path, info)) {
-			ret[path] = info.second->Name;
+		std::pair<HMODULE, DeMic_PluginInfo*> plugin;
+		if (LoadPluginInfo(path, plugin)) {
+			HMODULE hModule = plugin.first;
+			DeMic_PluginInfo* info = plugin.second;
+			ret[path] = GetPluginDisplayName(path, info);
+			FreeLibrary(hModule);
 		}
-		FreeLibrary(info.first);
 		return true;
 	});
 	return ret;
@@ -273,7 +280,7 @@ void OnPluginMenuInitPopup() {
 	}
 	menuCmd2PluginPath.clear();
 
-	validPlugins = ReadPluginDir();
+	auto&& validPlugins = ReadPluginDir();
 	if (validPlugins.empty()) {
 		VERIFY(AppendMenu(pluginMenu, MF_STRING, ID_NO_PLUGIN, strRes->Load(IDS_NO_PLUGIN).c_str()))
 		return;
@@ -285,18 +292,17 @@ void OnPluginMenuInitPopup() {
 		const auto id = GetNextPluginMenuCmd();
 		VERIFY(AppendMenuW(pluginMenu,
 			MF_STRING | (loadedPlugins.count(path) ? MF_CHECKED : 0),
-			id,
-			(name + L"(" + GetLastPathComponent(path) + L")").c_str()));
+			id, name.c_str()));
 		menuCmd2PluginPath[id] = path;
 	});
 
 	// Process the renamed loaded plugins(Yes, it's possible to rename a loaded DLL!)
-	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [](const auto& pair) {
+	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [&validPlugins](const auto& pair) {
 		const auto& path = pair.first;
-		const std::wstring name = pair.second->PluginInfo->Name;
+		const auto info = pair.second->PluginInfo;
 		const auto id = GetNextPluginMenuCmd();
-		if (std::none_of(validPlugins.begin(), validPlugins.end(), [path](const auto pair) { return pair.first == path; })) {
-			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, (name + L"(" + GetLastPathComponent(path) + L") ?").c_str()));
+		if (std::none_of(validPlugins.begin(), validPlugins.end(), [&path, info](const auto pair) { return pair.first == path; })) {
+			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, GetPluginDisplayName(path, info).c_str()));
 			menuCmd2PluginPath[id] = path; // Path does not exist, but it's OK.
 		}
 	});

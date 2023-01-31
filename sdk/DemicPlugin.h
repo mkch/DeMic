@@ -20,6 +20,8 @@ extern "C" {
 		DWORD SDKVersion;
 		// The name of this plugin. Can't be NULL.
 		const wchar_t* Name;
+		// Version of this plugin.
+		struct { WORD Major; WORD Minor; } Version;
 		// OnLoaded is called when this plugin is fulled loaded.
 		// Argument host is the host application of DeMic.
 		// Argument args is the extra arguments.
