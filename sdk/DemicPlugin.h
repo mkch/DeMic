@@ -77,7 +77,7 @@ extern "C" {
 		void(*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Sets a listener called when default microphone device is changed.
 		void(*SetDefaultDevChangedListener)(void* state, void(*listener)());
-		// Deletes the root menu item added by 
+		// Deletes the root menu item added by CreateRootMenuItem.
 		BOOL(*DeleteRootMenuItem)(void* state);
 	};
 
