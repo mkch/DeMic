@@ -13,12 +13,15 @@ static const int IMAGE_SIZE = 512;
 static HBRUSH hWndBkBrush = NULL;
 
 void Paint(HWND hWnd, HDC hDC);
+void SyncTopMost(HWND hwnd);
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
         hBmpMicrophone = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE));
         hBmpMuted = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE_MUTED));
         hWndBkBrush = CreateSolidBrush(GetSysColor(WND_BK_COLOR));
+        SyncTopMost(hWnd);
         break;
     case WM_DESTROY:
         DeleteObject(hBmpMicrophone);
@@ -41,6 +44,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     }
+    case WM_RBUTTONDOWN: {
+        const auto hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_CONTEXT_MENU));
+        if (!hMenu) {
+            SHOW_LAST_ERROR();
+            break;
+        }
+        const auto popupMenu = GetSubMenu(hMenu, 0);
+        if (!popupMenu) {
+            DestroyMenu(hMenu);
+            SHOW_LAST_ERROR();
+        }
+        CheckMenuItem(popupMenu, ID_ALWAYS_ON_TOP, alwaysOnTop ? MF_CHECKED : MF_UNCHECKED);
+        POINT pt = { 0 };
+        GetCursorPos(&pt);
+        UINT_PTR cmd = TrackPopupMenu(popupMenu,
+            TPM_RETURNCMD | GetSystemMetrics(SM_MENUDROPALIGNMENT),
+            pt.x, pt.y,
+            0,
+            hWnd, NULL);
+        if (cmd == ID_ALWAYS_ON_TOP) {
+            alwaysOnTop = !alwaysOnTop;
+            SyncTopMost(hWnd);
+            WriteConfig();
+        }
+        DestroyMenu(hMenu);
+        break;
+    }
     case WM_PAINT: {
             PAINTSTRUCT ps = { 0 };
             HDC hDC = BeginPaint(hWnd, &ps);
@@ -50,6 +80,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     return DefWindowProcW(hWnd, message, wParam, lParam);
+}
+
+// Sync the top most state with alwyasOnTop flag.
+void SyncTopMost(HWND hwnd) {
+       SetWindowPos(hwnd, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }
 
 // Paints the window.

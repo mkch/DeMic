@@ -6,3 +6,7 @@ extern HINSTANCE hInstance;
 extern StringRes* strRes;
 extern DeMic_Host* host;
 extern void* state;
+extern bool alwaysOnTop;
+
+void ReadConfig();
+void WriteConfig();
