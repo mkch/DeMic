@@ -19,6 +19,7 @@ static const wchar_t* const CONFIG_FILE_NAME = L"Billboard.json";
 std::wstring configFilePath;
 
 bool alwaysOnTop = false;
+RECT lastWindowRect = { 0 };
 
 void ReadConfig();
 void WriteConfig();
@@ -41,15 +42,14 @@ BOOL WINAPI DllMain(
 		VERIFY(gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
 		configFilePath = configFile;
 		configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
-		ReadConfig();
 		break;
 	}
     case DLL_PROCESS_DETACH:
+		// Perform any necessary cleanup.
+		DestroyBillboardWnd(); // We need to trigger WM_DESTROY to save config file.
         if (lpvReserved != nullptr) {
             break; // do not do cleanup if process termination scenario
         }
-        // Perform any necessary cleanup.
-		DestroyBillboardWnd();
 		if (host && state) {
 			host->DeleteRootMenuItem(state);
 		}
@@ -59,6 +59,11 @@ BOOL WINAPI DllMain(
 }
 
 const static char* const CONFIG_ALWAYS_ON_TOP = "AlwaysOnTop";
+const static char* const CONFIG_LAST_RECT = "LastRect";
+const static char* const CONFIG_LEFT = "left";
+const static char* const CONFIG_TOP = "top";
+const static char* const CONFIG_RIGHT = "right";
+const static char* const CONFIG_BOTTOM = "bottom";
 
 static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
 
@@ -70,8 +75,10 @@ void ReadConfig() {
 		return;
 	}
 	try {
-		json config = json::parse(in);
+		const auto config = json::parse(in);
 		alwaysOnTop = config[CONFIG_ALWAYS_ON_TOP];
+		const auto lastRect = config[CONFIG_LAST_RECT];
+		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
 	}
 	catch (json::exception e) {
 		ShowError((strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
@@ -79,7 +86,16 @@ void ReadConfig() {
 }
 
 void WriteConfig() {
-	json config = { {CONFIG_ALWAYS_ON_TOP, alwaysOnTop} };
+	GetBillboardWndRect(&lastWindowRect);
+	json config = { {CONFIG_ALWAYS_ON_TOP, alwaysOnTop},
+		{CONFIG_LAST_RECT, {
+				{CONFIG_LEFT, lastWindowRect.left},
+				{CONFIG_TOP, lastWindowRect.top}, 
+				{CONFIG_RIGHT, lastWindowRect.right},
+				{CONFIG_BOTTOM, lastWindowRect.bottom},
+			} 
+		} 
+	};
 	std::ofstream out(configFilePath);
 	out << std::setw(2) << config;
 	if (out.fail()) {

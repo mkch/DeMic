@@ -14,16 +14,22 @@ static HBRUSH hWndBkBrush = NULL;
 
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
+void RePosWnd(HWND hwnd);
+
+static RECT rcBeforeMinized = { 0 };
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
+        ReadConfig();
+        RePosWnd(hWnd);
         hBmpMicrophone = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE));
         hBmpMuted = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE_MUTED));
         hWndBkBrush = CreateSolidBrush(GetSysColor(WND_BK_COLOR));
         SyncTopMost(hWnd);
         break;
     case WM_DESTROY:
+        WriteConfig();
         DeleteObject(hBmpMicrophone);
         DeleteObject(hBmpMuted);
         DeleteObject(hWndBkBrush);
@@ -71,6 +77,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         DestroyMenu(hMenu);
         break;
     }
+    case WM_SYSCOMMAND:{
+        if (wParam == SC_MINIMIZE) {
+           GetWindowRect(hWnd, &rcBeforeMinized); // Save the winddow RECT before minizing.
+        }
+        break;
+    }
     case WM_PAINT: {
             PAINTSTRUCT ps = { 0 };
             HDC hDC = BeginPaint(hWnd, &ps);
@@ -80,6 +92,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     return DefWindowProcW(hWnd, message, wParam, lParam);
+}
+
+// RePosWnd position hwnd to lastWindowRect.
+void RePosWnd(HWND hwnd) {
+    if (lastWindowRect.right - lastWindowRect.left <= 0 || lastWindowRect.bottom - lastWindowRect.top <= 0) {
+        return;
+    }
+    static const int MIN_INTERSECT = 100;
+    MONITORINFO monitorInfo = { sizeof(monitorInfo), 0 };
+    GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
+    const LPRECT rcMonitor = &monitorInfo.rcWork;
+    const int cx = lastWindowRect.right - lastWindowRect.left;
+    const int cy = lastWindowRect.bottom - lastWindowRect.top;
+    if (rcMonitor->right - lastWindowRect.left < MIN_INTERSECT) {
+        lastWindowRect.left = rcMonitor->right - cx;
+        lastWindowRect.right = lastWindowRect.left + cx;
+    }
+    if (lastWindowRect.right - rcMonitor->left < MIN_INTERSECT) {
+        lastWindowRect.left = 0;
+        lastWindowRect.right = lastWindowRect.left + cx;
+    }
+    if (rcMonitor->bottom - lastWindowRect.top < MIN_INTERSECT) {
+        lastWindowRect.top = rcMonitor->bottom - cy;
+        lastWindowRect.bottom = lastWindowRect.top + cy;
+    }
+    if (lastWindowRect.bottom - rcMonitor->top < MIN_INTERSECT) {
+        lastWindowRect.top = 0;
+        lastWindowRect.bottom = lastWindowRect.top + cy;
+    }
+    MoveWindow(hwnd, lastWindowRect.left, lastWindowRect.top, cx, cy, FALSE);
 }
 
 // Sync the top most state with alwyasOnTop flag.
@@ -173,4 +215,12 @@ void ShowBillboardWnd() {
 
 void InvalidateBillboardWnd() {
     InvalidateRect(BillboardWnd, NULL, TRUE);
+}
+
+void GetBillboardWndRect(LPRECT pRect) {
+    if (IsIconic(BillboardWnd)) {
+        CopyRect(pRect, &rcBeforeMinized);
+        return;
+    }
+    GetWindowRect(BillboardWnd, pRect);
 }
