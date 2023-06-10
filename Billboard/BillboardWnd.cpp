@@ -14,7 +14,7 @@ static HBRUSH hWndBkBrush = NULL;
 
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
-void RePosWnd(HWND hwnd);
+void RestoreLastWindowRect(HWND hwnd);
 
 static RECT rcBeforeMinized = { 0 };
 
@@ -22,7 +22,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     switch (message) {
     case WM_CREATE:
         ReadConfig();
-        RePosWnd(hWnd);
+        RestoreLastWindowRect(hWnd);
         hBmpMicrophone = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE));
         hBmpMuted = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE_MUTED));
         hWndBkBrush = CreateSolidBrush(GetSysColor(WND_BK_COLOR));
@@ -94,34 +94,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
-// RePosWnd position hwnd to lastWindowRect.
-void RePosWnd(HWND hwnd) {
+void RestoreLastWindowRect(HWND hwnd) {
     if (lastWindowRect.right - lastWindowRect.left <= 0 || lastWindowRect.bottom - lastWindowRect.top <= 0) {
         return;
     }
-    static const int MIN_INTERSECT = 100;
-    MONITORINFO monitorInfo = { sizeof(monitorInfo), 0 };
-    GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
-    const LPRECT rcMonitor = &monitorInfo.rcWork;
-    const int cx = lastWindowRect.right - lastWindowRect.left;
-    const int cy = lastWindowRect.bottom - lastWindowRect.top;
-    if (rcMonitor->right - lastWindowRect.left < MIN_INTERSECT) {
-        lastWindowRect.left = rcMonitor->right - cx;
-        lastWindowRect.right = lastWindowRect.left + cx;
-    }
-    if (lastWindowRect.right - rcMonitor->left < MIN_INTERSECT) {
-        lastWindowRect.left = 0;
-        lastWindowRect.right = lastWindowRect.left + cx;
-    }
-    if (rcMonitor->bottom - lastWindowRect.top < MIN_INTERSECT) {
-        lastWindowRect.top = rcMonitor->bottom - cy;
-        lastWindowRect.bottom = lastWindowRect.top + cy;
-    }
-    if (lastWindowRect.bottom - rcMonitor->top < MIN_INTERSECT) {
-        lastWindowRect.top = 0;
-        lastWindowRect.bottom = lastWindowRect.top + cy;
-    }
-    MoveWindow(hwnd, lastWindowRect.left, lastWindowRect.top, cx, cy, FALSE);
+    MoveWindow(hwnd, lastWindowRect.left, lastWindowRect.top, 
+        lastWindowRect.right - lastWindowRect.left, 
+        lastWindowRect.bottom - lastWindowRect.top, FALSE);
 }
 
 // Sync the top most state with alwyasOnTop flag.
@@ -209,7 +188,49 @@ void DestroyBillboardWnd() {
     BillboardWnd = NULL;
 }
 
+// MakeProminent position BillboardWnd to a prominent position.
+void MakeProminent() {
+    if (IsIconic(BillboardWnd)) {
+        ShowWindow(BillboardWnd, SW_RESTORE);
+    }
+    RECT rcWnd = { 0 };
+    if (!GetWindowRect(BillboardWnd, &rcWnd)) {
+        SHOW_LAST_ERROR();
+        return;
+    }
+    const int cx = rcWnd.right - rcWnd.left;
+    const int cy = rcWnd.bottom - rcWnd.top;
+    MONITORINFO monitorInfo = { sizeof(monitorInfo), 0 };
+    GetMonitorInfo(MonitorFromRect(&rcWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
+    const LPRECT rcMonitor = &monitorInfo.rcWork;
+    if (rcMonitor->right - rcWnd.left < cx) {
+        rcWnd.left = rcMonitor->right - cx;
+        rcWnd.right = rcWnd.left + cx;
+    }
+    if (rcWnd.right - rcMonitor->left < cx) {
+        rcWnd.right = rcMonitor->left + cx;
+        rcWnd.left = rcWnd.right - cx;
+    }
+    if (rcMonitor->bottom - rcWnd.top < cy) {
+        rcWnd.top = rcMonitor->bottom - cy;
+        rcWnd.bottom = rcWnd.top + cy;
+    }
+    if (rcWnd.bottom - rcMonitor->top < cy) {
+        rcWnd.bottom = rcMonitor->top + cy;
+        rcWnd.top = rcWnd.bottom - cy;
+    }
+    if (!MoveWindow(BillboardWnd, rcWnd.left, rcWnd.top, cx, cy, TRUE)) {
+        SHOW_LAST_ERROR();
+    }
+    SetForegroundWindow(BillboardWnd);
+    FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_ALL, 2, 0 };
+    FlashWindowEx(&flashInfo);
+}
+
 void ShowBillboardWnd() {
+    if (IsWindowVisible(BillboardWnd)) {
+        MakeProminent();
+    }
     ShowWindow(BillboardWnd, SW_SHOW);
 }
 
