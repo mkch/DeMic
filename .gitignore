@@ -36,3 +36,5 @@ Debug/
 Release/
 x64/
 *.aps
+.vscode
+WebUI-log.txt

@@ -1,5 +1,7 @@
 #pragma once
 #include <unordered_set>
+#include "Util.h"
+#include "PluginImpl.h"
 
 static const UINT ID_NO_PLUGIN = 99;
 
@@ -26,3 +28,40 @@ void OnPluginMenuItemCmd(UINT cmd);
 std::wstring GetPluginDir();
 // Called when plugin menu is about to popup;
 void OnPluginMenuInitPopup();
+
+void NotifyMicStateChanged();
+bool DeletePluginRootMenuItem(const Plugin* plugin);
+bool CreateRootMenuItem(Plugin* plugin, LPCMENUITEMINFOW lpmi);
+bool ModifyRootMenuItem(const Plugin* plugin, LPCMENUITEMINFOW lpmi);
+Plugin* FindPlugin(const std::wstring& path);
+void UnloadPlugin(const std::wstring& path);
+
+template<typename F>
+void EnumPluginDir(const wchar_t* ext, const F& f) {
+	const auto pluginDir = GetPluginDir();
+	WIN32_FIND_DATA findData = { 0 };
+	HANDLE hFind = FindFirstFileW((pluginDir + L"\\*." + ext).c_str(), &findData);
+	if (hFind == INVALID_HANDLE_VALUE) {
+		return;
+	}
+
+	while (TRUE) {
+		// Load the plugin.
+		auto path = pluginDir + L"\\" + findData.cFileName;
+		if (!f(path)) {
+			break;
+		}
+		if (!FindNextFileW(hFind, &findData)) {
+			DWORD lastError = GetLastError();
+			if (lastError) {
+				if (lastError == ERROR_NO_MORE_FILES) {
+					break;
+				}
+				SHOW_ERROR(lastError);
+				FindClose(hFind);
+				return;
+			}
+		}
+	}
+	FindClose(hFind);
+}

@@ -8,6 +8,7 @@
 #include <vector>
 #include <algorithm>
 #include "Util.h"
+#include "DeMic.h"
 
 static const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 static const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -253,4 +254,31 @@ std::wstring MicCtrl::GetDefaultMicphone() {
 	}
 	VERIFY(ret == E_NOTFOUND);
 	return L"";
+}
+
+HRESULT STDMETHODCALLTYPE MicCtrl::AudioEndpointVolumeCallback::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
+	if (muted == pNotify->bMuted) {
+		return S_OK; // State is not changed.
+	}
+	if (pNotify->bMuted) {
+		muted = 1;
+	}
+	else {
+		muted = 0;
+	}
+	SendMessageW(mainWindow, UM_MUTED_STATE_CHANGED, 0, 0);
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE MicCtrl::MMNotificationClient::OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId) {
+	if (flow == eCapture) {
+		PostMessageW(mainWindow, UM_DEFAULT_DEVICE_CHANGED, 0, 0);
+	}
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE MicCtrl::MMNotificationClient::OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
+	// Do not use SendMessage!
+	PostMessageW(mainWindow, UM_DEVICE_STATE_CHANGED, 0, 0);
+	return S_OK;
 }

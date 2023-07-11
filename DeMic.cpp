@@ -12,18 +12,14 @@
 #include <windowsx.h>
 
 #include "Plugin.h"
+#include "ExePluginImpl.h"
 
 // Currrent version of DeMic.
 static const wchar_t* VERSION = L"1.0";
 
 #define MAX_LOADSTRING 1024
 
-// Notify message used by Shell_NotifyIconW.
-static const UINT UM_NOTIFY = WM_USER + 1;
 static const int HOTKEY_ID = 1;
-
-// Microphone command message used by command line args.
-static const UINT UM_MIC_CMD = WM_USER + 2;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
@@ -89,6 +85,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    InitExePlugin();
 
     micCtrl.SetDevFilter(devFilter);
 
@@ -395,6 +393,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 break;
         }
         break;
+    case UM_RECV_PLUGIN2_MSG:
+        OnRecvPlugin2Message(*(const std::wstring*)wParam, *(const json*)lParam);
+        break;
+    case UM_PLUGIN2_DEAD:
+        OnPlugin2Dead(*(const std::wstring*)wParam);
+        break;
     case WM_CREATE:
         ShowNotification(hWnd, silentMode);
         break;
@@ -403,12 +407,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ToggleMuted();
         }
         break;
-    case MicCtrl::WM_DEVICE_STATE_CHANGED:
+    case UM_DEVICE_STATE_CHANGED:
         if (!SetTimer(hWnd, DELAY_DEVICE_CHANGE_TIMER, DEVICE_CHANGE_DELAY, DelayDeviceChangeTimerProc)) {
             SHOW_LAST_ERROR();
         }
         break;
-    case MicCtrl::WM_DEFAULT_DEVICE_CHANGED:
+    case UM_DEFAULT_DEVICE_CHANGED:
         CallPluginDefaultDevChangedListeners();
         break;
     case WM_COMMAND: {
@@ -456,7 +460,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         UnregisterHotKey(mainWindow, HOTKEY_ID);
         PostQuitMessage(0);
         break;
-    case MicCtrl::WM_MUTED_STATE_CHANGED:
+    case UM_MUTED_STATE_CHANGED:
         UpdateNotification(hWnd);
         CallPluginMicStateListeners();
         break;

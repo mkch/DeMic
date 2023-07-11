@@ -2,40 +2,24 @@
  
 #include <Windows.h>
 
+#ifdef __cplusplus
 extern "C" {
-	struct DeMic_PluginInfo;
-
-	// The export function name of plugin.
-	static const char* DEMIC_GET_PLUGIN_INFO_FUNC_NAME = "GetPluginInfo";
-	typedef DeMic_PluginInfo* (*DEMIC_GET_PLUGIN_INFO)(void);
-
-	struct DeMic_Host;
-	struct DeMic_OnLoadedArgs;
+#endif
 
 	static const DWORD DEMIC_CURRENT_SDK_VERSION = 1;
-	
-	struct DeMic_PluginInfo {
-		// Version of this SDK.
-		// Should be CURRENT_SDK_VERSION
-		DWORD SDKVersion;
-		// The name of this plugin. Can't be NULL.
-		const wchar_t* Name;
-		// Version of this plugin.
-		struct { WORD Major; WORD Minor; } Version;
-		// OnLoaded is called when this plugin is fulled loaded.
-		// Argument host is the host application of DeMic.
-		// Argument args is the extra arguments.
-		// A plugin should return TRUE if everything is OK.
-		BOOL (*OnLoaded)(DeMic_Host* host, DeMic_OnLoadedArgs* state);
-		// OnMenuItemCmd is called when the root menu item or a sub menu item
-		// of this plugin is selected.
-		// Argument id is 0 if the root menu item is selected.
-		// Can be NULL.
-		void (*OnMenuItemCmd)(UINT id);
-	};
+
+	// Extra arguments of OnLoaded in DeMic_PluginInfo.
+	typedef struct tagDeMic_OnLoadedArgs {
+		// The opaque handle of internal plugin state.
+		void* State;
+		// Menu command ids within the range of [FirstMenuItemID,LastMenuItemID]
+		// will be received by OnMenuItemCmd of DeMic_PluginInfo.
+		UINT FirstMenuItemID;
+		UINT LastMenuItemID;
+	} DeMic_OnLoadedArgs;
 
 	// Interface for plugin to call DeMic.
-	struct DeMic_Host {
+	typedef struct tagDeMic_Host {
 		// Creates the root menu item of this plugin.
 		// MIIM_ID and wID of lpmi.fMask is ignored.
 		BOOL(*CreateRootMenuItem)(void* state, LPCMENUITEMINFOW lpmi);
@@ -72,23 +56,42 @@ extern "C" {
 		void(*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
 		// Forces DeMic to call micphone state changed handler.
 		void(*NotifyMicStateChanged)();
-		// Get the devault microphone device ID.
+		// Get the default microphone device ID.
 		// Empty string if not found.
 		void(*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Sets a listener called when default microphone device is changed.
 		void(*SetDefaultDevChangedListener)(void* state, void(*listener)());
 		// Deletes the root menu item added by CreateRootMenuItem.
 		BOOL(*DeleteRootMenuItem)(void* state);
-	};
+	} DeMic_Host;
+	
+	typedef struct tagDeMic_PluginInfo {
+		// Version of this SDK.
+		// Should be CURRENT_SDK_VERSION
+		DWORD SDKVersion;
+		// The name of this plugin. Can't be NULL.
+		const wchar_t* Name;
+		// Version of this plugin.
+		struct { WORD Major; WORD Minor; } Version;
+		// OnLoaded is called when this plugin is fulled loaded.
+		// Argument host is the host application of DeMic.
+		// Argument args is the extra arguments.
+		// A plugin should return TRUE if everything is OK.
+		BOOL (*OnLoaded)(DeMic_Host* host, DeMic_OnLoadedArgs* state);
+		// OnMenuItemCmd is called when the root menu item or a sub menu item
+		// of this plugin is selected.
+		// Argument id is 0 if the root menu item is selected.
+		// Can be NULL.
+		void (*OnMenuItemCmd)(UINT id);
+		// OnUnload is called when this plugin is about to be unloaded.
+		// Can be NULL.
+		void (*OnUnload)();
+	} DeMic_PluginInfo;
 
-	// Extra arguments of OnLoaded in DeMic_PluginInfo.
-	struct DeMic_OnLoadedArgs {
-		// The opaque handle of internal plugin state.
-		void* State;
-		// Menu command ids within the range of [FirstMenuItemID,LastMenuItemID]
-		// will be received by OnMenuItemCmd of DeMic_PluginInfo.
-		UINT FirstMenuItemID;
-		UINT LastMenuItemID;
-	};
+	// The export function name of plugin.
+	static const char* DEMIC_GET_PLUGIN_INFO_FUNC_NAME = "GetPluginInfo";
+	typedef DeMic_PluginInfo* (*DEMIC_GET_PLUGIN_INFO)(void);
 
+#ifdef __cplusplus
 }
+#endif

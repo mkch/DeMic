@@ -45,3 +45,13 @@ std::vector<wchar_t> DupCStr(const std::wstring& str) {
     r.push_back(0);
     return r;
 }
+
+// Gets the last path component of path.
+// path must be normalized to use system path separator(\)
+std::wstring GetLastPathComponent(std::wstring path) {
+    auto pos = path.find_last_of(L'\\');
+    if (pos == std::wstring::npos) {
+        return path;
+    }
+    return path.substr(pos + 1);
+}

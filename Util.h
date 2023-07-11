@@ -22,6 +22,7 @@ extern std::wstring utilAppName;
 void ShowError(const wchar_t* msg);
 void ShowError(const wchar_t* msg, const wchar_t* file, int line);
 void ShowError(DWORD lastError, const wchar_t* file, int line);
+std::wstring GetLastPathComponent(std::wstring path);
 
 class StringRes {
 public:

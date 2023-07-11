@@ -1,0 +1,4 @@
+github.com/mkch/gg v0.0.0-20230321164719-5c616fc7017f h1:CpLz1KR2UhrfnN+McDgfHu4bqOWsTh0nQqPma5V7Z44=
+github.com/mkch/gg v0.0.0-20230321164719-5c616fc7017f/go.mod h1:WOz0t21TN8cn9510DxRFrXyf2WrBWBs/IlzCwDqm+PE=
+golang.org/x/net v0.12.0 h1:cfawfvKITfUsFCeJIHJrbSxpeu/E81khclypR0GVT50=
+golang.org/x/net v0.12.0/go.mod h1:zEVYFnQC7m/vmpQFELhcD1EWkZlX69l4oqgmer6hfKA=

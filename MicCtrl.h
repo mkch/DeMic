@@ -8,17 +8,8 @@
 
 // The title of application.
 extern std::wstring appTitle;
-// The main window of application.
-extern HWND mainWindow;
 
 class MicCtrl {
-public:
-    // The window message sent to mainWindow when micophone muted state is changed.
-    static const UINT WM_MUTED_STATE_CHANGED = WM_USER + 100;
-    // The window message sent to mainWindow when audio device state is changed. 
-    static const UINT WM_DEVICE_STATE_CHANGED = WM_USER + 101;
-    // The window message sent to mainWindow when default microphone device is changed.
-    static const UINT WM_DEFAULT_DEVICE_CHANGED = WM_USER + 102;
 private:
     class AudioEndpointVolumeCallback : public IAudioEndpointVolumeCallback {
     private:
@@ -56,18 +47,7 @@ private:
             return S_OK;
         }
 
-        HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
-            if (muted == pNotify->bMuted) {
-                return S_OK; // State is not changed.
-            }
-            if (pNotify->bMuted) {
-                muted = 1;
-            } else {
-                muted = 0;
-            }
-            SendMessageW(mainWindow, WM_MUTED_STATE_CHANGED, 0, 0);
-            return S_OK;
-        }
+        HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify);
     };
 
     class MMNotificationClient : public IMMNotificationClient {
@@ -104,12 +84,7 @@ private:
             return S_OK;
         }
 
-        HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId ) {
-            if (flow == eCapture) {
-                PostMessageW(mainWindow, WM_DEFAULT_DEVICE_CHANGED, 0, 0);
-            }
-            return S_OK;
-        }
+        HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId);
 
         HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId) {
             return S_OK;
@@ -119,11 +94,7 @@ private:
             return S_OK;
         }
 
-        HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
-            // Do not use SendMessage!
-            PostMessageW(mainWindow, WM_DEVICE_STATE_CHANGED, 0, 0);
-            return S_OK;
-        }
+        HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState);
 
         HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
             return S_OK;

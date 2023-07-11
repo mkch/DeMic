@@ -1,0 +1,61 @@
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <!-- link rel="stylesheet" href="/static/style.css" -->
+    <!-- script src="/static/login.js"></script -->
+
+    <title>DeMic</title>
+</head>
+
+<body>
+    <script>
+        function startWebSocket(password) {
+            const ws = new WebSocket("ws://" + `${window.location.host}/DeMic?password=${password}`);
+            ws.onclose = function () {
+                document.querySelector("#login").style.visibility = "visible";
+                document.querySelector("#main").style.visibility = "hidden";
+            };
+            ws.onopen = function () {
+                console.log("onopen");
+            };
+            ws.onerror = function () {
+                console.log("onerror");
+            };
+            ws.onmessage = function (msg) {
+                const jsonMsg = JSON.parse(msg.data);
+                switch (jsonMsg.Type) {
+                    case "loginOK":
+                        document.querySelector("#login").style.visibility = "hidden";
+                        document.querySelector("#main").style.visibility = "visible";
+                        break;
+                    case "loginFailed":
+                        alert("Login failed!");
+                        break;
+                    default:
+                        console.log(JSON.stringify(jsonMsg))
+                        break;
+                }
+            };
+        }
+        function loginDeMic(event) {
+            startWebSocket(document.querySelector("#password").value);
+        }
+    </script>
+
+    <div id="login" style="text-align: center; width:fit-content; margin: 10pt auto 10pt auto">
+        <div style="padding-bottom: 10pt;">Login</div>
+        <form>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" style="width: 15ch">
+            <input type="button" id="login" value="Login" onclick="loginDeMic(event)">
+        </form>
+    </div>
+    <div id="main">
+
+    </div>
+
+</body>
