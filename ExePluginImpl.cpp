@@ -190,7 +190,8 @@ static const DWORD DEMIC_CURRENT_SDK2_VERSION = 1;
 
 static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
 
-static BOOL CreatePlugin2Process(const std::wstring& path, LPSTARTUPINFO si, LPPROCESS_INFORMATION pi) {
+static BOOL CreatePlugin2Process(const std::wstring& path, LPSTARTUPINFO si, LPPROCESS_INFORMATION pi, BOOL suspended = FALSE) {
+	DWORD creationFlags = suspended ? CREATE_SUSPENDED : 0;
 	auto cmdLineBuf = DupCStr(L"\"" + path + L"\" " + L"DeMicPlugin");
 	return CreateProcess(
 		path.c_str(),			// aplication name
@@ -198,7 +199,7 @@ static BOOL CreatePlugin2Process(const std::wstring& path, LPSTARTUPINFO si, LPP
 		NULL,					// process security attributes 
 		NULL,					// primary thread security attributes 
 		TRUE,					// handles are inherited 
-		0,						// creation flags 
+		creationFlags,			// creation flags 
 		NULL,					// use parent's environment 
 		NULL,					// use parent's current directory 
 		si,						// STARTUPINFO pointer 
@@ -897,8 +898,15 @@ std::unique_ptr<Plugin>LoadPlugin_EXE(const std::wstring& path, const std::pair<
 	PROCESS_INFORMATION pi = { 0 };
 
 	auto cmdLineBuf = DupCStr(L"\"" + path + L"\" " + L"DeMicPlugin");
-	if (!CreatePlugin2Process(path, &si, &pi)) {
+	const auto wait = waitForDebugger.find(GetLastPathComponent(path)) != end(waitForDebugger);
+	if (!CreatePlugin2Process(path, &si, &pi, wait)) {
 		return FALSE;
+	}
+	if (wait) {
+		EnablePluginMenuItem(path, false);
+		MessageBox(NULL, (path + L" is loaded and suspended.\n\nAttach debugger and then press OK to continue.").c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION | MB_TASKMODAL);
+		ResumeThread(pi.hThread);
+		EnablePluginMenuItem(path, true);
 	}
 	CloseHandle(pi.hThread);
 	CloseHandle(stdOutWr);

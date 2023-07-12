@@ -6,6 +6,8 @@
 static const UINT ID_NO_PLUGIN = 99;
 
 extern std::unordered_set<std::wstring> configuredPluginFiles;
+extern std::unordered_set<std::wstring>waitForDebugger;
+void EnablePluginMenuItem(const std::wstring& path, bool enable);
 
 // Loads all the plugins in plugin dir.
 void LoadPlugins();

@@ -4,23 +4,16 @@ import (
 	"flag"
 	"log"
 	"os"
-	"time"
 	"webui/demic"
 
 	"github.com/mkch/gg"
 )
 
 func main() {
-	time.Sleep(time.Second * 8)
 	f := gg.Must(os.OpenFile("WebUI-log.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0777))
 	defer f.Close()
 	log.SetOutput(f)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	// defer func() {
-	// 	if err := recover(); err != nil {
-	// 		log.Print(err)
-	// 	}
-	// }()
 
 	flag.Parse()
 	if flag.NArg() < 1 || flag.Arg(0) != "DeMicPlugin" {

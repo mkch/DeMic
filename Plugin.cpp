@@ -53,7 +53,19 @@ static const UINT MAX_MENU_ITEM_COUNT = 16;
 std::unordered_set<std::wstring> configuredPluginFiles;
 std::unordered_map<UINT, std::wstring> menuCmd2PluginPath;
 
-UINT GetNextPluginMenuCmd() {
+// File names of plugin2s that need to pause(via MessageBox) after
+// their process are created.
+std::unordered_set<std::wstring>waitForDebugger;
+// File path of plugin that are waiting for debugger.
+std::wstring waitingForDebugger;
+
+// Set the enable state of the plugin menu item.
+// Debug purpos only.
+void EnablePluginMenuItem(const std::wstring& path, bool enable) {
+	waitingForDebugger = enable ? L"" : path;
+}
+
+static UINT GetNextPluginMenuCmd() {
 	UINT cmd = APS_NextPluginCmdID;
 	while(menuCmd2PluginPath.count(cmd)){
 		cmd++;
@@ -192,7 +204,7 @@ void OnPluginMenuInitPopup() {
 	for(const auto& plugin : validPlugins) {
 		const auto id = GetNextPluginMenuCmd();
 		VERIFY(AppendMenuW(pluginMenu,
-			MF_STRING | (loadedPlugins.count(plugin.Path) ? MF_CHECKED : 0),
+			MF_STRING | (loadedPlugins.count(plugin.Path) ? MF_CHECKED : 0) | (plugin.Path == waitingForDebugger ? MF_GRAYED : 0),
 			id, plugin.DisplayName.c_str()));
 		menuCmd2PluginPath[id] = plugin.Path;
 	}
@@ -202,7 +214,7 @@ void OnPluginMenuInitPopup() {
 		const auto& path = pair.first;
 		if (std::none_of(validPlugins.begin(), validPlugins.end(), [&path](const auto pair) { return pair.Path == path; })) {
 			const auto id = GetNextPluginMenuCmd();
-			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED, id, pair.second->DisplayName.c_str()));
+			VERIFY(AppendMenuW(pluginMenu, MF_STRING | MF_CHECKED | (path == waitingForDebugger ? MF_GRAYED : 0), id, pair.second->DisplayName.c_str()));
 			menuCmd2PluginPath[id] = path; // Path does not exist, but it's OK.
 		}
 	}

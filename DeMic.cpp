@@ -760,6 +760,7 @@ static const auto CONFIG_ON_PATH = L"OnPath";
 static const auto CONFIG_OFF_ENABLE = L"OffEnable";
 static const auto CONFIG_OFF_PATH = L"OffPath";
 static const auto CONFIG_PLUGIN = L"Plugin";
+static const auto CONFIG_WAIT_FOR_DEBUGGER = L"_WaitForDebugger";
 // Delimiter of plugin files.
 static const auto CONFIG_PLUGIN_DEL = L"|";
 
@@ -785,6 +786,10 @@ void ReadConfig() {
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
     Split(buf, CONFIG_PLUGIN_DEL, [](const auto& plugin) { configuredPluginFiles.insert(plugin); });
+
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_PLUGIN, CONFIG_WAIT_FOR_DEBUGGER, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    Split(buf, CONFIG_PLUGIN_DEL, [](const auto& plugin) { waitForDebugger.insert(plugin); });
 }
 
 // Write settings to config file.
