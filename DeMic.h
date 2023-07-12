@@ -24,6 +24,10 @@ enum {
 	UM_RECV_PLUGIN2_MSG,
 	// A plugin2 client disconnected.
 	UM_PLUGIN2_DEAD,
+	// A plugin2 timed out.
+	UM_PLUGIN2_TIMEOUT,
+	// A plugin2 errored.
+	UM_PLUGIN2_ERROR,
 };
 // The main window of application.
 extern HWND mainWindow;

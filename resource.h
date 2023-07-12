@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ generated include file.
-// Used by DeMic.rc
+// Microsoft Visual C++ 生成的包含文件。
+// 供 DeMic.rc 使用
 //
 #define IDI_DEMIC                       2
 #define IDD_DEMIC_DIALOG                102
@@ -17,6 +17,8 @@
 #define IDS_SOUND_FILE_FILTER           110
 #define IDS_PLUGIN_INSTRUCTION          110
 #define IDS_CAN_NOT_LOAD_PLUGIN         111
+#define IDS_PLUGIN_ERROR                112
+#define IDS_PLUGIN_TIMEOUT              113
 #define IDR_MAINFRAME                   128
 #define IDI_MICPHONE                    138
 #define IDI_ICON2                       141

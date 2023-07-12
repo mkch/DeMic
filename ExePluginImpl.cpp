@@ -9,6 +9,15 @@
 #include <algorithm>
 #include <sstream>
 #include <strsafe.h>
+#include <Shlwapi.h>
+
+// The max ms to wait when reading plugin dir.
+static const DWORD READ_DIR_TIMEOUT = 500;
+// The max ms to wait for a return value of "call" from plugin.
+static const DWORD RETURN_TIMEOUT = 500;
+// The max ms to wait when writing a plugin message.
+// The max ms to wait when writing a plugin message.
+static const DWORD WRITE_TIMEOUT = 1000;
 
 class async {
 private:
@@ -329,7 +338,7 @@ std::vector<PluginName> ReadPluginDir_EXE() {
 		}
 		return true;
 		});
-	for (auto start = GetTickCount64(); GetTickCount64() - start < 500;) {
+	for (auto start = GetTickCount64(); GetTickCount64() - start < READ_DIR_TIMEOUT;) {
 		if (SleepEx(10, TRUE) == WAIT_IO_COMPLETION) {
 			if (info.size() == processes.size()) {
 				break;
@@ -371,9 +380,9 @@ void Lock(LPCRITICAL_SECTION lock, F f) {
 	f();
 }
 
-bool CallPlugin2(const std::wstring& pluginPath, const json& msg, json* ret = nullptr, DWORD timeout = 500);
+bool CallPlugin2(const std::wstring& pluginPath, const json& msg, json* ret = nullptr, DWORD timeout = RETURN_TIMEOUT);
 class ExePlugin;
-bool CallPlugin2(const ExePlugin* plugin, json msg, json* ret = nullptr, DWORD timeout = 500);
+bool CallPlugin2(const ExePlugin* plugin, json msg, json* ret = nullptr, DWORD timeout = RETURN_TIMEOUT);
 
 class PendingReturn {
 public:
@@ -387,7 +396,10 @@ public:
 std::unordered_map<UINT, PendingReturn> pendingReturns;
 CRITICAL_SECTION pendingReturnsLock;
 
-static bool AppendToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus);
+static void AppendToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus);
+void OnPlugin2Error(const std::wstring& path, const json::exception& e);
+void OnPlugin2Error(const ExePlugin* plugin, const std::wstring& err);
+void OnPlugin2Error(const ExePlugin* plugin, const json::exception& e);
 
 class ExePlugin : public Plugin {
 public:
@@ -440,22 +452,25 @@ public:
 			return;
 		}
 		json ret;
-		CallPlugin2(this, {
+		if (!CallPlugin2(this, {
 			{"Type", "call"},
 			{"Func", "InitMenuPopupListener"},
 			{"Params", uintptr_t(hMenu)},
-		}, &ret);
+			}, &ret, 0xFFFFFFFF)) {
+			OnPlugin2Timeout(Path);
+			return;
+		}
 
 		// The menu item will be added to hMenu by a "return" call.
 		for (auto i = GetMenuItemCount(hMenu) - 1; i >= 0; i--) {
 			DeleteMenu(hMenu, 0, MF_BYPOSITION); // Delete submenu as well.
 		}
 		std::vector<std::pair<UINT, HMENU>> submenus;
-		if (!AppendToMenu(hMenu, ret, submenus)) {
-			for (auto submenu : submenus) {
-				DestroyMenu(submenu.second);
-			}
-			VERIFY(FALSE);
+		try {
+			AppendToMenu(hMenu, ret, submenus);
+		} catch (const json::exception& e) {
+			OnPlugin2Error(Path, e);
+			return;
 		}
 	}
 	virtual void CallDefaultDevChangedListener() {
@@ -479,9 +494,7 @@ public:
 	}
 };
 
-static bool AppendToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus);
-
-static bool InsertItemToMenu(HMENU hMenu, UINT pos, const json& item, std::vector<std::pair<UINT, HMENU>>& submenus) {
+static void InsertItemToMenu(HMENU hMenu, UINT pos, const json& item, std::vector<std::pair<UINT, HMENU>>& submenus) {
 	MENUITEMINFOW info = {};
 	info.cbSize = sizeof(info);
 	std::vector<wchar_t> strBuf;
@@ -507,30 +520,22 @@ static bool InsertItemToMenu(HMENU hMenu, UINT pos, const json& item, std::vecto
 			info.fMask |= MIIM_SUBMENU;
 			info.hSubMenu = CreateMenu();
 			submenus.push_back(std::make_pair(info.wID, info.hSubMenu));
-			if (!AppendToMenu(info.hSubMenu, *sub, submenus)) {
-				return false;
-			}
+			AppendToMenu(info.hSubMenu, *sub, submenus);
 		}
 	}
-	return InsertMenuItem(hMenu, pos, TRUE, &info);
+	VERIFY(InsertMenuItem(hMenu, pos, TRUE, &info));
 }
 
-static bool AppendToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus) {
+static void AppendToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus) {
 	for (const auto& item : items) {
-		if (!InsertItemToMenu(hMenu, GetMenuItemCount(hMenu), item, submenus)) {
-			return false;
-		}
+		InsertItemToMenu(hMenu, GetMenuItemCount(hMenu), item, submenus);
 	}
-	return true;
 }
 
-static bool PrependToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus) {
+static void PrependToMenu(HMENU hMenu, const json::array_t& items, std::vector<std::pair<UINT, HMENU>>& submenus) {
 	for (auto item = items.crbegin(); item != items.crend(); ++item) {
-		if (!InsertItemToMenu(hMenu, 0, *item, submenus)) {
-			return false;
-		}
+		InsertItemToMenu(hMenu, 0, *item, submenus);
 	}
-	return true;
 }
 
 static bool CreateRootMenuItem(ExePlugin* plugin, const json& msg) {
@@ -540,10 +545,10 @@ static bool CreateRootMenuItem(ExePlugin* plugin, const json& msg) {
 	auto item = msg["Params"];
 	item["ID"] = plugin->FirstMenuItemID;
 	std::vector<std::pair<UINT, HMENU>> submenus;
-	if (!PrependToMenu(popupMenu, { item, json()}, submenus)) {
-		for (auto& submenu : submenus) {
-			DestroyMenu(submenu.second);
-		}
+	try {
+		PrependToMenu(popupMenu, { item, json() }, submenus);
+	} catch (const json::exception& e) {
+		OnPlugin2Error(plugin, e);
 		return false;
 	}
 
@@ -619,14 +624,53 @@ static void HandleFuncReturn(const json& msg) {
 	SetEvent(ret.Event);
 }
 
+void OnPlugin2Timeout(const ExePlugin* plugin) {
+	wchar_t buf[1024] = {};
+	wnsprintfW(buf, sizeof(buf) / sizeof(buf[0]), strRes->Load(IDS_PLUGIN_TIMEOUT).c_str(), GetLastPathComponent(plugin->Path).c_str());
+	MessageBoxW(mainWindow, buf, strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+	TerminateProcess(plugin->Process, 0);
+}
+
+void OnPlugin2Timeout(const std::wstring& path) {
+	const auto plugin = (ExePlugin*)FindPlugin(path);
+	if (plugin) {
+		OnPlugin2Timeout(plugin);
+	}
+}
+
+void OnPlugin2Error(const ExePlugin* plugin, const std::wstring& err) {
+	wchar_t buf[1024] = {};
+	wnsprintfW(buf, sizeof(buf) / sizeof(buf[0]), strRes->Load(IDS_PLUGIN_ERROR).c_str(), GetLastPathComponent(plugin->Path).c_str(), err.c_str());
+	MessageBoxW(mainWindow, buf, strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+	TerminateProcess(plugin->Process, 0);
+}
+
+void OnPlugin2Error(const std::wstring& path, const std::wstring& err) {
+	const auto plugin = (ExePlugin*)FindPlugin(path);
+	if (plugin) {
+		OnPlugin2Error(plugin, err);
+	}
+}
+
+void OnPlugin2Error(const std::wstring& path, const json::exception& e) {
+	// Hopefully json::exception::what() returns utf-8.
+	OnPlugin2Error(path, wstrconv.from_bytes(e.what()));
+}
+
+void OnPlugin2Error(const ExePlugin* plugin, const json::exception& e) {
+	// Hopefully json::exception::what() returns utf-8.
+	OnPlugin2Error(plugin, wstrconv.from_bytes(e.what()));
+}
+
 void OnRecvPlugin2Message(const std::wstring& path, const json& msg) {
 	try {
 		std::string&& t = msg["Type"];
 		if (t == "call") {
 			HandleFuncCall(path, msg);
 		}
-	} catch (json::exception) {
-		UnloadPlugin(path);
+	}
+	catch (json::exception& e) {
+		OnPlugin2Error(path, e);
 	}
 }
 
@@ -641,7 +685,7 @@ static std::list<PluginData> pluginQueue;
 static CRITICAL_SECTION pluginQueueLock = {};
 static HANDLE pluginQueueSem = 0;
 
-static std::list<std::pair<HANDLE, json>> writeQueue;
+static std::list<std::tuple<std::wstring, HANDLE, json>> writeQueue;
 static CRITICAL_SECTION writeQueueLock = {};
 static HANDLE writeQueueSem = 0;
 
@@ -653,7 +697,7 @@ static void HandlePlugin() {
 	Lock(&pluginQueueLock, [&plugin]() {
 		plugin = pluginQueue.front();
 		pluginQueue.pop_front();
-		});
+	});
 	auto ctx = new ReadMessageCtx();
 
 	class callback {
@@ -693,17 +737,22 @@ static void HandlePlugin() {
 	ReadMessage(plugin.StdOutRd, ctx, callback(ctx, plugin));
 }
 
-static void HandleWrite() {
-	std::pair<HANDLE, json> item;
+// Get a message from write queue and write it out.
+// Param startTime[path] will be set to 0 after writing is done.
+static void HandleWrite(std::unordered_map<std::wstring, ULONGLONG>& startTime) {
+	std::tuple<std::wstring, HANDLE, json> item;
 	Lock(&writeQueueLock, [&item]() {
 		item = writeQueue.front();
 		writeQueue.pop_front();
-		});
-	HANDLE stdInWr = item.first;
-	const json& message = item.second;
+	});
+	const std::wstring& path = std::get<0>(item);
+	HANDLE stdInWr = std::get<1>(item);
+	const json& message = std::get<2>(item);
 
 	auto ctx = new WriteMessageCtx();
-	WriteMessage(stdInWr, ctx, message, [ctx](auto err, auto n) {
+	startTime[path] = GetTickCount64();
+	WriteMessage(stdInWr, ctx, message, [ctx, &startTime, path](auto err, auto n) {
+		startTime[path] = 0;
 		delete ctx;
 	});
 }
@@ -723,16 +772,41 @@ bool CallPlugin2(const ExePlugin* plugin, json msg, json* ret, DWORD timeout) {
 
 	msg["ID"] = id;
 	Lock(&writeQueueLock, [plugin, &msg]() {
-		writeQueue.push_back(std::make_pair(plugin->StdInWr, msg));
+		writeQueue.push_back(std::make_tuple(plugin->Path, plugin->StdInWr, msg));
 	});
 	ReleaseSemaphore(writeQueueSem, 1, NULL);
 
+	bool ok = false;
 	if (ret) {
-		auto wait = WaitForSingleObject(event, timeout);
+		HANDLE handles[] = { event };
+		MSG msg = {};
+		auto waitStart = GetTickCount64();
+		ULONGLONG timeToWait = timeout;
+		while (1) {
+			// Process the message sent from pluginThread.
+			auto elapsed = GetTickCount64() - waitStart;
+			if (elapsed >= timeToWait) {
+				break;
+			}
+			timeToWait -= elapsed;
+			switch (MsgWaitForMultipleObjects(1, handles, FALSE, (DWORD)timeToWait, QS_SENDMESSAGE)) {
+			case WAIT_OBJECT_0:
+				ok = true;
+				goto out_of_loop;
+			case WAIT_TIMEOUT:
+				goto out_of_loop;
+			case WAIT_OBJECT_0 + 1:
+				while (PeekMessage(&msg, mainWindow, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {};
+				continue;
+			default:
+				VERIFY(FALSE);
+				goto out_of_loop;
+			}
+		}
+		out_of_loop:
 		CloseHandle(event);
-		return wait == WAIT_OBJECT_0;
 	}
-	return true;
+	return ok;
 }
 
 bool CallPlugin2(const std::wstring& pluginPath, const json& msg,json* ret, DWORD timeout) {
@@ -745,17 +819,27 @@ bool CallPlugin2(const std::wstring& pluginPath, const json& msg,json* ret, DWOR
 
 static DWORD WINAPI PluginThreadProc(LPVOID lpParameter) {
 	HANDLE handles[] = { pluginQueueSem, writeQueueSem };
+	std::unordered_map<std::wstring, ULONGLONG> writeTime;
 	while (1) {
-		const auto wait = WaitForMultipleObjectsEx(sizeof(handles) / sizeof(handles[0]), handles, false, INFINITE, true);
-		if (wait == WAIT_IO_COMPLETION) {
-			continue;
+		for (const auto t : writeTime) {
+			auto writeStartTime = t.second;
+			if (writeStartTime) {
+				auto elapsed = GetTickCount64() - writeStartTime;
+				if (elapsed >= WRITE_TIMEOUT) {
+					SendMessage(mainWindow, UM_PLUGIN2_TIMEOUT, (WPARAM)&t.first, 0);
+				}
+			}
 		}
+		const auto wait = WaitForMultipleObjectsEx(sizeof(handles) / sizeof(handles[0]), handles, false, WRITE_TIMEOUT, true);
 		switch (wait) {
+		case WAIT_TIMEOUT:
+		case WAIT_IO_COMPLETION:
+			break;
 		case WAIT_OBJECT_0:
 			HandlePlugin();
 			break;
 		case WAIT_OBJECT_0 + 1:
-			HandleWrite();
+			HandleWrite(writeTime);
 			break;
 		default:
 			VERIFY(FALSE);

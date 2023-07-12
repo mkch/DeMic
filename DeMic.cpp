@@ -399,6 +399,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_PLUGIN2_DEAD:
         OnPlugin2Dead(*(const std::wstring*)wParam);
         break;
+    case UM_PLUGIN2_TIMEOUT:
+        OnPlugin2Timeout(*(const std::wstring*)wParam);
+        break;
+    case UM_PLUGIN2_ERROR:
+        OnPlugin2Error(*(const std::wstring*)wParam, *(const std::wstring*)lParam);
+        break;
     case WM_CREATE:
         ShowNotification(hWnd, silentMode);
         break;

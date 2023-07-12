@@ -1,1 +1,1 @@
-go build -o ../x64/Debug/plugin/WebUI.plugin2
+go build -o ../x64/Debug/plugin/WebUI.plugin2 -gcflags=all="-N -l"

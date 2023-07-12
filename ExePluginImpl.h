@@ -12,7 +12,8 @@ std::vector<PluginName> ReadPluginDir_EXE();
 std::unique_ptr<Plugin>LoadPlugin_EXE(const std::wstring& path, const std::pair<UINT, UINT>& menuItemIdRange);
 void OnRecvPlugin2Message(const std::wstring& path, const json& message);
 void OnPlugin2Dead(const std::wstring& path);
-
+void OnPlugin2Timeout(const std::wstring& path);
+void OnPlugin2Error(const std::wstring& path, const std::wstring& err);
 
 /*
 * 
