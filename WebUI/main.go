@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"webui/demic"
@@ -58,8 +59,10 @@ func main() {
 }
 
 func onDemicInitMenuPopup(menu uintptr) []demic.Message {
+	muted, _ := demic.Muted()
 	return []demic.Message{
 		{"String": "A"},
 		{"String": "B"},
+		{"String": fmt.Sprintf("Muted: %v", muted)},
 	}
 }

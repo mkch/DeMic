@@ -160,16 +160,19 @@ func processMsg(msg Message) {
 		switch msg["Func"] {
 		case "InitMenuPopupListener":
 			if OnInitMenuPopup != nil {
-				var ret = OnInitMenuPopup(uintptr(msg["Params"].(float64)))
-				if _, ok := write(Message{
-					"Type":  "return",
-					"Func":  "InitMenuPopupListener",
-					"Call":  uint(msg["ID"].(float64)),
-					"Value": ret,
-				}, false); !ok {
-					return
-				}
+				go func() {
+					var ret = OnInitMenuPopup(uintptr(msg["Params"].(float64)))
+					if _, ok := write(Message{
+						"Type":  "return",
+						"Func":  "InitMenuPopupListener",
+						"Call":  uint(msg["ID"].(float64)),
+						"Value": ret,
+					}, false); !ok {
+						log.Print("write after done")
+					}
+				}()
 			}
+			return
 		case "Unload":
 			if OnUnload != nil {
 				OnUnload()
