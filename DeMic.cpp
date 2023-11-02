@@ -8,13 +8,14 @@
 #include <shlwapi.h>
 #include <Dbt.h>
 #include <string>
+#include <array>
 #include <strsafe.h>
 #include <windowsx.h>
 
 #include "Plugin.h"
 
 // Currrent version of DeMic.
-static const wchar_t* VERSION = L"1.0";
+static const wchar_t* VERSION = L"1.1";
 
 #define MAX_LOADSTRING 1024
 
@@ -59,6 +60,9 @@ std::wstring onSoundPath; // The mic on notification sound file.
 BOOL enableOffSound = FALSE; // Enable mic off notification sound.
 std::wstring offSoundPath; // The sound file.
 
+std::wstring cmdLineArgs; // The command line args to use when starting the first instance.
+std::wstring cmdLineArgs2; // The command line args to use when starting this exe while already running. 
+
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
@@ -81,7 +85,12 @@ enum MIC_CMD {
     CMD_ON,     // Turn on microphone.
     CMD_OFF,    // Turn off microphone.
     CMD_TOGGLE, // Toggle on/off.
+
+    CMD_SILENT = 0x8F000000, //Do not show notification.
 };
+
+DWORD ParseCmdLine(int argc, wchar_t** argv);
+std::wstring CommandLine(const std::wstring& args);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -92,27 +101,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     micCtrl.SetDevFilter(devFilter);
 
-    int argc = 0;
-    wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
-
-    MIC_CMD  cmd = CMD_NONE;
-
-    if (argc > 1) {
-        const auto argv1 = std::wstring(argv[1]);
-        if (argv1 == L"/silent" || argv1 == L"-silent") {
-            silentMode = true;
-        } else if (argv1 == L"/on" || argv1 == L"-on") {
-            silentMode = true;
-            cmd = CMD_ON;
-        } else if (argv1 == L"/off" || argv1 == L"-off") {
-            silentMode = true;
-            cmd = CMD_OFF;
-        } else if (argv1 == L"/toggle" || argv1 == L"-toggle") {
-            silentMode = true;
-            cmd = CMD_TOGGLE;
-        }
-    }
-
     // Initialize global strings
     WCHAR szTitle[MAX_LOADSTRING] = { 0 };
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -120,12 +108,49 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     utilAppName = appTitle;
     strRes = new StringRes(hInstance);
 
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
+
+    DWORD cmd = ParseCmdLine(argc, argv);
+    silentMode = cmd & CMD_SILENT;
+    // Initialize configFilePath.
+    std::wstring moduleFilePath = argv[0];
+
+    LocalFree(argv);
+
+    configFilePath = moduleFilePath;
+    const auto sep = configFilePath.rfind(L'\\');
+    if (sep != std::wstring::npos) {
+        configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
+    }
+    ReadConfig();
+    
+    const bool noArgInCmdLine = cmd == CMD_NONE;
+
+    if (noArgInCmdLine) {
+        // If no arg in command line, try to parse the args in ini file.
+        int cmdLineArgc = 0;
+        wchar_t** cmdLineArgv = CommandLineToArgvW(CommandLine(cmdLineArgs).c_str(), &cmdLineArgc);
+        cmd = ParseCmdLine(cmdLineArgc, cmdLineArgv);
+        LocalFree(cmdLineArgv);
+        silentMode = cmd & CMD_SILENT;
+    }
+
+
     if (AlreadyRunning()) {
-        if (cmd != CMD_NONE) {
+        if (noArgInCmdLine) {
+            // If no arg in command line, try to parse the args in ini file.
+            int cmdLine2Argc = 0;
+            wchar_t** cmdLine2Argv = CommandLineToArgvW(CommandLine(cmdLineArgs2).c_str(), &cmdLine2Argc);
+            cmd = ParseCmdLine(cmdLine2Argc, cmdLine2Argv);
+            LocalFree(cmdLine2Argv);
+        }
+        const DWORD action = cmd & ~CMD_SILENT;
+        if (action != 0) {
             // Find the main window of running process.
             const HWND hwnd = FindWindowW(szWindowClass, appTitle.c_str());
             if (hwnd != NULL) {
-                PostMessage(hwnd, UM_MIC_CMD, cmd, 0);
+                PostMessage(hwnd, UM_MIC_CMD, action, 0);
                 return 0;
             }
         }
@@ -134,13 +159,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
 
-    // Initialize configFilePath.
-    std::wstring moduleFilePath = argv[0];
-    configFilePath = moduleFilePath;
-    const auto sep = configFilePath.rfind(L'\\');
-    if (sep != std::wstring::npos) {
-        configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
-    }
     startOnBootCmd = std::wstring(L"\"") + moduleFilePath + L"\" /silent";
 
     if (!MyRegisterClass(hInstance)) {
@@ -153,17 +171,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return FALSE;
     }
 
-    ReadConfig();
     ResetHotKey();
     LoadPlugins();
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_DEMIC));
-
-    MSG msg;
+    MSG msg = {};
 
     // Process microphone comands from command line.
-    if (cmd != CMD_NONE) {
-        PostMessage(mainWindow, UM_MIC_CMD, cmd, 0);
+    const DWORD action = cmd & ~CMD_SILENT;
+    if (action != CMD_NONE) {
+        PostMessage(mainWindow, UM_MIC_CMD, action, 0);
     }
 
     // Main message loop:
@@ -179,6 +196,33 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     return (int) msg.wParam;
+}
+
+// CommandLine returns the whole command line of this exe
+// as if args are passed in command line.
+std::wstring CommandLine(const std::wstring& args) {
+    std::array<wchar_t, 1024> argv0;
+    GetModuleFileName(NULL, argv0.data(), argv0.size());
+    return (std::wstringstream() << L'"' << argv0.data() << L'"' << L' ' << args).str();
+}
+
+DWORD ParseCmdLine(int argc, wchar_t** argv) {
+    DWORD  cmd = CMD_NONE;
+
+    if (argc > 1) {
+        const auto argv1 = std::wstring(argv[1]);
+        if (argv1 == L"/silent" || argv1 == L"-silent") {
+            cmd = CMD_SILENT;
+        } else if (argv1 == L"/on" || argv1 == L"-on") {
+            cmd = CMD_ON | CMD_SILENT;
+        } else if (argv1 == L"/off" || argv1 == L"-off") {
+            cmd = CMD_OFF | CMD_SILENT;
+        } else if (argv1 == L"/toggle" || argv1 == L"-toggle") {
+            silentMode = true;
+            cmd = CMD_TOGGLE | CMD_SILENT;
+        }
+    }
+    return cmd;
 }
 
 BOOL devFilter(const wchar_t* devID) {
@@ -452,6 +496,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_DESTROY:
+        WriteConfig();
         RemoveNotification(hWnd);
         UnregisterHotKey(mainWindow, HOTKEY_ID);
         PostQuitMessage(0);
@@ -753,6 +798,13 @@ static const auto CONFIG_PLUGIN = L"Plugin";
 // Delimiter of plugin files.
 static const auto CONFIG_PLUGIN_DEL = L"|";
 
+// Command line args to use when starting the first
+// instance of this exe.
+static const auto CONFIG_CMD_LINE_ARGS = L"CmdLineArgs";
+// Command line args to use when executing this exe
+// while another instance is already running.
+static const auto CONFIG_CMD_LINE_ARGS2 = L"CmdLineArgs2";
+
 // Read settings from config file.
 void ReadConfig() {
     if (!PathFileExistsW(configFilePath.c_str())) {
@@ -775,6 +827,14 @@ void ReadConfig() {
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
     Split(buf, CONFIG_PLUGIN_DEL, [](const auto& plugin) { configuredPluginFiles.insert(plugin); });
+
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    cmdLineArgs = buf;
+
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    cmdLineArgs2 = buf;
 }
 
 // Write settings to config file.
@@ -796,6 +856,12 @@ void WriteConfig() {
         configFilePath.c_str());
     WritePrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN,
         Join(configuredPluginFiles.begin(), configuredPluginFiles.end(), CONFIG_PLUGIN_DEL).c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS,
+        cmdLineArgs.c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2,
+        cmdLineArgs2.c_str(),
         configFilePath.c_str());
 }
 
