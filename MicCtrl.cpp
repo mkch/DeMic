@@ -216,7 +216,7 @@ std::wstring MicCtrl::GetDevIfaceName(const wchar_t* devID) {
 	VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
 	dev->Release();
 	PROPVARIANT name;
-	VERIFY_OK(propStore->GetValue(PKEY_DeviceInterface_FriendlyName, &name));
+	VERIFY_OK(propStore->GetValue(PKEY_Device_FriendlyName, &name));
 	propStore->Release();
 	return name.pwszVal;
 }

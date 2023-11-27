@@ -15,7 +15,7 @@
 #include "Plugin.h"
 
 // Currrent version of DeMic.
-static const wchar_t* VERSION = L"1.1";
+static const wchar_t* VERSION = L"1.1.1";
 
 #define MAX_LOADSTRING 1024
 
