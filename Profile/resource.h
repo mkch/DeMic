@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ generated include file.
-// Used by Profile.rc
+// Microsoft Visual C++ 生成的包含文件。
+// 供 Profile.rc 使用
 //
 #define IDS_APPLY_TO                    101
 #define IDS_APPLY_TO_ONE                102
@@ -12,6 +12,8 @@
 #define IDS_READ_CONFIG_FAILED          107
 #define IDS_DEFAULT_MICROPHONE          108
 #define IDS_APPLY_TO_DEFAULT            109
+#define IDS_ALL_EXCEPT                  110
+#define IDS_APPLY_TO_ALL_EXCEPT         111
 
 // Next default values for new objects
 // 

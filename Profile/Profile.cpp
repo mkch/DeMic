@@ -86,6 +86,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host->SetInitMenuPopupListener(state, NULL, MainMenuPopupListener);
     devicesMenu = CreatePopupMenu();
     host->SetInitMenuPopupListener(state, devicesMenu, SubMenuPopupListener);
+
     host->SetDevFilter(state, MicDevFilter);
     host->SetDefaultDevChangedListener(state, DefaultDevChangedListener);
 
@@ -100,6 +101,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 }
 
 UINT allDevMenuID = 0; // Menu item id of "All".
+UINT allDevExcpetMenuID = 0; // Menu item id of "All excpet the flollowing".
 
 // Key: Menu item id.
 // Value: Microphone device id and device name.
@@ -110,11 +112,14 @@ std::unordered_map<UINT, std::pair<std::wstring, std::wstring>> menuID2Dev;
 // Key: Device ID; Value: Device name.
 // Empyt map: all devices.
 std::unordered_map<std::wstring, std::wstring> selectedDev;
+// Whether selectedDev is a exclusion list.
+bool excludeSelected = false;
 
 const static char* const CONFIG_DEFAULT_PROFILE_NAME = "Default";
 const static char* const CONFIG_DEVICES = "Devices";
 const static char* const CONFIG_ID = "ID";
 const static char* const CONFIG_NAME = "Name";
+const static char* const CONFIG_EXCLUDE = "Exclude";
 
 static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
 
@@ -125,8 +130,15 @@ void ReadConfig() {
     }
     try {
         json config = json::parse(in);
-        auto& devices = config[CONFIG_DEFAULT_PROFILE_NAME];
-        for_each(devices.begin(), devices.end(), [](const json& dev) {
+        json* devices = NULL;
+        auto& profile = config[CONFIG_DEFAULT_PROFILE_NAME];
+        if (profile.is_object()) {
+            excludeSelected = profile[CONFIG_EXCLUDE];
+            devices = &profile[CONFIG_DEVICES];
+        } else {
+            devices = &profile; // profile is an array of devices.
+        }
+        std::for_each(devices->begin(), devices->end(), [](const json& dev) {
             auto id = dev[CONFIG_ID].get<std::string>();
             auto name = dev[CONFIG_NAME].get<std::string>();
             selectedDev[wstrconv.from_bytes(id)] = wstrconv.from_bytes(name);
@@ -141,7 +153,10 @@ void WriteConfig() {
     std::for_each(selectedDev.begin(), selectedDev.end(), [&devices](auto const& dev) {
         devices.push_back({ {CONFIG_ID, wstrconv.to_bytes(dev.first)}, {CONFIG_NAME, wstrconv.to_bytes(dev.second) }});
     });
-    json config = { {CONFIG_DEFAULT_PROFILE_NAME, devices} };
+    json config = { {CONFIG_DEFAULT_PROFILE_NAME,
+        {{CONFIG_EXCLUDE, excludeSelected},
+            {CONFIG_DEVICES, devices}}
+        } };
     std::ofstream out(configFilePath);
     out << std::setw(2) << config;
     if (out.fail()) {
@@ -161,12 +176,28 @@ BOOL MicDevFilter(const wchar_t* devID) {
     if (selectedDev.empty()) { // Empty: All devices.
         return TRUE;
     }
-    if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
+
+    if (excludeSelected) {
         auto userData = std::pair<const wchar_t*, int>(devID, 0);
         host->GetDefaultDevID(IsDefaultDev, &userData);
-        return userData.second == 0;
+        const bool isDefault = userData.second == 0;
+        for (auto it = selectedDev.begin(); it != selectedDev.end(); ++it) {
+            if (it->first == DEFAULT_MIC_DEV_ID && isDefault) {
+                return FALSE;
+            }
+            if (it->first == devID) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    } else {
+        if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
+            auto userData = std::pair<const wchar_t*, int>(devID, 0);
+            host->GetDefaultDevID(IsDefaultDev, &userData);
+            return userData.second == 0;
+        }
+        return selectedDev.find(devID) != selectedDev.end();
     }
-    return selectedDev.find(devID) != selectedDev.end();
 }
 
 void DevNameString(const wchar_t* name, void* userData) {
@@ -203,6 +234,9 @@ void MainMenuPopupListener(HMENU menu) {
     std::vector<wchar_t> rootTitle;
     if (selectedDev.empty()) {
         rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ALL));
+    } else if (excludeSelected) {
+        rootTitle.assign(255, 0);
+        StringCchPrintfW(&rootTitle[0], rootTitle.size(), strRes->Load(IDS_APPLY_TO_ALL_EXCEPT).c_str(), selectedDev.size());
     } else if (selectedDev.size() == 1) {
         if (selectedDev.count(DEFAULT_MIC_DEV_ID)) {
             rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_DEFAULT));
@@ -210,8 +244,7 @@ void MainMenuPopupListener(HMENU menu) {
         else {
             rootTitle = DupCStr(strRes->Load(IDS_APPLY_TO_ONE));
         }
-    }
-    else {
+    } else {
         rootTitle.assign(255, 0);
         StringCchPrintfW(&rootTitle[0], rootTitle.size(), strRes->Load(IDS_APPLY_TO).c_str(), selectedDev.size());
     }
@@ -231,8 +264,16 @@ void SubMenuPopupListener(HMENU menu) {
     UINT menuItemID = firstMenuItemID;
     allDevMenuID = menuItemID;
     VERIFY(AppendMenu(devicesMenu,
-        MF_STRING | (selectedDev.empty() ? MF_CHECKED : 0),
+        MF_STRING | ((selectedDev.empty() && !excludeSelected) ? MF_CHECKED : 0),
         allDevMenuID, strRes->Load(IDS_ALL_MICROPHONES).c_str()));
+    menuItemID++;
+
+    VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+
+    allDevExcpetMenuID = menuItemID;
+    VERIFY(AppendMenu(devicesMenu, 
+        MF_STRING | (excludeSelected ? MF_CHECKED : 0),
+        allDevExcpetMenuID, strRes->Load(IDS_ALL_EXCEPT).c_str()));
     menuItemID++;
 
     VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
@@ -266,6 +307,9 @@ static void OnMenuItemCmd(UINT id) {
     }
     if (id == allDevMenuID) {
         selectedDev.clear();
+        excludeSelected = false;
+    } else if (id == allDevExcpetMenuID) {
+        excludeSelected = true;
     } else {
         selectedDev.erase(DEFAULT_MIC_DEV_ID);
         auto dev = menuID2Dev[id];
@@ -285,7 +329,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 0},			/*Version*/
+    {1, 1},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
