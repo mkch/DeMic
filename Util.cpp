@@ -1,15 +1,33 @@
 #include "Util.h"
 #include <sstream>
 #include <algorithm>
+#include <limits>
+#undef max
 
 std::wstring utilAppName;
+
+// Extract the base part of a file path.
+// E.g. file_path_base(L"C:\\a\\b\\c.txt",'\\') == "c.txt"
+static const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim = '\\') {
+    if (delim == 0) return path;
+    const size_t len = std::wcslen(path);
+    if (len == 0) return path;
+    auto p = path + len - 1;
+    do {
+        if (*p == delim) {
+            return p+1;
+        }
+        p--;
+    } while (p >= path);
+    return path;
+}
 
 void ShowError(const wchar_t* msg) {
     MessageBoxW(NULL, msg, utilAppName.c_str(), MB_ICONERROR);
 }
 
 void ShowError(const wchar_t* msg, const wchar_t* file, int line) {
-    ShowError((std::wstringstream() << file << L":" << line << L"\n" << msg).str().c_str());
+    ShowError((std::wstringstream() << file_path_base(file) << L":" << line << L"\n" << msg).str().c_str());
 }
 
 // Show a message box with the error description of lastError.
