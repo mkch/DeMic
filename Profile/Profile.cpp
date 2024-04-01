@@ -211,18 +211,25 @@ struct EnumDevProcData {
     std::unordered_set<std::wstring> EnumedDevID;
 };
 
+
+// Append a menu item to show "too many microphones".
+void AppendTooManyMicrophonesMenuItem(HMENU menu, const std::wstring& title) {
+    const static std::wstring TOO_MANY = L"<!!!TOO MANY !!!>";
+    VERIFY(AppendMenu(menu, MF_STRING, 0, (TOO_MANY + L" " + title).c_str()));
+}
+
 void EnumDevProc(const wchar_t* devID, void* userData) {
     auto data = (EnumDevProcData*)userData;
-    if (data->ItemID >= lastMenuItemID) {
-        SHOW_ERROR(L"Too many microphone devices. No more menu item id available!");
-        return; // No more IDs available.
-    }
     data->EnumedDevID.insert(devID);
     std::wstring name;
     host->GetDevIfaceName(devID, DevNameString, &name);
     UINT flags = MF_STRING;
     if (selectedDev.find(devID) != selectedDev.end()) {
         flags |= MF_CHECKED;
+    }
+    if (data->ItemID >= lastMenuItemID) {
+        AppendTooManyMicrophonesMenuItem(devicesMenu, name);
+        return; // No more IDs available.
     }
     VERIFY(AppendMenu(devicesMenu, flags, data->ItemID, name.c_str()))
     menuID2Dev[data->ItemID] = std::pair<std::wstring, std::wstring>(devID, name);
@@ -289,11 +296,14 @@ void SubMenuPopupListener(HMENU menu) {
     EnumDevProcData data = { menuItemID };
     host->GetActiveDevices(EnumDevProc, &data);
 
-    // Append extra items in selectedDevID as menu items with
-    // device ID as title.
+    // Append extra items in selectedDevID.
     std::for_each(selectedDev.begin(), selectedDev.end(), [&data](const auto& dev) {
         if (dev.first == DEFAULT_MIC_DEV_ID || data.EnumedDevID.find(dev.first) != data.EnumedDevID.end()) {
             return;
+        }
+        if (data.ItemID >= lastMenuItemID) {
+            AppendTooManyMicrophonesMenuItem(devicesMenu, dev.second);
+            return; // No more IDs available.
         }
         VERIFY(AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
         menuID2Dev[data.ItemID] = dev;
@@ -329,7 +339,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 1},			/*Version*/
+    {1, 2},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
