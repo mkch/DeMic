@@ -109,10 +109,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	host = h;
 	state = args->State;
 
-	// TODO: debug
-	LOG(host, state, LevelInfo, L"ÐÅÏ¢£ºLog from billboard");
-	LOG_LAST_ERROR(host, state);
-
 	MENUITEMINFOW rootMenuItem = {sizeof(rootMenuItem), 0};
 	rootMenuItem.fMask = MIIM_STRING;
 	auto title = DupCStr(strRes->Load(IDS_OPEN_BILLBOARD));

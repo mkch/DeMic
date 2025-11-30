@@ -80,10 +80,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
 
-    // TODO: debug
-    LOG(host, state, LevelWarn, L"¾¯¸æ£ºLog from profile");
-    LOG_LAST_ERROR(host, state);
-
     firstMenuItemID = args->FirstMenuItemID;
     lastMenuItemID = args->LastMenuItemID;
 

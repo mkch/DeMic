@@ -103,11 +103,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    // TODO: debug
-
-    LOG(LevelInfo, L"Test info");
-    LOG_ERROR(L"abc测试中文消息");
-
     micCtrl.SetDevFilter(devFilter);
 
     // Initialize global strings
