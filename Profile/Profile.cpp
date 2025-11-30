@@ -143,8 +143,8 @@ void ReadConfig() {
             auto name = dev[CONFIG_NAME].get<std::string>();
             selectedDev[wstrconv.from_bytes(id)] = wstrconv.from_bytes(name);
         });
-    } catch (json::exception e) {
-        ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
+    } catch(...) {
+        ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
     }
 }
 

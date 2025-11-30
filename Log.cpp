@@ -54,7 +54,7 @@ void WriteLog(LogLevel level, const wchar_t* file, int line, const std::wstring&
 		out << wstrconv.to_bytes(file_path_base(file)) << ':' << line << ' '
 			<< wstrconv.to_bytes(message)
 			<< std::endl;
-	} catch (std::runtime_error&) {
+	} catch (...) {
 		static bool errorShowed = false;
 		if (!errorShowed) {
 			ShowError( (std::wstring(L"Write log file field: ") + defaultLogFilePath).c_str());

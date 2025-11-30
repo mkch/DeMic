@@ -78,9 +78,8 @@ void ReadConfig() {
 		alwaysOnTop = config[CONFIG_ALWAYS_ON_TOP];
 		const auto lastRect = config[CONFIG_LAST_RECT];
 		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
-	}
-	catch (json::exception e) {
-		ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
+	} catch (...) {
+		ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
 	}
 }
 
