@@ -30,6 +30,9 @@
     <ClInclude Include="BillboardWnd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\sdk\DemicPluginUtil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Billboard.cpp">

@@ -1,11 +1,14 @@
 #include "framework.h"
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <unordered_map>
 #include <algorithm>
+#include <iostream>
 #include "Plugin.h"
 #include "DeMic.h"
 #include "sdk/DeMicPlugin.h"
+#include "Log.h"
 
 const static wchar_t* const PLUGIN_DIR_NAME = L"plugin";
 const static wchar_t* const PLUGIN_EXT = L"plugin";
@@ -21,7 +24,7 @@ std::wstring GetPluginDir() {
 	if (GetModuleFileNameW(NULL, fileName, BUF_SIZE) == BUF_SIZE) {
 		DWORD lastError = GetLastError();
 		if (lastError) {
-			SHOW_ERROR(lastError);
+			LOG_ERROR(lastError);
 			return L"";
 		}
 	}
@@ -117,7 +120,7 @@ static std::pair<UINT,UINT> GetFreeMenuItemID() {
 static bool LoadPluginInfo(const std::wstring& path, std::pair<HMODULE, DeMic_PluginInfo*>& info) {
 	HMODULE hModule = LoadLibraryW(path.c_str());
 	if (!hModule) {
-		SHOW_LAST_ERROR();
+		LOG_LAST_ERROR();
 		return false;
 	}
 	const DEMIC_GET_PLUGIN_INFO getPluginInfo = (DEMIC_GET_PLUGIN_INFO)GetProcAddress(hModule, DEMIC_GET_PLUGIN_INFO_FUNC_NAME);
@@ -195,7 +198,7 @@ void EnumPluginDir(const F& f) {
 				if (lastError == ERROR_NO_MORE_FILES) {
 					break;
 				}
-				SHOW_ERROR(lastError);
+				LOG_ERROR(lastError);
 				FindClose(hFind);
 				return;
 			}
@@ -250,7 +253,7 @@ static BOOL DeletePluginRootMenuItem(PluginState* state) {
 	for (int i = 0; i < GetMenuItemCount(popupMenu); i++) {
 		MENUITEMINFOW info = { sizeof(info), MIIM_ID, 0 };
 		if (!GetMenuItemInfoW(popupMenu, i, TRUE, &info)) {
-			SHOW_LAST_ERROR();
+			LOG_LAST_ERROR();
 			return FALSE;
 		}
 		if (state->RootMenuItemID == info.wID) {
@@ -486,6 +489,10 @@ static BOOL HostDeleteRootMenuItem(void* st) {
 	return DeletePluginRootMenuItem((PluginState*)st);
 }
 
+static void HostWriteLog(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message) {
+	WriteLog(level, file, line, message, ((PluginState*)state)->PluginInfo);
+}
+
 bool ProcessPluginMenuCmd(UINT id) {;
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
 		const auto state = plugin.second;
@@ -516,4 +523,5 @@ static DeMic_Host host = {
 	HostGetDefaultDevID,
 	HostSetDefaultDevChangedListener,
 	HostDeleteRootMenuItem,
+	HostWriteLog,
 };

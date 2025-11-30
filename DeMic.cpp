@@ -14,8 +14,7 @@
 
 #include "Plugin.h"
 
-// Currrent version of DeMic.
-static const wchar_t* VERSION = L"1.1.1";
+#include "Log.h"
 
 #define MAX_LOADSTRING 1024
 
@@ -27,6 +26,8 @@ static const int HOTKEY_ID = 1;
 static const UINT UM_MIC_CMD = WM_USER + 2;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
+
+const static wchar_t* const LOG_FILE_NAME = L"demic-log.txt";
 
 StringRes* strRes = NULL;
 
@@ -92,6 +93,9 @@ enum MIC_CMD {
 DWORD ParseCmdLine(int argc, wchar_t** argv);
 std::wstring CommandLine(const std::wstring& args);
 
+std::wstring GetDefaultLogFilePath();
+std::wstring defaultLogFilePath = GetDefaultLogFilePath();
+
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPWSTR    lpCmdLine,
@@ -99,13 +103,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    // TODO: debug
+
+    LOG(LevelInfo, L"Test info");
+    LOG_ERROR(L"abc测试中文消息");
+
     micCtrl.SetDevFilter(devFilter);
 
     // Initialize global strings
     WCHAR szTitle[MAX_LOADSTRING] = { 0 };
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     appTitle = &szTitle[0];
-    utilAppName = appTitle;
     strRes = new StringRes(hInstance);
 
     int argc = 0;
@@ -162,7 +170,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     startOnBootCmd = std::wstring(L"\"") + moduleFilePath + L"\" /silent";
 
     if (!MyRegisterClass(hInstance)) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR();
         return FALSE;
     }
 
@@ -294,7 +302,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    pluginMenu = CreatePopupMenu();
    MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, pluginMenu, 0 };
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
-       SHOW_LAST_ERROR();
+       LOG_LAST_ERROR();
    }
 
    //ShowWindow(mainWindow, nCmdShow);
@@ -449,7 +457,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case MicCtrl::WM_DEVICE_STATE_CHANGED:
         if (!SetTimer(hWnd, DELAY_DEVICE_CHANGE_TIMER, DEVICE_CHANGE_DELAY, DelayDeviceChangeTimerProc)) {
-            SHOW_LAST_ERROR();
+            LOG_LAST_ERROR();
         }
         break;
     case MicCtrl::WM_DEFAULT_DEVICE_CHANGED:
@@ -565,11 +573,11 @@ bool ResetHotKey() {
             wchar_t* msg = NULL;
             FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 NULL, lastError, 0, (LPWSTR)&msg, 0, NULL);
-            ShowError(msg);
+            LOG_ERROR(msg);
             LocalFree(msg);
         }
         else {
-            SHOW_LAST_ERROR();
+            LOG_LAST_ERROR();
         }
         return false;
     }
@@ -641,7 +649,7 @@ bool SelectSoundFile(HWND owner, std::wstring& path) {
     if (!GetOpenFileNameW(&ofn)) {
         DWORD err = GetLastError();
         if (err != 0) {
-            SHOW_ERROR(err);
+            LOG_ERROR(err);
         }
         return false;
     }
@@ -760,7 +768,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
     wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_NOTIFICATION_TIP).c_str(), VERSION);
     if (!Shell_NotifyIconW(modify ? NIM_MODIFY : NIM_ADD, &data)) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR();
         return;
     }
 }
@@ -779,7 +787,7 @@ void RemoveNotification(HWND hwnd) {
     data.hWnd = hwnd;
     data.uID = NOTIFY_ID;
     if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR();
         return;
     }
 }
@@ -892,14 +900,14 @@ void EnableStartOnBoot() {
         0, KEY_WRITE,
         &key);
     if (ret != ERROR_SUCCESS) {
-        SHOW_ERROR(ret);
+        LOG_ERROR(ret);
     }
     else {
         ret = RegSetValueExW(key, START_ON_BOOT_REG_VALUE_NAME,
             0, REG_SZ,
             (const BYTE*)startOnBootCmd.c_str(), DWORD(startOnBootCmd.length()) * sizeof(wchar_t));
         if (ret != ERROR_SUCCESS) {
-            SHOW_ERROR(ret);
+            LOG_ERROR(ret);
         }
     }
     RegFlushKey(key);
@@ -912,12 +920,12 @@ void DisableStartOnBoot() {
         0, KEY_WRITE,
         &key);
     if (ret != ERROR_SUCCESS) {
-        SHOW_ERROR(ret);
+        LOG_ERROR(ret);
     }
     else {
         ret = RegDeleteValueW(key, START_ON_BOOT_REG_VALUE_NAME);
         if (ret != ERROR_SUCCESS) {
-            SHOW_ERROR(ret);
+            LOG_ERROR(ret);
         }
     }
     RegFlushKey(key);
@@ -927,8 +935,27 @@ void DisableStartOnBoot() {
 static const auto RUNNING_MUTEX_NAME = L"DeMic is running";
 static bool AlreadyRunning() {
     if (CreateMutexW(NULL, FALSE, RUNNING_MUTEX_NAME) == NULL) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR();
         std::exit(1);
     }
     return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+std::wstring GetDefaultLogFilePath() {
+    static const int BUF_SIZE = 1024;
+    wchar_t fileName[BUF_SIZE];
+    if (GetModuleFileNameW(NULL, fileName, BUF_SIZE) == BUF_SIZE) {
+        DWORD lastError = GetLastError();
+        if (lastError) {
+            LOG_ERROR(lastError);
+            return L"";
+        }
+    }
+
+    std::wstring logFilePath(fileName);
+    const auto sep = logFilePath.find_last_of(L'\\');
+    if (sep != std::wstring::npos) {
+        logFilePath = logFilePath.substr(0, sep + 1) + LOG_FILE_NAME;
+    }
+    return logFilePath;
 }

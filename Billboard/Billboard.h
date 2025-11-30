@@ -1,5 +1,5 @@
 #pragma once
-#include "../sdk/DeMicPlugin.h"
+#include "../sdk/DemicPluginUtil.h"
 #include "../Util.h"
 
 extern HINSTANCE hInstance;

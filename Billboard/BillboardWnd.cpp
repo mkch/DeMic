@@ -53,13 +53,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_RBUTTONDOWN: {
         const auto hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_CONTEXT_MENU));
         if (!hMenu) {
-            SHOW_LAST_ERROR();
+            LOG_LAST_ERROR(host, state);
             break;
         }
         const auto popupMenu = GetSubMenu(hMenu, 0);
         if (!popupMenu) {
             DestroyMenu(hMenu);
-            SHOW_LAST_ERROR();
+            LOG_LAST_ERROR(host, state);
         }
         CheckMenuItem(popupMenu, ID_ALWAYS_ON_TOP, alwaysOnTop ? MF_CHECKED : MF_UNCHECKED);
         POINT pt = { 0 };
@@ -167,14 +167,14 @@ static HWND BillboardWnd = NULL;
 
 BOOL CreateBillboardWnd() {
     if (!MyRegisterClass()) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR(host, state);
         return FALSE;
     }
     BillboardWnd = CreateWindowW(szWindowClass, strRes->Load(IDS_BILLBOARD).c_str(), WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 550, 400, nullptr, nullptr, hInstance, nullptr);
 
     if (!BillboardWnd) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR(host, state);
         return FALSE;
     }
     return TRUE;
@@ -195,7 +195,7 @@ void MakeProminent() {
     }
     RECT rcWnd = { 0 };
     if (!GetWindowRect(BillboardWnd, &rcWnd)) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR(host, state);
         return;
     }
     const int cx = rcWnd.right - rcWnd.left;
@@ -220,7 +220,7 @@ void MakeProminent() {
         rcWnd.top = rcWnd.bottom - cy;
     }
     if (!MoveWindow(BillboardWnd, rcWnd.left, rcWnd.top, cx, cy, TRUE)) {
-        SHOW_LAST_ERROR();
+        LOG_LAST_ERROR(host, state);
     }
     SetForegroundWindow(BillboardWnd);
     FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_ALL, 2, 0 };

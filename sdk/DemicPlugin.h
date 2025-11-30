@@ -12,7 +12,7 @@ extern "C" {
 	struct DeMic_Host;
 	struct DeMic_OnLoadedArgs;
 
-	static const DWORD DEMIC_CURRENT_SDK_VERSION = 1;
+	static const DWORD DEMIC_CURRENT_SDK_VERSION = 2;
 	
 	struct DeMic_PluginInfo {
 		// Version of this SDK.
@@ -32,6 +32,13 @@ extern "C" {
 		// Argument id is 0 if the root menu item is selected.
 		// Can be NULL.
 		void (*OnMenuItemCmd)(UINT id);
+	};
+
+	enum LogLevel {
+		LevelDebug = -4,
+		LevelInfo = 0,
+		LevelWarn = 4,
+		LevelError = 8,
 	};
 
 	// Interface for plugin to call DeMic.
@@ -79,6 +86,8 @@ extern "C" {
 		void(*SetDefaultDevChangedListener)(void* state, void(*listener)());
 		// Deletes the root menu item added by CreateRootMenuItem.
 		BOOL(*DeleteRootMenuItem)(void* state);
+		// Writes a log message to the default log file.
+		void (*WriteLog)(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.
@@ -90,5 +99,4 @@ extern "C" {
 		UINT FirstMenuItemID;
 		UINT LastMenuItemID;
 	};
-
 }

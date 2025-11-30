@@ -13,7 +13,7 @@ HINSTANCE hInstance = NULL;
 StringRes* strRes = NULL;
 
 extern DeMic_PluginInfo plugin;
-std::vector<wchar_t> plugInName;
+std::vector<wchar_t> pluginName;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"Billboard.json";
 std::wstring configFilePath;
@@ -33,13 +33,12 @@ BOOL WINAPI DllMain(
 	case DLL_PROCESS_ATTACH: {
 		hInstance = hinstDLL;
 		strRes = new StringRes(hinstDLL);
-		utilAppName = strRes->Load(IDS_APP_NAME);
-		plugInName = DupCStr(utilAppName);
-		plugin.Name = &plugInName[0];
+		pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
+		plugin.Name = &pluginName[0];
 
 		wchar_t configFile[1024] = { 0 };
 		const DWORD gmfn = GetModuleFileNameW(hInstance, configFile, sizeof(configFile) / sizeof(configFile[0]));
-		VERIFY(gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
+		VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
 		configFilePath = configFile;
 		configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
 		break;
@@ -81,7 +80,7 @@ void ReadConfig() {
 		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
 	}
 	catch (json::exception e) {
-		ShowError((strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
+		ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
 	}
 }
 
@@ -99,7 +98,7 @@ void WriteConfig() {
 	std::ofstream out(configFilePath);
 	out << std::setw(2) << config;
 	if (out.fail()) {
-		ShowError(strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+		ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
 	}
 }
 
@@ -110,6 +109,9 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	host = h;
 	state = args->State;
 
+	// TODO: debug
+	LOG(host, state, LevelInfo, L"–≈œ¢£∫Log from billboard");
+	LOG_LAST_ERROR(host, state);
 
 	MENUITEMINFOW rootMenuItem = {sizeof(rootMenuItem), 0};
 	rootMenuItem.fMask = MIIM_STRING;
@@ -138,7 +140,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
 	NULL,			/*Name*/
-	{1, 1},			/*Version*/
+	{1, 2},			/*Version*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
 };

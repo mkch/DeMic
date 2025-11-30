@@ -1,6 +1,6 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
-#include "../sdk/DeMicPlugin.h"
+#include "../sdk/DeMicPluginUtil.h"
 #include "../Util.h"
 #include "resource.h"
 #include <vector>
@@ -38,13 +38,12 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH: {
         strRes = new StringRes(hModule);
-        utilAppName = strRes->Load(IDS_APP_NAME);
-        pluginName = DupCStr(utilAppName);
+        pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
         
         wchar_t configFile[1024] = { 0 };
         const DWORD gmfn = GetModuleFileNameW(hModule, configFile, sizeof(configFile) / sizeof(configFile[0]));
-        VERIFY(gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
+        VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
         configFilePath = configFile;
         configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\')+1) + CONFIG_FILE_NAME;
         ReadConfig();
@@ -80,6 +79,11 @@ void DefaultDevChangedListener() {
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
+
+    // TODO: debug
+    LOG(host, state, LevelWarn, L"¾¯¸æ£ºLog from profile");
+    LOG_LAST_ERROR(host, state);
+
     firstMenuItemID = args->FirstMenuItemID;
     lastMenuItemID = args->LastMenuItemID;
 
@@ -96,7 +100,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.dwTypeData = &title[0];
     rootMenuItem.cch = UINT(title.size() - 1);
     rootMenuItem.hSubMenu = devicesMenu;
-    VERIFY(host->CreateRootMenuItem(state, &rootMenuItem));
+    VERIFY(host, state, host->CreateRootMenuItem(state, &rootMenuItem));
     return TRUE;
 }
 
@@ -144,7 +148,7 @@ void ReadConfig() {
             selectedDev[wstrconv.from_bytes(id)] = wstrconv.from_bytes(name);
         });
     } catch (json::exception e) {
-        ShowError((strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
+        ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + wstrconv.from_bytes(e.what())).c_str());
     }
 }
 
@@ -160,7 +164,7 @@ void WriteConfig() {
     std::ofstream out(configFilePath);
     out << std::setw(2) << config;
     if (out.fail()) {
-        ShowError(strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+        ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
     }
 }
 
@@ -215,7 +219,7 @@ struct EnumDevProcData {
 // Append a menu item to show "too many microphones".
 void AppendTooManyMicrophonesMenuItem(HMENU menu, const std::wstring& title) {
     const static std::wstring TOO_MANY = L"<!!!TOO MANY !!!>";
-    VERIFY(AppendMenu(menu, MF_STRING, 0, (TOO_MANY + L" " + title).c_str()));
+    VERIFY(host, state, AppendMenu(menu, MF_STRING, 0, (TOO_MANY + L" " + title).c_str()));
 }
 
 void EnumDevProc(const wchar_t* devID, void* userData) {
@@ -231,7 +235,7 @@ void EnumDevProc(const wchar_t* devID, void* userData) {
         AppendTooManyMicrophonesMenuItem(devicesMenu, name);
         return; // No more IDs available.
     }
-    VERIFY(AppendMenu(devicesMenu, flags, data->ItemID, name.c_str()))
+    VERIFY(host, state, AppendMenu(devicesMenu, flags, data->ItemID, name.c_str()))
     menuID2Dev[data->ItemID] = std::pair<std::wstring, std::wstring>(devID, name);
     data->ItemID++;
 }
@@ -259,7 +263,7 @@ void MainMenuPopupListener(HMENU menu) {
     info.fMask = MIIM_STRING | MIIM_SUBMENU;
     info.hSubMenu = devicesMenu;
     info.dwTypeData = &rootTitle[0];
-    VERIFY(host->ModifyRootMenuItem(state, &info));
+    VERIFY(host, state, host->ModifyRootMenuItem(state, &info));
 }
 
 void SubMenuPopupListener(HMENU menu) {
@@ -270,28 +274,28 @@ void SubMenuPopupListener(HMENU menu) {
 
     UINT menuItemID = firstMenuItemID;
     allDevMenuID = menuItemID;
-    VERIFY(AppendMenu(devicesMenu,
+    VERIFY(host, state, AppendMenu(devicesMenu,
         MF_STRING | ((selectedDev.empty() && !excludeSelected) ? MF_CHECKED : 0),
         allDevMenuID, strRes->Load(IDS_ALL_MICROPHONES).c_str()));
     menuItemID++;
 
-    VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+    VERIFY(host, state, AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
 
     allDevExcpetMenuID = menuItemID;
-    VERIFY(AppendMenu(devicesMenu, 
+    VERIFY(host, state, AppendMenu(devicesMenu,
         MF_STRING | (excludeSelected ? MF_CHECKED : 0),
         allDevExcpetMenuID, strRes->Load(IDS_ALL_EXCEPT).c_str()));
     menuItemID++;
 
-    VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+    VERIFY(host, state, AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
 
-    VERIFY(AppendMenu(devicesMenu,
+    VERIFY(host, state, AppendMenu(devicesMenu,
         MF_STRING | (selectedDev.size() == 1 && selectedDev.count(DEFAULT_MIC_DEV_ID) ? MF_CHECKED : 0),
         menuItemID, strRes->Load(IDS_DEFAULT_MICROPHONE).c_str()));
     menuID2Dev[menuItemID] = std::pair<std::wstring, std::wstring>(DEFAULT_MIC_DEV_ID, L"");
     menuItemID++;
 
-    VERIFY(AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
+    VERIFY(host, state, AppendMenu(devicesMenu, MF_SEPARATOR, 0, NULL));
 
     EnumDevProcData data = { menuItemID };
     host->GetActiveDevices(EnumDevProc, &data);
@@ -305,7 +309,7 @@ void SubMenuPopupListener(HMENU menu) {
             AppendTooManyMicrophonesMenuItem(devicesMenu, dev.second);
             return; // No more IDs available.
         }
-        VERIFY(AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
+        VERIFY(host, state, AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
         menuID2Dev[data.ItemID] = dev;
         data.ItemID++;
     });
@@ -339,7 +343,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 2},			/*Version*/
+    {1, 3},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
