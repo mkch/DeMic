@@ -7,7 +7,6 @@
 
 #include "Log.h"
 #include "DeMic.h"
-#include "Util.h"
 
 const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim = L'\\');
 
