@@ -302,10 +302,16 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
-// Timer id for delaying the MicCtrl::WM_DEVICE_STATE_CHANGED message processing.
-static const UINT_PTR DELAY_DEVICE_CHANGE_TIMER = 1;
+enum {
+    // Timer id for delaying the MicCtrl::WM_DEVICE_STATE_CHANGED message processing.
+    DELAY_DEVICE_CHANGE_TIMER = 1,
+    // Timer id for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD) retring.
+    SHELL_NOTIFY_ICON_RETRY_TIMER,
+};
 // Batch interval of  WM_DEVICECHANGE message processing.
 static const UINT DEVICE_CHANGE_DELAY = 1000;
+// Retry interval of Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
+static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
 
 void CALLBACK DelayDeviceChangeTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
     KillTimer(hwnd, DELAY_DEVICE_CHANGE_TIMER);  // Make it one time timer.
@@ -796,6 +802,35 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 // ID of Shell_NotifyIconW.
 static const UINT NOTIFY_ID = 1;
 
+static struct {
+    DWORD message;
+    NOTIFYICONDATAW data;
+    // == 0: Idle. 
+    // > 0: Current retry count.
+	DWORD retryCount;
+} shellNotifyIconRetryData = { 0 };
+
+void CALLBACK ShellNotifyIconRetryTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
+    LOG(LevelDebug, L"Retrying Shell_NotifyIconW...");
+    if (!Shell_NotifyIconW(shellNotifyIconRetryData.message, &shellNotifyIconRetryData.data)) {
+        DWORD err = GetLastError();
+		if (err == ERROR_TIMEOUT) {
+            if (++shellNotifyIconRetryData.retryCount <= 3) {
+                return; // Retry again.
+            } else {
+                LOG(LevelDebug, L"Shell_NotifyIconW max retry count reached.");
+            }
+        } else {
+            LOG_ERROR(err);
+        }
+    } else {
+        LOG(LevelDebug, L"Shell_NotifyIconW retry succeeded.");
+    }
+    // Stop retrying.
+    shellNotifyIconRetryData.retryCount = 0;
+    KillTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER);
+}
+
 void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
@@ -811,9 +846,23 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.uCallbackMessage = UM_NOTIFY;
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
     wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_NOTIFICATION_TIP).c_str(), VERSION);
-    if (!Shell_NotifyIconW(modify ? NIM_MODIFY : NIM_ADD, &data)) {
-        LOG_LAST_ERROR();
-        return;
+	const DWORD message = modify ? NIM_MODIFY : NIM_ADD;
+    if (!Shell_NotifyIconW(message, &data)) {
+        DWORD err = GetLastError();
+        if (err != ERROR_TIMEOUT) {
+            LOG_ERROR(err);
+            return;
+        }
+        if (shellNotifyIconRetryData.retryCount != 0) {
+			KillTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER); // Stop previous retrying.
+        }
+		// Prepare for retrying.
+        shellNotifyIconRetryData.retryCount = 1;
+        shellNotifyIconRetryData.message = message;
+		shellNotifyIconRetryData.data = data;
+        if (!SetTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER, SHELL_NOTIFY_ICON_RETRY_INTERVAL, ShellNotifyIconRetryTimerProc)) {
+            LOG_LAST_ERROR();
+        }
     }
 }
 
