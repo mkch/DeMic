@@ -57,6 +57,9 @@
 #define ID_MENU_HELP                    32787
 #define ID_HELP_SHOWLOG                 32788
 #define ID_HELP_SHOW_LOG                32789
+#define ID_32790                        32790
+#define ID_HELP_CHECKFORUPDATES         32791
+#define ID_HELP_CHECK_FOR_UPDATES       32792
 #define IDC_HOTKEY_STATIC               -1
 
 // Next default values for new objects
@@ -65,7 +68,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        155
-#define _APS_NEXT_COMMAND_VALUE         32790
+#define _APS_NEXT_COMMAND_VALUE         32793
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

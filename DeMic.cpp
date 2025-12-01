@@ -348,7 +348,7 @@ void ShowSoundSettingsWindow() {
 
 // Opens the folder containing the specified file and select the file.
 // If the filePath does not exist, returns FALSE.
-BOOL OpenFolderSelectFile(LPCWSTR filePath) {
+static BOOL OpenFolderSelectFile(LPCWSTR filePath) {
     std::vector<wchar_t> buf(wcslen(filePath) + 1); // In case filePath contains . or ..
     DWORD len = GetFullPathNameW(filePath, DWORD(buf.size()), buf.data(), NULL);
     if (len == 0 || len > DWORD(buf.size())) {
@@ -377,8 +377,13 @@ BOOL OpenFolderSelectFile(LPCWSTR filePath) {
     return ok;
 }
 // Open the specified folder.
-BOOL OpenFolder(LPCWSTR folder) {
+static BOOL OpenFolder(LPCWSTR folder) {
     HINSTANCE h = ShellExecuteW(NULL, L"open", folder, NULL, NULL, SW_SHOWNORMAL);
+    return ((INT_PTR)h > 32);
+}
+
+static BOOL CheckForUpdates() {
+    HINSTANCE h = ShellExecuteW(NULL, L"open", L"https://github.com/mkch/DeMic/releases", NULL, NULL, SW_SHOWNORMAL);
     return ((INT_PTR)h > 32);
 }
 
@@ -408,6 +413,11 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         if (!OpenFolderSelectFile(defaultLogFilePath.c_str())) {
 			OpenFolder(defaultLogFilePath.substr(0, defaultLogFilePath.rfind(LOG_FILE_NAME)).c_str());
         }
+        break;
+    case ID_HELP_CHECK_FOR_UPDATES:
+        if(!CheckForUpdates()) {
+            LOG_LAST_ERROR();
+		}
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
@@ -757,11 +767,12 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             PlayOnSound(std::wstring(strRes->Load(IDS_NAN) == buf ? L"" : buf));
             break;
         }
-        case IDC_OFF_SOUND_PLAY:{}
+        case IDC_OFF_SOUND_PLAY: {
             buf[0] = 0;
             GetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), buf, sizeof(buf) / sizeof(buf[0]));
             PlayOffSound(std::wstring(strRes->Load(IDS_NAN) == buf ? L"" : buf));
             break;
+        }
         case IDOK: {
             enableOnSound = Button_GetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND));
             buf[0] = 0;
