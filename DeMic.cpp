@@ -13,8 +13,7 @@
 #include <windowsx.h>
 
 #include "Plugin.h"
-
-#include "Log.h"
+#include "TimeDebouncer.h"
 
 // Notify message used by Shell_NotifyIconW.
 static const UINT UM_NOTIFY = WM_USER + 1;
@@ -302,24 +301,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
-enum {
-    // Timer id for delaying the MicCtrl::WM_DEVICE_STATE_CHANGED message processing.
-    DELAY_DEVICE_CHANGE_TIMER = 1,
-    // Timer id for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD) retring.
-    SHELL_NOTIFY_ICON_RETRY_TIMER,
-};
-// Batch interval of  WM_DEVICECHANGE message processing.
-static const UINT DEVICE_CHANGE_DELAY = 1000;
-// Retry interval of Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
-static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
-
-void CALLBACK DelayDeviceChangeTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
-    KillTimer(hwnd, DELAY_DEVICE_CHANGE_TIMER);  // Make it one time timer.
-    micCtrl.ReloadDevices();
-    UpdateNotification(hwnd);
-    CallPluginMicStateListeners();
-}
-
 void ShowHotKeySettingWindow() {
     HWND hotKey = GetDlgItem(hotKeySettingWindow, IDC_HOTKEY);
     WPARAM wParam = MAKELONG(MAKEWORD(hotKeyVk, hotKeyMod), 0);
@@ -480,6 +461,25 @@ BOOL IsMuted() {
     return micCtrl.GetMuted();
 }
 
+// Debounce interval for device state change events (ms).
+static const UINT DEVICE_CHANGE_DELAY = 1000;
+
+static TimeDebouncer deviceStateChangedDebouncer(DEVICE_CHANGE_DELAY, [] {
+    micCtrl.ReloadDevices();
+    UpdateNotification(mainWindow);
+    CallPluginMicStateListeners();
+});
+
+static TimeDebouncer defaultDeviceChangedDebouncer(DEVICE_CHANGE_DELAY, CallPluginDefaultDevChangedListeners);
+
+// Debounce interval for device muted state change events (ms).
+static const UINT MUTED_STATE_CHANGE_DELAY = 20;
+
+static TimeDebouncer mutedStatedChangedDebouncer(MUTED_STATE_CHANGE_DELAY, [] {
+    UpdateNotification(mainWindow);
+    CallPluginMicStateListeners();
+});
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
@@ -505,12 +505,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case MicCtrl::WM_DEVICE_STATE_CHANGED:
-        if (!SetTimer(hWnd, DELAY_DEVICE_CHANGE_TIMER, DEVICE_CHANGE_DELAY, DelayDeviceChangeTimerProc)) {
-            LOG_LAST_ERROR();
-        }
+		deviceStateChangedDebouncer.Emit();
         break;
     case MicCtrl::WM_DEFAULT_DEVICE_CHANGED:
-        CallPluginDefaultDevChangedListeners();
+        defaultDeviceChangedDebouncer.Emit();
+        break;
+    case MicCtrl::WM_MUTED_STATE_CHANGED:
+		mutedStatedChangedDebouncer.Emit();
         break;
     case WM_COMMAND: {
             int wmId = LOWORD(wParam);
@@ -557,10 +558,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         RemoveNotification(hWnd);
         UnregisterHotKey(mainWindow, HOTKEY_ID);
         PostQuitMessage(0);
-        break;
-    case MicCtrl::WM_MUTED_STATE_CHANGED:
-        UpdateNotification(hWnd);
-        CallPluginMicStateListeners();
         break;
     case WM_INITMENUPOPUP:
         if ((HMENU)wParam == popupMenu) {
@@ -805,31 +802,26 @@ static const UINT NOTIFY_ID = 1;
 static struct {
     DWORD message;
     NOTIFYICONDATAW data;
-    // == 0: Idle. 
-    // > 0: Current retry count.
-	DWORD retryCount;
+	DWORD retriedCount;
 } shellNotifyIconRetryData = { 0 };
 
-void CALLBACK ShellNotifyIconRetryTimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
-    LOG(LevelDebug, L"Retrying Shell_NotifyIconW...");
+
+// Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
+static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
+
+static TimeDebouncer shellNotifyIconRetryDebouncer(SHELL_NOTIFY_ICON_RETRY_INTERVAL, [] {
     if (!Shell_NotifyIconW(shellNotifyIconRetryData.message, &shellNotifyIconRetryData.data)) {
         DWORD err = GetLastError();
-		if (err == ERROR_TIMEOUT) {
-            if (++shellNotifyIconRetryData.retryCount <= 3) {
-                return; // Retry again.
-            } else {
-                LOG(LevelDebug, L"Shell_NotifyIconW max retry count reached.");
+        if (err == ERROR_TIMEOUT) {
+            if (++shellNotifyIconRetryData.retriedCount < 3) {
+                shellNotifyIconRetryDebouncer.Emit(); // Retry again.
+                return;
             }
         } else {
             LOG_ERROR(err);
         }
-    } else {
-        LOG(LevelDebug, L"Shell_NotifyIconW retry succeeded.");
     }
-    // Stop retrying.
-    shellNotifyIconRetryData.retryCount = 0;
-    KillTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER);
-}
+});
 
 void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     NOTIFYICONDATAW data = { 0 };
@@ -853,16 +845,12 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
             LOG_ERROR(err);
             return;
         }
-        if (shellNotifyIconRetryData.retryCount != 0) {
-			KillTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER); // Stop previous retrying.
-        }
+		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy.
 		// Prepare for retrying.
-        shellNotifyIconRetryData.retryCount = 1;
+        shellNotifyIconRetryData.retriedCount = 0;
         shellNotifyIconRetryData.message = message;
 		shellNotifyIconRetryData.data = data;
-        if (!SetTimer(hwnd, SHELL_NOTIFY_ICON_RETRY_TIMER, SHELL_NOTIFY_ICON_RETRY_INTERVAL, ShellNotifyIconRetryTimerProc)) {
-            LOG_LAST_ERROR();
-        }
+        shellNotifyIconRetryDebouncer.Emit();
     }
 }
 

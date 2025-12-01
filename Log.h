@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sdk/DemicPlugin.h"
+#include <string>
 
 #define LOG(level, msg) WriteLog((level), _CRT_WIDE(__FILE__), __LINE__, (msg))
 #define LOG_ERROR(err) LogError(_CRT_WIDE(__FILE__), __LINE__, err)
