@@ -35,5 +35,9 @@ static inline void _LogError(DeMic_Host* host, void* state, const wchar_t* file,
 	} \
 }
 
-#define VERIFY_OK(exp) VERIFY((exp) == S_OK)
-#define VERIFY_SUCCEEDED(exp) VERIFY(SUCCEEDED(exp))
+#define VERIFY_SUCCEEDED(hr) { \
+	if (FAILED(hr)) { \
+		LogError(_CRT_WIDE(__FILE__), __LINE__, DWORD(hr)); \
+		DebugBreak(); \
+	} \
+}

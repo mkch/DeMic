@@ -13,8 +13,12 @@
 	} \
 }
 
-#define VERIFY_OK(exp) VERIFY((exp) == S_OK)
-#define VERIFY_SUCCEEDED(expr) VERIFY(SUCCEEDED(expr))
+#define VERIFY_SUCCEEDED(hr) { \
+	if (FAILED(hr)) { \
+		LogError(_CRT_WIDE(__FILE__), __LINE__, DWORD(hr)); \
+		DebugBreak(); \
+	} \
+}
 
 void WriteLog(LogLevel level, const wchar_t* file, int line, const std::wstring& message, const DeMic_PluginInfo* plugin = NULL);
 std::wstring GetLastErrorMessage(DWORD lastError);

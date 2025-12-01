@@ -349,10 +349,10 @@ void ShowSoundSettingsWindow() {
 // Opens the folder containing the specified file and select the file.
 // If the filePath does not exist, returns FALSE.
 BOOL OpenFolderSelectFile(LPCWSTR filePath) {
-    std::vector<wchar_t> buf(wcslen(filePath) + 1);
+    std::vector<wchar_t> buf(wcslen(filePath) + 1); // In case filePath contains . or ..
     DWORD len = GetFullPathNameW(filePath, DWORD(buf.size()), buf.data(), NULL);
     if (len == 0 || len > DWORD(buf.size())) {
-        LOG_LAST_ERROR();
+		LOG_LAST_ERROR(); // If filePath contains . or .. the result length must be equal or less than buf.size().
         return FALSE;
     }
     BOOL ok = FALSE;

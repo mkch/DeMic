@@ -66,16 +66,16 @@ static const IID IID_ISimpleAudioVolume = __uuidof(ISimpleAudioVolume);
 //}
 
 MicCtrl::MicCtrl() :notifClient(new MMNotificationClient()) {
-	VERIFY_OK(CoInitialize(NULL));
-	VERIFY_OK(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+	VERIFY_SUCCEEDED(CoInitialize(NULL));
+	VERIFY_SUCCEEDED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
 		IID_IMMDeviceEnumerator, (void**)&devEnum));
-	VERIFY_OK(devEnum->RegisterEndpointNotificationCallback(notifClient));
+	VERIFY_SUCCEEDED(devEnum->RegisterEndpointNotificationCallback(notifClient));
 	ReloadDevices();
 }
 
 MicCtrl::~MicCtrl() {
 	UnregisterAudioCallbacks();
-	VERIFY_OK(devEnum->UnregisterEndpointNotificationCallback(notifClient));
+	VERIFY_SUCCEEDED(devEnum->UnregisterEndpointNotificationCallback(notifClient));
 	notifClient->Release();
 	devEnum->Release();
 }
@@ -83,7 +83,7 @@ MicCtrl::~MicCtrl() {
 void MicCtrl::UnregisterAudioCallbacks() {
 	std::for_each(audioCallbacks.begin(), audioCallbacks.end(),
 		[](auto& callback) {
-			VERIFY_OK(callback.first->UnregisterControlChangeNotify(callback.second));
+			VERIFY_SUCCEEDED(callback.first->UnregisterControlChangeNotify(callback.second));
 			callback.first->Release();
 			callback.second->Release();
 	});
@@ -95,22 +95,22 @@ void MicCtrl::ReloadDevices() {
 	audioCallbacks.clear();
 
 	IMMDeviceCollection* devCollection = NULL;
-	VERIFY_OK(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
+	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_OK(devCollection->GetCount(&devCount));
+	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
-		VERIFY_OK(devCollection->Item(i, &dev));
+		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
 		IPropertyStore* propStore = NULL;
-		VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
+		VERIFY_SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &propStore));
 		PROPVARIANT name;
-		VERIFY_OK(propStore->GetValue(PKEY_Device_FriendlyName, &name));
+		VERIFY_SUCCEEDED(propStore->GetValue(PKEY_Device_FriendlyName, &name));
 		propStore->Release();
 
 		IAudioEndpointVolume* volume = NULL;
-		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
+		VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		AudioEndpointVolumeCallback* callback = new AudioEndpointVolumeCallback(name.pwszVal);
-		VERIFY_OK(volume->RegisterControlChangeNotify(callback));
+		VERIFY_SUCCEEDED(volume->RegisterControlChangeNotify(callback));
 		audioCallbacks.push_back(AudioVolumeCallback(volume, callback));
 		dev->Release();
 	}
@@ -119,15 +119,15 @@ void MicCtrl::ReloadDevices() {
 
 bool MicCtrl::GetMuted() {
 	IMMDeviceCollection* devCollection = NULL;
-	VERIFY_OK(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
+	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_OK(devCollection->GetCount(&devCount));
+	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
 	BOOL bMute = TRUE;
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
-		VERIFY_OK(devCollection->Item(i, &dev));
+		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
 		LPWSTR id = NULL;
-		VERIFY_OK(dev->GetId(&id));
+		VERIFY_SUCCEEDED(dev->GetId(&id));
 		if (devFilter && !devFilter(id)) {
 			CoTaskMemFree(id);
 			dev->Release();
@@ -135,9 +135,9 @@ bool MicCtrl::GetMuted() {
 		}
 		CoTaskMemFree(id);
 		IAudioEndpointVolume* volume = NULL;
-		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
+		VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
-		VERIFY_OK(volume->GetMute(&bMute));
+		VERIFY_SUCCEEDED(volume->GetMute(&bMute));
 		volume->Release();
 		if (!bMute) {
 			break;
@@ -149,14 +149,14 @@ bool MicCtrl::GetMuted() {
 
 void MicCtrl::SetMuted(bool mute) {
 	IMMDeviceCollection* devCollection = NULL;
-	VERIFY_OK(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
+	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_OK(devCollection->GetCount(&devCount));
+	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
-		VERIFY_OK(devCollection->Item(i, &dev));
+		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
 		LPWSTR id = NULL;
-		VERIFY_OK(dev->GetId(&id));
+		VERIFY_SUCCEEDED(dev->GetId(&id));
 		if (devFilter && !devFilter(id)) {
 			CoTaskMemFree(id);
 			dev->Release();;
@@ -164,7 +164,7 @@ void MicCtrl::SetMuted(bool mute) {
 		}
 		CoTaskMemFree(id);
 		IAudioEndpointVolume* volume = NULL;
-		VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
+		VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
 		VERIFY_SUCCEEDED(volume->SetMute(mute, NULL));
 		volume->Release();
@@ -174,16 +174,16 @@ void MicCtrl::SetMuted(bool mute) {
 
 std::vector<std::wstring> MicCtrl::GetActiveDevices() {
 	IMMDeviceCollection* devCollection = NULL;
-	VERIFY_OK(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
+	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_OK(devCollection->GetCount(&devCount));
+	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
 	std::vector<std::wstring> ids;
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
-		VERIFY_OK(devCollection->Item(i, &dev));
+		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
 		
 		LPWSTR id = NULL;
-		VERIFY_OK(dev->GetId(&id));
+		VERIFY_SUCCEEDED(dev->GetId(&id));
 		ids.push_back(id);
 		CoTaskMemFree(id);
 
@@ -199,10 +199,10 @@ std::wstring MicCtrl::GetDevName(const wchar_t* devID) {
 		return L"";
 	}
 	IPropertyStore* propStore = NULL;
-	VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
+	VERIFY_SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &propStore));
 	dev->Release();
 	PROPVARIANT name;
-	VERIFY_OK(propStore->GetValue(PKEY_Device_FriendlyName, &name));
+	VERIFY_SUCCEEDED(propStore->GetValue(PKEY_Device_FriendlyName, &name));
 	propStore->Release();
 	return name.pwszVal;
 }
@@ -213,10 +213,10 @@ std::wstring MicCtrl::GetDevIfaceName(const wchar_t* devID) {
 		return L"";
 	}
 	IPropertyStore* propStore = NULL;
-	VERIFY_OK(dev->OpenPropertyStore(STGM_READ, &propStore));
+	VERIFY_SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &propStore));
 	dev->Release();
 	PROPVARIANT name;
-	VERIFY_OK(propStore->GetValue(PKEY_Device_FriendlyName, &name));
+	VERIFY_SUCCEEDED(propStore->GetValue(PKEY_Device_FriendlyName, &name));
 	propStore->Release();
 	return name.pwszVal;
 }
@@ -227,15 +227,15 @@ int MicCtrl::GetDevMuted(const wchar_t* devID) {
 		return -1;
 	}
 	DWORD state = 0;
-	VERIFY_OK(dev->GetState(&state));
+	VERIFY_SUCCEEDED(dev->GetState(&state));
 	if (state != DEVICE_STATE_ACTIVE) {
 		return -1;
 	}
 	IAudioEndpointVolume* volume = NULL;
-	VERIFY_OK(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
+	VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 	dev->Release();
 	BOOL mute = FALSE;
-	VERIFY_OK(volume->GetMute(&mute));
+	VERIFY_SUCCEEDED(volume->GetMute(&mute));
 	volume->Release();
 	return mute ? 1 : 0;
 }
@@ -245,7 +245,7 @@ std::wstring MicCtrl::GetDefaultMicphone() {
 	auto ret = devEnum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev);
 	if (ret == S_OK) {
 		LPWSTR devID = NULL;
-		VERIFY_OK(dev->GetId(&devID));
+		VERIFY_SUCCEEDED(dev->GetId(&devID));
 		dev->Release();
 		std::wstring strDevID(devID);
 		CoTaskMemFree(devID);
