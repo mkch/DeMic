@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ generated include file.
-// Used by DeMic.rc
+// Microsoft Visual C++ 生成的包含文件。
+// 供 DeMic.rc 使用
 //
 #define IDI_DEMIC                       2
 #define IDD_DEMIC_DIALOG                102
@@ -51,6 +51,12 @@
 #define ID_MENU_PLUGIN                  32781
 #define ID_MENU_PLUGIN32782             32782
 #define ID_32783                        32783
+#define ID_MENU_32784                   32784
+#define ID_32785                        32785
+#define ID_MENU_SHOW_LOG                32786
+#define ID_MENU_HELP                    32787
+#define ID_HELP_SHOWLOG                 32788
+#define ID_HELP_SHOW_LOG                32789
 #define IDC_HOTKEY_STATIC               -1
 
 // Next default values for new objects
@@ -59,7 +65,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        155
-#define _APS_NEXT_COMMAND_VALUE         32784
+#define _APS_NEXT_COMMAND_VALUE         32790
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

@@ -205,7 +205,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 // as if args are passed in command line.
 std::wstring CommandLine(const std::wstring& args) {
     std::array<wchar_t, 1024> argv0;
-    GetModuleFileName(NULL, argv0.data(), argv0.size());
+    GetModuleFileName(NULL, argv0.data(), DWORD(argv0.size()));
     return (std::wstringstream() << L'"' << argv0.data() << L'"' << L' ' << args).str();
 }
 
@@ -344,6 +344,43 @@ void ShowSoundSettingsWindow() {
 
     ShowWindow(soundSettingsWindow, SW_SHOW);
 }
+#include <shlobj.h>
+
+// Opens the folder containing the specified file and select the file.
+// If the filePath does not exist, returns FALSE.
+BOOL OpenFolderSelectFile(LPCWSTR filePath) {
+    std::vector<wchar_t> buf(wcslen(filePath) + 1);
+    DWORD len = GetFullPathNameW(filePath, DWORD(buf.size()), buf.data(), NULL);
+    if (len == 0 || len > DWORD(buf.size())) {
+        LOG_LAST_ERROR();
+        return FALSE;
+    }
+    BOOL ok = FALSE;
+
+    PIDLIST_ABSOLUTE pidlFile = NULL;
+    SFGAOF sfgao;
+
+    auto hr = SHParseDisplayName(&buf[0], NULL, &pidlFile, 0, &sfgao);
+    if (SUCCEEDED(hr) && pidlFile) {
+        PIDLIST_ABSOLUTE pidlFolder = ILClone(pidlFile);
+        if (pidlFolder && ILRemoveLastID(pidlFolder)) {
+            PCUITEMID_CHILD child = ILFindLastID(pidlFile);
+            if (SUCCEEDED(SHOpenFolderAndSelectItems(pidlFolder, 1, &child, 0))) {
+                ok = TRUE;
+            }
+        }
+        if (pidlFolder) CoTaskMemFree(pidlFolder);
+        CoTaskMemFree(pidlFile);
+    } else {
+        LOG_ERROR(hr);
+    }
+    return ok;
+}
+// Open the specified folder.
+BOOL OpenFolder(LPCWSTR folder) {
+    HINSTANCE h = ShellExecuteW(NULL, L"open", folder, NULL, NULL, SW_SHOWNORMAL);
+    return ((INT_PTR)h > 32);
+}
 
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
@@ -366,6 +403,11 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         break;
     case ID_NO_PLUGIN:
         MessageBoxW(hWnd, (strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+        break;
+    case ID_HELP_SHOW_LOG:
+        if (!OpenFolderSelectFile(defaultLogFilePath.c_str())) {
+			OpenFolder(defaultLogFilePath.substr(0, defaultLogFilePath.rfind(LOG_FILE_NAME)).c_str());
+        }
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
