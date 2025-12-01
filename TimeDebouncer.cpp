@@ -22,12 +22,9 @@ TimeDebouncer::~TimeDebouncer() {
 }
 
 void TimeDebouncer::Emit() {
-	if (mTimerID) {
-		if (!KillTimer(NULL, mTimerID)) {
-			LOG_LAST_ERROR();
-		}
-	}
-	mTimerID = SetTimer(NULL, 0, mInterval, TimerProc);
+	// SetTimer will replace the timer if time id is not zero,
+	// so we don't need to kill the previous timer.
+	mTimerID = SetTimer(NULL, mTimerID, mInterval, TimerProc);
 	if (!mTimerID) {
 		LOG_LAST_ERROR();
 		return;
