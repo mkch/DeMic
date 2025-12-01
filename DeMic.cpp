@@ -16,8 +16,6 @@
 
 #include "Log.h"
 
-#define MAX_LOADSTRING 1024
-
 // Notify message used by Shell_NotifyIconW.
 static const UINT UM_NOTIFY = WM_USER + 1;
 static const int HOTKEY_ID = 1;
@@ -106,10 +104,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     micCtrl.SetDevFilter(devFilter);
 
     // Initialize global strings
-    WCHAR szTitle[MAX_LOADSTRING] = { 0 };
-    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    appTitle = &szTitle[0];
     strRes = new StringRes(hInstance);
+    appTitle = strRes->Load(IDS_APP_TITLE);
 
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
