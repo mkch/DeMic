@@ -490,7 +490,7 @@ static BOOL HostDeleteRootMenuItem(void* st) {
 }
 
 static void HostWriteLog(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message) {
-	Log(level, file, line, message, ((PluginState*)state)->PluginInfo);
+	Log(Logger::Level(level), file, line, message, ((PluginState*)state)->PluginInfo);
 }
 
 bool ProcessPluginMenuCmd(UINT id) {;

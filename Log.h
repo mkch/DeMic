@@ -3,6 +3,7 @@
 #include "sdk/DemicPlugin.h"
 #include <string>
 #include <ostream>
+#include "Logger.h"
 
 #define LOG(level, msg) Log((level), _CRT_WIDE(__FILE__), __LINE__, (msg))
 #define LOG_ERROR(err) LogError(_CRT_WIDE(__FILE__), __LINE__, err)
@@ -25,9 +26,9 @@
 // Display errors to the user prominently.
 void ShowError(const wchar_t* msg);
 // Set the default logger stream. The initial default logger is stderr.
-void SetDefaultLogger(std::ostream*);
+void SetDefaultLogger(Logger* logger);
 // Log filename, line number and message to the default logger.
-void Log(LogLevel level, const wchar_t* file, int line, const wchar_t* msg, const DeMic_PluginInfo* plugin = NULL);
+void Log(Logger::Level level, const wchar_t* file, int line, const wchar_t* msg, const DeMic_PluginInfo* plugin = NULL);
 // Log filename, line number and error message to the default logger.
 void LogError(const wchar_t* file, int line, const wchar_t* msg);
 // Log filename, line number and the description of lastError to the default logger.

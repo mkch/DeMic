@@ -173,6 +173,7 @@
     <ClInclude Include="DeMic.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="Log.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="MicCtrl.h" />
     <ClInclude Include="Plugin.h" />
     <ClInclude Include="Resource.h" />
@@ -184,6 +185,7 @@
   <ItemGroup>
     <ClCompile Include="DeMic.cpp" />
     <ClCompile Include="Log.cpp" />
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MicCtrl.cpp" />
     <ClCompile Include="Plugin.cpp" />
     <ClCompile Include="TimeDebouncer.cpp" />

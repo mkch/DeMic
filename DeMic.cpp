@@ -62,6 +62,8 @@ std::wstring offSoundPath; // The sound file.
 std::wstring cmdLineArgs; // The command line args to use when starting the first instance.
 std::wstring cmdLineArgs2; // The command line args to use when starting this exe while already running. 
 
+Logger::Level logLevel = Logger::LevelError; // The log level for logging.
+
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
@@ -93,7 +95,6 @@ std::wstring CommandLine(const std::wstring& args);
 
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
-std::ofstream defaultLogger(defaultLogFilePath, std::ios::app);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -101,10 +102,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
-
-	SetDefaultLogger(&defaultLogger);
-
-    micCtrl.SetDevFilter(devFilter);
 
     // Initialize global strings
     strRes = new StringRes(hInstance);
@@ -126,6 +123,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
     }
     ReadConfig();
+
+    std::ofstream loggerStream(defaultLogFilePath, std::ios::app);
+    Logger defaultLogger(&loggerStream, logLevel);
+    SetDefaultLogger(&defaultLogger);
+
+    micCtrl.SetDevFilter(devFilter);
     
     const bool noArgInCmdLine = cmd == CMD_NONE;
 
@@ -814,16 +817,20 @@ static struct {
 static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
 
 static TimeDebouncer shellNotifyIconRetryDebouncer(SHELL_NOTIFY_ICON_RETRY_INTERVAL, [] {
-    if (!Shell_NotifyIconW(shellNotifyIconRetryData.message, &shellNotifyIconRetryData.data)) {
-        DWORD err = GetLastError();
-        if (err == ERROR_TIMEOUT) {
-            if (++shellNotifyIconRetryData.retriedCount < 3) {
-                shellNotifyIconRetryDebouncer.Emit(); // Retry again.
-                return;
-            }
-        } else {
-            LOG_ERROR(err);
+	LOG(Logger::LevelDebug,
+        (std::wstringstream() << L"Retrying Shell_NotifyIconW " << shellNotifyIconRetryData.retriedCount+1 << L" ...").str().c_str());
+    if (Shell_NotifyIconW(shellNotifyIconRetryData.message, &shellNotifyIconRetryData.data)) {
+        LOG(Logger::LevelDebug, L"Shell_NotifyIconW succeeded on retry.");
+        return;
+    }
+    DWORD err = GetLastError();
+    if (err == ERROR_TIMEOUT) {
+		if (++shellNotifyIconRetryData.retriedCount < 3) { // Retry up to 3 times.
+            shellNotifyIconRetryDebouncer.Emit();
+            return;
         }
+    } else {
+        LOG_ERROR(err);
     }
 });
 
@@ -849,6 +856,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
             LOG_ERROR(err);
             return;
         }
+		LOG(Logger::LevelDebug, L"Shell_NotifyIconW failed with ERROR_TIMEOUT, will retry.");
 		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy.
 		// Prepare for retrying.
         shellNotifyIconRetryData.retriedCount = 0;
@@ -897,6 +905,9 @@ static const auto CONFIG_CMD_LINE_ARGS = L"CmdLineArgs";
 // Command line args to use when executing this exe
 // while another instance is already running.
 static const auto CONFIG_CMD_LINE_ARGS2 = L"CmdLineArgs2";
+// Log level.
+static const auto CONFIG_LOG = L"Log";
+static const auto CONFIG_LOG_LEVEL = L"LogLevel";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -928,6 +939,8 @@ void ReadConfig() {
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
     cmdLineArgs2 = buf;
+
+    logLevel = (Logger::Level)GetPrivateProfileIntW(CONFIG_LOG, CONFIG_LOG_LEVEL, Logger::LevelError, configFilePath.c_str());
 }
 
 // Write settings to config file.
@@ -949,12 +962,6 @@ void WriteConfig() {
         configFilePath.c_str());
     WritePrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN,
         Join(configuredPluginFiles.begin(), configuredPluginFiles.end(), CONFIG_PLUGIN_DEL).c_str(),
-        configFilePath.c_str());
-    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS,
-        cmdLineArgs.c_str(),
-        configFilePath.c_str());
-    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2,
-        cmdLineArgs2.c_str(),
         configFilePath.c_str());
 }
 
