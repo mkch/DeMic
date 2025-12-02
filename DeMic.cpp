@@ -9,6 +9,7 @@
 #include <Dbt.h>
 #include <string>
 #include <array>
+#include <fstream>
 #include <strsafe.h>
 #include <windowsx.h>
 
@@ -92,6 +93,7 @@ std::wstring CommandLine(const std::wstring& args);
 
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
+std::ofstream defaultLogger(defaultLogFilePath, std::ios::app);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -99,6 +101,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+	SetDefaultLogger(&defaultLogger);
 
     micCtrl.SetDevFilter(devFilter);
 

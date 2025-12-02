@@ -2,15 +2,20 @@
 #include <ctime>    // C-style time
 #include <iomanip>  // for std::put_time
 #include <codecvt>  // for std::wstring_convert
-
-#include <fstream>
+#include <iostream> // for std::cerr
 
 #include "Log.h"
 #include "DeMic.h"
 
+static std::ostream* defaultLogger = &std::cerr;
+
+void SetDefaultLogger(std::ostream* stream) {
+	defaultLogger = stream;
+}
+
 const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim = L'\\');
 
-std::tm GetLocalTm() {
+static std::tm GetLocalTm() {
 	// Get current system time point
 	auto now = std::chrono::system_clock::now();
 	// Convert to C-style time_t
@@ -39,32 +44,23 @@ static const char* LevelName(LogLevel level) {
 	}
 }
 
-void WriteLog(LogLevel level, const wchar_t* file, int line, const std::wstring& message, const DeMic_PluginInfo* plugin) {
+static BOOL WriteLog(std::ostream& stream, LogLevel level, const wchar_t* file, int line, const std::wstring& message, const DeMic_PluginInfo* plugin) {
 	const auto now = GetLocalTm();
-	try {
-		std::ofstream out(defaultLogFilePath, std::ios::app);
-		out.exceptions(std::ios::failbit | std::ios::badbit);
-		out << '[' << LevelName(level)  << "] "
-			<< std::put_time(&now, "%Y-%m-%d_%H:%M:%S")
-			<< " Demic-" << wstrconv.to_bytes(VERSION) << ' ';
-		if (plugin) {
-			out << wstrconv.to_bytes(plugin->Name) << '-' << plugin->Version.Major << '.' << plugin->Version.Minor << ' ';
-		}
-		out << wstrconv.to_bytes(file_path_base(file)) << ':' << line << ' '
-			<< wstrconv.to_bytes(message)
-			<< std::endl;
-	} catch (...) {
-		static bool errorShowed = false;
-		if (!errorShowed) {
-			ShowError( (std::wstring(L"Write log file field: ") + defaultLogFilePath).c_str());
-			errorShowed = true;
-		}
+	stream << std::put_time(&now, "%Y-%m-%d_%H:%M:%S ")
+		<< '[' << LevelName(level) << "] "
+		<< " Demic-" << wstrconv.to_bytes(VERSION) << ' ';
+	if (plugin) {
+		stream << wstrconv.to_bytes(plugin->Name) << '-' << plugin->Version.Major << '.' << plugin->Version.Minor << ' ';
 	}
+	stream << wstrconv.to_bytes(file_path_base(file)) << ':' << line << ' '
+		<< wstrconv.to_bytes(message)
+		<< std::endl;
+	return stream.good();
 }
 
 // Extract the base part of a file path.
 // E.g. file_path_base(L"C:\\a\\b\\c.txt",'\\') == "c.txt"
-const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim) {
+static const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim) {
 	if (delim == 0) return path;
 	const size_t len = std::wcslen(path);
 	if (len == 0) return path;
@@ -78,8 +74,18 @@ const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim) {
 	return path;
 }
 
+void Log(LogLevel level, const wchar_t* file, int line, const wchar_t* msg, const DeMic_PluginInfo* plugin) {
+	if (!WriteLog(*defaultLogger, level, file, line, msg, plugin)) {
+		static bool errorShowed = false;
+		if (!errorShowed) {
+			ShowError(L"Write log failed!");
+			errorShowed = true;
+		}
+	}
+}
+
 void LogError(const wchar_t* file, int line, const wchar_t* msg) {
-	WriteLog(LevelError, file, line, msg, NULL);
+	Log(LevelError, file, line, msg);
 }
 
 static std::wstring GetLastErrorMessage(DWORD lastError) {
@@ -91,7 +97,6 @@ static std::wstring GetLastErrorMessage(DWORD lastError) {
 	return message;
 }
 
-// Log the error description of lastError.
 void LogError(const wchar_t* file, int line, DWORD lastError) {
 	LogError(file, line, GetLastErrorMessage(lastError).c_str());
 }
