@@ -25,7 +25,7 @@ static const UINT UM_MIC_CMD = WM_USER + 2;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
-const static wchar_t* const LOG_FILE_NAME = L"demic-log.txt";
+const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 
 StringRes* strRes = NULL;
 
