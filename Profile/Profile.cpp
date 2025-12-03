@@ -214,9 +214,9 @@ struct EnumDevProcData {
 
 
 // Append a menu item to show "too many microphones".
-void AppendTooManyMicrophonesMenuItem(HMENU menu, const std::wstring& title) {
-    const static std::wstring TOO_MANY = L"<!!!TOO MANY !!!>";
-    VERIFY(host, state, AppendMenu(menu, MF_STRING, 0, (TOO_MANY + L" " + title).c_str()));
+void AppendTooManyMicrophonesMenuItem(HMENU menu) {
+	LOG(host, state, LevelWarn, L"Too many microphones to show in menu. Skipped");
+    VERIFY(host, state, AppendMenu(menu, MF_STRING, 0, strRes->Load(IDS_TOO_MANY_MICROPHONES).c_str()));
 }
 
 void EnumDevProc(const wchar_t* devID, void* userData) {
@@ -229,7 +229,7 @@ void EnumDevProc(const wchar_t* devID, void* userData) {
         flags |= MF_CHECKED;
     }
     if (data->ItemID >= lastMenuItemID) {
-        AppendTooManyMicrophonesMenuItem(devicesMenu, name);
+        AppendTooManyMicrophonesMenuItem(devicesMenu);
         return; // No more IDs available.
     }
     VERIFY(host, state, AppendMenu(devicesMenu, flags, data->ItemID, name.c_str()))
@@ -303,7 +303,7 @@ void SubMenuPopupListener(HMENU menu) {
             return;
         }
         if (data.ItemID >= lastMenuItemID) {
-            AppendTooManyMicrophonesMenuItem(devicesMenu, dev.second);
+            AppendTooManyMicrophonesMenuItem(devicesMenu);
             return; // No more IDs available.
         }
         VERIFY(host, state, AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
