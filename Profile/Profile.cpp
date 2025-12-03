@@ -298,10 +298,18 @@ void SubMenuPopupListener(HMENU menu) {
     host->GetActiveDevices(EnumDevProc, &data);
 
     // Append extra items in selectedDevID.
-    std::for_each(selectedDev.begin(), selectedDev.end(), [&data](const auto& dev) {
+    std::vector<std::pair<std::wstring, std::wstring>> extraDev;
+    std::for_each(selectedDev.begin(), selectedDev.end(), [&data, &extraDev](const auto& dev) {
         if (dev.first == DEFAULT_MIC_DEV_ID || data.EnumedDevID.find(dev.first) != data.EnumedDevID.end()) {
             return;
         }
+		extraDev.push_back(dev);
+    });
+    std::sort(extraDev.begin(), extraDev.end(), [](const auto& a, const auto& b) {
+        return a.second < b.second;
+	});
+
+    std::for_each(extraDev.begin(), extraDev.end(), [&data](const auto& dev) {
         if (data.ItemID >= lastMenuItemID) {
             AppendMicrophoneMenuItemBeyondIDLimit(devicesMenu, dev.second);
             return; // No more IDs available.
