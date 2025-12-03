@@ -963,6 +963,12 @@ void WriteConfig() {
     WritePrivateProfileStringW(CONFIG_PLUGIN, CONFIG_PLUGIN,
         Join(configuredPluginFiles.begin(), configuredPluginFiles.end(), CONFIG_PLUGIN_DEL).c_str(),
         configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS,
+        cmdLineArgs.c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2,
+        cmdLineArgs2.c_str(),
+        configFilePath.c_str());
 }
 
 static const auto START_ON_BOOT_REG_SUB_KEY = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
