@@ -451,10 +451,10 @@ void CallPluginInitMenuPopupListener(HMENU menu) {
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(),
 		[menu](const auto pair) {
 			const auto plugin = pair.second;
-	const auto it = plugin->InitMenuPopupListeners.find(menu);
-	if (it != plugin->InitMenuPopupListeners.end()) {
-		it->second(menu);
-	}
+			const auto it = plugin->InitMenuPopupListeners.find(menu);
+			if (it != plugin->InitMenuPopupListeners.end()) {
+				it->second(menu);
+			}
 		});
 }
 
