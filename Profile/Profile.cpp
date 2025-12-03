@@ -97,6 +97,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.cch = UINT(title.size() - 1);
     rootMenuItem.hSubMenu = devicesMenu;
     VERIFY(host, state, host->CreateRootMenuItem(state, &rootMenuItem));
+    LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
     return TRUE;
 }
 

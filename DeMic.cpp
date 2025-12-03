@@ -176,6 +176,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return FALSE;
     }
 
+    LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
+
     ResetHotKey();
     LoadPlugins();
 
@@ -187,6 +189,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     if (action != CMD_NONE) {
         PostMessage(mainWindow, UM_MIC_CMD, action, 0);
     }
+
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {

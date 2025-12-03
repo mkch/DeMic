@@ -21,7 +21,7 @@ static const wchar_t* file_path_base(const wchar_t* path, const wchar_t delim = 
 }
 
 bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring& message) {
-    if (level >= mLevel) {
+    if (level < mLevel) {
         return true;
     }
 

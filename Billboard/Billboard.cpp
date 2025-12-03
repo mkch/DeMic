@@ -121,6 +121,8 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	if (!ok) {
 		host->DeleteRootMenuItem(state);
 	}
+
+	LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
 	return ok;
 }
 
