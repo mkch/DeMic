@@ -213,10 +213,10 @@ struct EnumDevProcData {
 };
 
 
-// Append a menu item indicating no more IDs available.
-void AppendMicrophoneMenuItemBeyondIDLimit(HMENU menu, const std::wstring& title) {
-    const static std::wstring TOO_MANY = L"<!>";
-    VERIFY(host, state, AppendMenu(menu, MF_STRING, 0, (TOO_MANY + L" " + title).c_str()));
+// Append a menu item with an extra marker which indicates no menu item id is available.
+void AppendOverflowDevItem(HMENU menu, const std::wstring& title) {
+    const static std::wstring OVERFLOW_MARKER = L"<!>";
+    VERIFY(host, state, AppendMenu(menu, MF_STRING, 0, (OVERFLOW_MARKER + title).c_str()));
 }
 
 void EnumDevProc(const wchar_t* devID, void* userData) {
@@ -229,7 +229,7 @@ void EnumDevProc(const wchar_t* devID, void* userData) {
         flags |= MF_CHECKED;
     }
     if (data->ItemID >= lastMenuItemID) {
-        AppendMicrophoneMenuItemBeyondIDLimit(devicesMenu, name);
+        AppendOverflowDevItem(devicesMenu, name);
         return; // No more IDs available.
     }
     VERIFY(host, state, AppendMenu(devicesMenu, flags, data->ItemID, name.c_str()))
@@ -311,7 +311,7 @@ void SubMenuPopupListener(HMENU menu) {
 
     std::for_each(extraDev.begin(), extraDev.end(), [&data](const auto& dev) {
         if (data.ItemID >= lastMenuItemID) {
-            AppendMicrophoneMenuItemBeyondIDLimit(devicesMenu, dev.second);
+            AppendOverflowDevItem(devicesMenu, dev.second);
             return; // No more IDs available.
         }
         VERIFY(host, state, AppendMenu(devicesMenu, MF_STRING | MF_CHECKED, data.ItemID, dev.second.c_str()));
