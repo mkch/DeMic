@@ -14,7 +14,6 @@
 #define IDS_APPLY_TO_DEFAULT            109
 #define IDS_ALL_EXCEPT                  110
 #define IDS_APPLY_TO_ALL_EXCEPT         111
-#define IDS_TOO_MANY_MICROPHONES        112
 
 // Next default values for new objects
 // 
