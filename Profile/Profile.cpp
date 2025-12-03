@@ -46,7 +46,6 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
         configFilePath = configFile;
         configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\')+1) + CONFIG_FILE_NAME;
-        ReadConfig();
         break;
     }
     case DLL_PROCESS_DETACH:
@@ -97,6 +96,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.cch = UINT(title.size() - 1);
     rootMenuItem.hSubMenu = devicesMenu;
     VERIFY(host, state, host->CreateRootMenuItem(state, &rootMenuItem));
+    ReadConfig();
     LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
     return TRUE;
 }
