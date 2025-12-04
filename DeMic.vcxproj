@@ -190,7 +190,6 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MicCtrl.cpp" />
     <ClCompile Include="Plugin.cpp" />
-    <ClCompile Include="TimeDebouncer.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -474,18 +474,21 @@ BOOL IsMuted() {
 // Debounce interval for device state change events (ms).
 static const UINT DEVICE_CHANGE_DELAY = 1000;
 
-static TimeDebouncer deviceStateChangedDebouncer(DEVICE_CHANGE_DELAY, [] {
+// static member of template class must be defined for each instantiation.
+std::map<UINT_PTR, TimeDebouncer<>*> TimeDebouncer<>::sInstances;
+
+static TimeDebouncer<> deviceStateChangedDebouncer(DEVICE_CHANGE_DELAY, [] {
     micCtrl.ReloadDevices();
     UpdateNotification(mainWindow);
     CallPluginMicStateListeners();
 });
 
-static TimeDebouncer defaultDeviceChangedDebouncer(DEVICE_CHANGE_DELAY, CallPluginDefaultDevChangedListeners);
+static TimeDebouncer<> defaultDeviceChangedDebouncer(DEVICE_CHANGE_DELAY, CallPluginDefaultDevChangedListeners);
 
 // Debounce interval for device muted state change events (ms).
 static const UINT MUTED_STATE_CHANGE_DELAY = 20;
 
-static TimeDebouncer mutedStatedChangedDebouncer(MUTED_STATE_CHANGE_DELAY, [] {
+static TimeDebouncer<> mutedStatedChangedDebouncer(MUTED_STATE_CHANGE_DELAY, [] {
     UpdateNotification(mainWindow);
     CallPluginMicStateListeners();
 });
@@ -809,27 +812,30 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 // ID of Shell_NotifyIconW.
 static const UINT NOTIFY_ID = 1;
 
-static struct {
+struct ShellNotifyIconRetryData {
     DWORD message;
     NOTIFYICONDATAW data;
 	DWORD retriedCount;
-} shellNotifyIconRetryData = { 0 };
+};
+
+// static member of template class must be defined for each instantiation.
+std::map<UINT_PTR, TimeDebouncer<ShellNotifyIconRetryData>*> TimeDebouncer<ShellNotifyIconRetryData>::sInstances;
 
 
 // Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
 static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
 
-static TimeDebouncer shellNotifyIconRetryDebouncer(SHELL_NOTIFY_ICON_RETRY_INTERVAL, [] {
+static TimeDebouncer<ShellNotifyIconRetryData>shellNotifyIconRetryDebouncer(SHELL_NOTIFY_ICON_RETRY_INTERVAL, [](auto data) {
 	LOG(Logger::LevelDebug,
-        (std::wstringstream() << L"Retrying Shell_NotifyIconW " << shellNotifyIconRetryData.retriedCount+1 << L" ...").str().c_str());
-    if (Shell_NotifyIconW(shellNotifyIconRetryData.message, &shellNotifyIconRetryData.data)) {
+        (std::wstringstream() << L"Retrying Shell_NotifyIconW " << data.retriedCount+1 << L" ...").str().c_str());
+    if (Shell_NotifyIconW(data.message, &data.data)) {
         LOG(Logger::LevelDebug, L"Shell_NotifyIconW succeeded on retry.");
         return;
     }
     DWORD err = GetLastError();
     if (err == ERROR_TIMEOUT) {
-		if (++shellNotifyIconRetryData.retriedCount < 3) { // Retry up to 3 times.
-            shellNotifyIconRetryDebouncer.Emit();
+		if (++data.retriedCount < 3) { // Retry up to 3 times.
+            shellNotifyIconRetryDebouncer.Emit(data);
             return;
         }
     } else {
@@ -862,10 +868,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
 		LOG(Logger::LevelDebug, L"Shell_NotifyIconW failed with ERROR_TIMEOUT, will retry.");
 		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy.
 		// Prepare for retrying.
-        shellNotifyIconRetryData.retriedCount = 0;
-        shellNotifyIconRetryData.message = message;
-		shellNotifyIconRetryData.data = data;
-        shellNotifyIconRetryDebouncer.Emit();
+        shellNotifyIconRetryDebouncer.Emit(ShellNotifyIconRetryData{message, data, 0});
     }
 }
 
