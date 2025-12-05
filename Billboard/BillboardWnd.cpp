@@ -83,7 +83,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             inDragging = leftButtonDown = false;
         }
         break;
-    case WM_RBUTTONDOWN: {
+    case WM_RBUTTONUP: {
         const auto hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_CONTEXT_MENU));
         if (!hMenu) {
             LOG_LAST_ERROR(host, state);
