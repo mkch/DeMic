@@ -17,7 +17,7 @@ private:
 	static void CALLBACK TimerProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
 		auto instance = sInstances[id];
 		if (!KillTimer(NULL, id)) {
-			instance->mLastErrorLogger();
+			instance->mLogLastError();
 		}
 		sInstances.erase(id);
 		instance->mTimerID = 0;
