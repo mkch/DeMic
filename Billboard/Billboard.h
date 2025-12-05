@@ -7,6 +7,7 @@ extern StringRes* strRes;
 extern DeMic_Host* host;
 extern void* state;
 extern bool alwaysOnTop;
+extern bool hideCaption;
 extern RECT lastWindowRect;
 
 void ReadConfig();

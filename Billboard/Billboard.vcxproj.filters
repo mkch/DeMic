@@ -33,6 +33,9 @@
     <ClInclude Include="..\sdk\DemicPluginUtil.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\TimeDebouncer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Billboard.cpp">

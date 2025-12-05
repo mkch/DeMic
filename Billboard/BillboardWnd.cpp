@@ -2,6 +2,7 @@
 #include "resource.h"
 #include "Billboard.h"
 #include "BillboardWnd.h"
+#include "../TimeDebouncer.h"
 
 static const wchar_t* szWindowClass = L"DeMic-Billboard";
 static const COLORREF WND_BK_COLOR = COLOR_WINDOW;
@@ -14,10 +15,18 @@ static HBRUSH hWndBkBrush = NULL;
 
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
+void SyncHideCaption(HWND hwnd);
 void RestoreLastWindowRect(HWND hwnd);
 
 static RECT rcBeforeMinized = { 0 };
 
+// Start simulating window dragging.
+static void startDrag(HWND hWnd) {
+    SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+}
+
+static bool leftButtonDown = false;
+static bool inDragging = false;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
@@ -27,6 +36,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         hBmpMuted = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE_MUTED));
         hWndBkBrush = CreateSolidBrush(GetSysColor(WND_BK_COLOR));
         SyncTopMost(hWnd);
+		SyncHideCaption(hWnd);
         break;
     case WM_DESTROY:
         WriteConfig();
@@ -37,11 +47,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
         return 0;
-    case WM_LBUTTONDOWN: {
+    case WM_LBUTTONDOWN:
+        leftButtonDown = true;
+        break;
+    case WM_LBUTTONUP:{
+        leftButtonDown = false;
         static const int PADDING = 4;
         RECT rect = { 0 };
         GetClientRect(hWnd, &rect);
-        InflateRect(&rect, -PADDING*2, -PADDING*2);
+        InflateRect(&rect, -PADDING * 2, -PADDING * 2);
         POINT pt = { 0 };
         pt.x = LOWORD(lParam);
         pt.y = HIWORD(lParam);
@@ -50,6 +64,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     }
+    case WM_MOUSEMOVE:
+        if(hideCaption && leftButtonDown && !inDragging) {
+			inDragging = true;
+            startDrag(hWnd);
+            return 0;
+		}
+        break;
+    case WM_NCHITTEST:
+        if (hideCaption && inDragging) {
+            // The WM_NCHITTEST message right after the last dragging WM_MOUSEMOVE.
+            inDragging = leftButtonDown = false;
+        }
+        break;
+    case WM_KILLFOCUS:
+        if (hideCaption) {
+			// Just for safety, reset the dragging state when the window loses focus.
+            inDragging = leftButtonDown = false;
+        }
+        break;
     case WM_RBUTTONDOWN: {
         const auto hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_CONTEXT_MENU));
         if (!hMenu) {
@@ -62,6 +95,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             LOG_LAST_ERROR(host, state);
         }
         CheckMenuItem(popupMenu, ID_ALWAYS_ON_TOP, alwaysOnTop ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem(popupMenu, ID_HIDE_CAPTION, hideCaption ? MF_CHECKED : MF_UNCHECKED);
         POINT pt = { 0 };
         GetCursorPos(&pt);
         UINT_PTR cmd = TrackPopupMenu(popupMenu,
@@ -69,10 +103,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             pt.x, pt.y,
             0,
             hWnd, NULL);
-        if (cmd == ID_ALWAYS_ON_TOP) {
+        switch (cmd) {
+        case ID_ALWAYS_ON_TOP:
             alwaysOnTop = !alwaysOnTop;
             SyncTopMost(hWnd);
             WriteConfig();
+            break;
+        case ID_HIDE_CAPTION:
+            hideCaption = !hideCaption;
+            SyncHideCaption(hWnd);
+            WriteConfig();
+			break;
+        case ID_CLOSE:
+            SendMessage(hWnd, WM_CLOSE, 0, 0);
+			break;
         }
         DestroyMenu(hMenu);
         break;
@@ -106,6 +150,23 @@ void RestoreLastWindowRect(HWND hwnd) {
 // Sync the top most state with alwyasOnTop flag.
 void SyncTopMost(HWND hwnd) {
        SetWindowPos(hwnd, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
+static void HideWindowCaption(HWND hWnd) {
+    SetWindowLongPtr(hWnd, GWL_STYLE, GetWindowLongPtr(hWnd, GWL_STYLE) & ~WS_CAPTION);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+static void ShowWindowCaption(HWND hWnd) {
+    SetWindowLongPtr(hWnd, GWL_STYLE, GetWindowLongPtr(hWnd, GWL_STYLE) | WS_CAPTION);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+// Sync the caption state with hideCaption flag.
+void SyncHideCaption(HWND hwnd) {
+	hideCaption ? HideWindowCaption(hwnd) : ShowWindowCaption(hwnd);
 }
 
 // Paints the window.

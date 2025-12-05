@@ -19,10 +19,8 @@ static const wchar_t* const CONFIG_FILE_NAME = L"Billboard.json";
 std::wstring configFilePath;
 
 bool alwaysOnTop = false;
+bool hideCaption = false;
 RECT lastWindowRect = { 0 };
-
-void ReadConfig();
-void WriteConfig();
 
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,		// handle to DLL module
@@ -63,6 +61,7 @@ const static char* const CONFIG_LEFT = "left";
 const static char* const CONFIG_TOP = "top";
 const static char* const CONFIG_RIGHT = "right";
 const static char* const CONFIG_BOTTOM = "bottom";
+const static char* const CONFIG_HIDE_CAPTION = "HideCaption";
 
 static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
 
@@ -78,6 +77,7 @@ void ReadConfig() {
 		alwaysOnTop = config[CONFIG_ALWAYS_ON_TOP];
 		const auto lastRect = config[CONFIG_LAST_RECT];
 		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
+		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
 		ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
 	}
@@ -92,7 +92,8 @@ void WriteConfig() {
 				{CONFIG_RIGHT, lastWindowRect.right},
 				{CONFIG_BOTTOM, lastWindowRect.bottom},
 			} 
-		} 
+		},
+		{CONFIG_HIDE_CAPTION, hideCaption},
 	};
 	std::ofstream out(configFilePath);
 	out << std::setw(2) << config;
