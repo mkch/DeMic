@@ -55,6 +55,12 @@
     <None Include="Billboard.def">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="rt_manif.bin">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="bin00001.bin">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Billboard.rc">
@@ -68,5 +74,8 @@
     <Image Include="MicrophoneMuted.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="manifest.xml" />
   </ItemGroup>
 </Project>

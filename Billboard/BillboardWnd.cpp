@@ -2,7 +2,7 @@
 #include "resource.h"
 #include "Billboard.h"
 #include "BillboardWnd.h"
-#include "../TimeDebouncer.h"
+#include <commctrl.h>
 
 static const wchar_t* szWindowClass = L"DeMic-Billboard";
 static const COLORREF WND_BK_COLOR = COLOR_WINDOW;
@@ -25,6 +25,9 @@ static void startDrag(HWND hWnd) {
     SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
 }
 
+// Client area padding for clickable region.
+static const int PADDING = 4;
+
 static bool leftButtonDown = false;
 static bool inDragging = false;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -38,6 +41,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SyncTopMost(hWnd);
 		SyncHideCaption(hWnd);
         break;
+    case WM_GETMINMAXINFO: {
+        LPMINMAXINFO lpMinMaxInfo = (LPMINMAXINFO)lParam;
+
+        const static int CLIENT_MIN_SIZE = 100;
+        RECT rc = { 0, 0, CLIENT_MIN_SIZE, CLIENT_MIN_SIZE };
+
+        AdjustWindowRectExForDpi(&rc,
+            GetWindowLong(hWnd, GWL_STYLE),
+            GetMenu(hWnd) != NULL,
+            GetWindowLong(hWnd, GWL_EXSTYLE),
+            GetDpiForWindow(hWnd));
+
+        lpMinMaxInfo->ptMinTrackSize.x = rc.right - rc.left;
+        lpMinMaxInfo->ptMinTrackSize.y = rc.bottom - rc.top;
+        break;
+    }
     case WM_DESTROY:
         WriteConfig();
         DeleteObject(hBmpMicrophone);
@@ -52,7 +71,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_LBUTTONUP:{
         leftButtonDown = false;
-        static const int PADDING = 4;
         RECT rect = { 0 };
         GetClientRect(hWnd, &rect);
         InflateRect(&rect, -PADDING * 2, -PADDING * 2);
@@ -149,19 +167,33 @@ void RestoreLastWindowRect(HWND hwnd) {
 
 // Sync the top most state with alwyasOnTop flag.
 void SyncTopMost(HWND hwnd) {
-       SetWindowPos(hwnd, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    if (!SetWindowPos(hwnd, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)) {
+		LOG_LAST_ERROR(host, state);
+    }
 }
 
 static void HideWindowCaption(HWND hWnd) {
     SetWindowLongPtr(hWnd, GWL_STYLE, GetWindowLongPtr(hWnd, GWL_STYLE) & ~WS_CAPTION);
-    SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 }
 
 static void ShowWindowCaption(HWND hWnd) {
+	auto x = GetWindowLongPtr(hWnd, GWL_STYLE);
+	bool hidden = (x & WS_CAPTION) == 0;
     SetWindowLongPtr(hWnd, GWL_STYLE, GetWindowLongPtr(hWnd, GWL_STYLE) | WS_CAPTION);
-    SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    if (hidden) {
+        RECT rc = { 0 };
+        GetClientRect(hWnd, &rc);
+		ClientToScreen(hWnd, (LPPOINT)&rc.left);
+        ClientToScreen(hWnd, (LPPOINT)&rc.right);
+        AdjustWindowRectExForDpi(&rc, 
+            GetWindowLong(hWnd, GWL_STYLE), 
+            GetMenu(hWnd) != NULL,
+            GetWindowLong(hWnd, GWL_EXSTYLE),
+            GetDpiForWindow(hWnd));
+		MoveWindow(hWnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+    }
 }
 
 // Sync the caption state with hideCaption flag.

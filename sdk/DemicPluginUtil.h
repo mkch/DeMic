@@ -23,14 +23,14 @@ static inline void _LogError(DeMic_Host* host, void* state, const wchar_t* file,
 
 #define VERIFY_SIMPLE(title, exp) { \
 	if (!(exp)) { \
-		MessageBoxW(NULL, L"Verification failed:\n" _CRT_WIDE(#exp), (title), MB_ICONERROR); \
+		MessageBoxW(NULL, L"Verification failed: " _CRT_WIDE(#exp), (title), MB_ICONERROR); \
 		DebugBreak(); \
 	} \
 }
 
 #define VERIFY(host, state, exp) { \
 	if (!(exp)) { \
-		(host)->WriteLog((state), LevelError, _CRT_WIDE(__FILE__), __LINE__, L"Verification failed:\n" _CRT_WIDE(#exp)); \
+		(host)->WriteLog((state), LevelError, _CRT_WIDE(__FILE__), __LINE__, L"Verification failed: " _CRT_WIDE(#exp)); \
 		DebugBreak(); \
 	} \
 }

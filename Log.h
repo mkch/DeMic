@@ -11,7 +11,7 @@
 
 #define VERIFY(exp) { \
 	if (!(exp)) { \
-		LogError(_CRT_WIDE(__FILE__), __LINE__, L"Verification failed:\n" _CRT_WIDE(#exp)); \
+		LogError(_CRT_WIDE(__FILE__), __LINE__, L"Verification failed: " _CRT_WIDE(#exp)); \
 		DebugBreak(); \
 	} \
 }
