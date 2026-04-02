@@ -94,4 +94,8 @@
   <ItemGroup>
     <Xml Include="manifest.xml" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="cli.md" />
+    <None Include="config.md" />
+  </ItemGroup>
 </Project>
