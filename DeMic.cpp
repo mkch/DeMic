@@ -28,6 +28,9 @@ static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 
+std::wstring GetModuleFilePath();
+const std::wstring moduleFilePath = GetModuleFilePath(); // Full path of this exe.
+
 StringRes* strRes = NULL;
 
 void ShowNotification(HWND hwnd, bool silent);
@@ -110,14 +113,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
-
     DWORD cmd = ParseCmdLine(argc, argv);
     silentMode = cmd & CMD_SILENT;
-    // Initialize configFilePath.
-    std::wstring moduleFilePath = argv[0];
-
     LocalFree(argv);
 
+    // Read config file.
     configFilePath = moduleFilePath;
     const auto sep = configFilePath.rfind(L'\\');
     if (sep != std::wstring::npos) {
@@ -207,12 +207,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     return (int) msg.wParam;
 }
 
+// GetModuleFilePath returns the file path of this exe module.
+std::wstring GetModuleFilePath() {
+	DWORD size = MAX_PATH;
+	while(1) {
+		std::vector<wchar_t> buffer(size);
+		DWORD ret = GetModuleFileNameW(NULL, buffer.data(), DWORD(buffer.size()));
+		if (ret == 0) {
+			ShowError((std::wstringstream() << L"GetModuleFileNameW: " << GetLastError()).str().c_str());
+			DebugBreak();
+		}
+		if(ret < size) {
+			return std::wstring(buffer.data(), ret);
+		}
+		size *= 2;
+	}
+}
+
 // CommandLine returns the whole command line of this exe
 // as if args are passed in command line.
 std::wstring CommandLine(const std::wstring& args) {
-    std::array<wchar_t, 1024> argv0;
-    GetModuleFileName(NULL, argv0.data(), DWORD(argv0.size()));
-    return (std::wstringstream() << L'"' << argv0.data() << L'"' << L' ' << args).str();
+    return (std::wstringstream() << L'"' << moduleFilePath << L'"' << L' ' << args).str();
 }
 
 DWORD ParseCmdLine(int argc, wchar_t** argv) {
@@ -1061,17 +1076,7 @@ static bool AlreadyRunning() {
 }
 
 std::wstring GetDefaultLogFilePath() {
-    static const int BUF_SIZE = 1024;
-    wchar_t fileName[BUF_SIZE];
-    if (GetModuleFileNameW(NULL, fileName, BUF_SIZE) == BUF_SIZE) {
-        DWORD lastError = GetLastError();
-        if (lastError) {
-            LOG_ERROR(lastError);
-            return L"";
-        }
-    }
-
-    std::wstring logFilePath(fileName);
+    std::wstring logFilePath(moduleFilePath);
     const auto sep = logFilePath.find_last_of(L'\\');
     if (sep != std::wstring::npos) {
         logFilePath = logFilePath.substr(0, sep + 1) + LOG_FILE_NAME;
