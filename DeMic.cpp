@@ -656,13 +656,8 @@ bool ResetHotKey() {
     if (!RegisterHotKey(mainWindow, HOTKEY_ID, modifier, hotKeyVk)) {
         DWORD lastError = GetLastError();
         if (lastError == 1409) { // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
-            wchar_t* msg = NULL;
-            FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, lastError, 0, (LPWSTR)&msg, 0, NULL);
-            LOG_ERROR(msg);
-            LocalFree(msg);
-        }
-        else {
+            ShowError(strRes->Load(IDS_HOTKEY_CONFILCT).c_str());
+        } else {
             LOG_LAST_ERROR();
         }
         return false;
