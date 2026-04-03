@@ -41,7 +41,7 @@ void WriteConfig();
 bool StartOnBootEnabled();
 void EnableStartOnBoot();
 void DisableStartOnBoot();
-bool ResetHotKey();
+bool ResetHotKey(HWND hwnd);
 static bool AlreadyRunning();
 void PlayOnSound(const std::wstring&);
 void PlayOffSound(const std::wstring&);
@@ -242,6 +242,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     Logger defaultLogger(&loggerStream, logLevel);
     SetDefaultLogger(&defaultLogger);
 
+    LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
+
     micCtrl.SetDevFilter(devFilter);
     
     const bool noArgInCmdLine = cmd == CMD_NONE;
@@ -289,11 +291,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     if (!InitInstance (hInstance, nCmdShow)) {
         return FALSE;
     }
-
-    LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
-
-    ResetHotKey();
-    LoadPlugins();
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_DEMIC));
     MSG msg = {};
@@ -404,8 +401,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //        In this function, we save the instance handle in a global variable and
 //        create and display the main program window.
 //
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
    hInst = hInstance; // Store instance handle in our global variable
 
    mainWindow = CreateWindowW(szWindowClass, appTitle.c_str(), WS_OVERLAPPEDWINDOW,
@@ -434,8 +430,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
        LOG_LAST_ERROR();
    }
 
-   //ShowWindow(mainWindow, nCmdShow);
-   //UpdateWindow(mainWindow);
+   LoadPlugins();
 
    return TRUE;
 }
@@ -654,6 +649,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_CREATE:
+        if (!ResetHotKey(hWnd)) {
+            // Clear hot key values if unable to register the hot key.
+            hotKeyInfo.SetValue(0);
+        }
         ShowNotification(hWnd, silentMode);
         break;
     case WM_HOTKEY:
@@ -750,12 +749,12 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 }
 
 // ResetHotKey resets the hot key.
-bool ResetHotKey() {
-    UnregisterHotKey(mainWindow, HOTKEY_ID);
+bool ResetHotKey(HWND hwnd) {
+    UnregisterHotKey(hwnd, HOTKEY_ID);
     if (hotKeyInfo.Empty()) {
         return true;
     }
-	if (!hotKeyInfo.RegisterHotKey(mainWindow, HOTKEY_ID)) {
+	if (!hotKeyInfo.RegisterHotKey(hwnd, HOTKEY_ID)) {
         DWORD lastError = GetLastError();
         if (lastError == 1409) { // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
             ShowError(strRes->Load(IDS_HOTKEY_CONFILCT).c_str());
@@ -788,7 +787,7 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
                 HWND hotKeyCtrl = GetDlgItem(hDlg, IDC_HOTKEY);
 				hotKeyInfo.ReadFromCtrl(hotKeyCtrl);
                 // Reset the system hot key.
-                if (!ResetHotKey()) {
+                if (!ResetHotKey(mainWindow)) {
                     // Clear hot key values if unable to register the hot key.
 					hotKeyInfo.SetValue(0);
                     // Clear the hot key control.

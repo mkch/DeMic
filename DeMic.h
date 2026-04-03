@@ -9,7 +9,7 @@ const UINT APS_NextPluginCmdID = _APS_NEXT_COMMAND_VALUE;
 #undef APSTUDIO_INVOKED
 
 // Currrent version of DeMic.
-static const wchar_t* VERSION = L"1.3";
+static const wchar_t* VERSION = L"1.3.1";
 
 extern HMENU popupMenu;
 extern HMENU pluginMenu;
