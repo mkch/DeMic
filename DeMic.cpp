@@ -55,8 +55,121 @@ HWND mainWindow = NULL;
 HWND hotKeySettingWindow = NULL;
 HWND soundSettingsWindow = NULL;
 
-BYTE hotKeyVk = 0; // Current hotkey vk of the hotkey contorl.
-BYTE hotKeyMod = 0; // Current hotkey modifier of the hotkey control.
+// HotKeyControlInfo contains the setting of a HOTKEY control.
+class HotKeyControlInfo {
+private:
+    BYTE vk = 0;        // Current hotkey vk of the hotkey contorl.
+	BYTE mod = 0;       // Current hotkey modifier of the hotkey control.
+	std::wstring str;   // The string representation of hotkey in UI.
+public:
+    HotKeyControlInfo() {}
+    HotKeyControlInfo(const HotKeyControlInfo&) = delete;
+
+    bool Empty() const {
+		return vk == 0;
+    }
+    // Get the hot key setting of hot key control.
+	void ReadFromCtrl(HWND ctrl) {
+        SetValue((WORD)SendMessage(ctrl, HKM_GETHOTKEY, 0, 0));
+	}
+	// Set the hot key setting to a hot key control.
+    void SetToCtrl(HWND ctrl) const {
+        SendMessage(ctrl, HKM_SETHOTKEY, GetValue(), 0);
+    }
+	// ReigsterHotKey registers the hot key represented by this hot key control info to the system.
+    bool RegisterHotKey(HWND hwnd, int hotKeyId) const {
+        if (vk == 0) { // No hot key is given.
+            return false;
+        }
+        // Translate modifier.
+        UINT modifier = 0;
+        if (mod & HOTKEYF_ALT) {
+            modifier |= MOD_ALT;
+        }
+        if (mod & HOTKEYF_CONTROL) {
+            modifier |= MOD_CONTROL;
+        }
+        if (mod & HOTKEYF_SHIFT) {
+            modifier |= MOD_SHIFT;
+        }
+        return ::RegisterHotKey(mainWindow, HOTKEY_ID, modifier, vk);
+	}
+    const std::wstring& GetStr() const {
+        return str;
+	}
+
+    // Return value of HKM_GETHOTKEY, or parameter of HKM_SETHOTKEY.
+    WORD GetValue() const {
+		return MAKEWORD(vk, mod);
+    }
+
+    void SetValue(WORD value) {
+        vk = LOBYTE(value);
+        mod = HIBYTE(value);
+        str = GetHotKeyString(vk, mod);
+	}
+private:
+    static bool GetVirtualKeyName(UINT vk, bool extended, wchar_t* buffer, size_t bufferSize) {
+        auto scan = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+        // GetKeyNameText requires the scan code in the 16-23 bits, 
+        // the extended key flag in the 24th bit,
+        // and "Do not care" bit in the 25th bit for modifier keys.
+        // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getkeynametextw
+        scan = (scan << 16) | (1 << 25);
+        if (extended) {
+            scan |= (1 << 24); // Add extended key flag.
+        }
+        if (GetKeyNameText(scan, buffer, DWORD(bufferSize)) == 0) {
+            return false;
+        }
+        return true;
+    }
+    // GetHotKeyString returns the display string of the hot key given vk and modifier.
+    static std::wstring GetHotKeyString(BYTE vk, BYTE mod) {
+        if (vk == 0) {
+            return L"";
+        }
+        std::wstringstream ss;
+
+        static const size_t BUF_SIZE = 64;
+        wchar_t buf[BUF_SIZE] = { 0 };
+
+        // Translate modifier.
+        if (mod & HOTKEYF_CONTROL) {
+            if (!GetVirtualKeyName(VK_CONTROL, false, buf, sizeof(buf) / sizeof(buf[0]))) {
+                LOG_LAST_ERROR();
+                return L"";
+            }
+            ss << buf << L" + ";
+        }
+
+        if (mod & HOTKEYF_SHIFT) {
+            if (!GetVirtualKeyName(VK_SHIFT, false, buf, sizeof(buf) / sizeof(buf[0]))) {
+                LOG_LAST_ERROR();
+                return L"";
+            }
+            ss << buf << L" + ";
+        }
+
+        if (mod & HOTKEYF_ALT) {
+            if (!GetVirtualKeyName(VK_MENU, false, buf, sizeof(buf) / sizeof(buf[0]))) {
+                LOG_LAST_ERROR();
+                return L"";
+            }
+            ss << buf << L" + ";
+        }
+
+        // Translate vk.
+        if (!GetVirtualKeyName(vk, (mod & HOTKEYF_EXT) != 0, buf, sizeof(buf) / sizeof(buf[0]))) {
+            LOG_LAST_ERROR();
+            return L"";
+        }
+        ss << buf;
+        return ss.str();
+    }
+};
+
+HotKeyControlInfo hotKeyInfo;
 
 BOOL enableOnSound = FALSE; // Enable mic on notification sound.
 std::wstring onSoundPath; // The mic on notification sound file.
@@ -329,8 +442,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 void ShowHotKeySettingWindow() {
     HWND hotKey = GetDlgItem(hotKeySettingWindow, IDC_HOTKEY);
-    WPARAM wParam = MAKELONG(MAKEWORD(hotKeyVk, hotKeyMod), 0);
-    SendMessage(hotKey, HKM_SETHOTKEY, wParam, 0);
+	hotKeyInfo.SetToCtrl(hotKey);
     ShowWindow(hotKeySettingWindow, SW_SHOW);
 }
 
@@ -398,7 +510,7 @@ static BOOL CheckForUpdates() {
 
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
-    case ID_MENU_HOTKEYSETTING:
+    case ID_MENU_HOTKEY_SETTING:
         ShowHotKeySettingWindow();
         break;
     case ID_MENU_SOUND_SETTINGS:
@@ -439,6 +551,11 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
 }
 
 void PlaySoundFile(LPCWSTR path) {
+    DWORD dwAttrib = GetFileAttributes(path);
+    if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+        LOG_ERROR((std::wstringstream() << L"File path does not exist: " << path).str().c_str());
+    }
+    // Async sond playing does not return FALSE if path does not exist.
     PlaySoundW(path, NULL,
         SND_FILENAME | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
@@ -557,9 +674,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             int wmId = LOWORD(wParam);
             // Parse the menu selections:
             switch (wmId) {
-            case IDM_ABOUT:
-                DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-                break;
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
@@ -638,22 +752,10 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 // ResetHotKey resets the hot key.
 bool ResetHotKey() {
     UnregisterHotKey(mainWindow, HOTKEY_ID);
-    if (hotKeyVk == 0) { // No hot key is given.
+    if (hotKeyInfo.Empty()) {
         return true;
     }
-    // Translate modifier.
-    UINT modifier = 0;
-    if (hotKeyMod & HOTKEYF_ALT) {
-        modifier |= MOD_ALT;
-    }
-    if (hotKeyMod & HOTKEYF_CONTROL) {
-        modifier |= MOD_CONTROL;
-    }
-    if (hotKeyMod & HOTKEYF_SHIFT) {
-        modifier |= MOD_SHIFT;
-    }
-    
-    if (!RegisterHotKey(mainWindow, HOTKEY_ID, modifier, hotKeyVk)) {
+	if (!hotKeyInfo.RegisterHotKey(mainWindow, HOTKEY_ID)) {
         DWORD lastError = GetLastError();
         if (lastError == 1409) { // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
             ShowError(strRes->Load(IDS_HOTKEY_CONFILCT).c_str());
@@ -684,19 +786,17 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
         case IDOK: {
                 // Get the hot key setting of hot key control.
                 HWND hotKeyCtrl = GetDlgItem(hDlg, IDC_HOTKEY);
-                auto hk = SendMessage(hotKeyCtrl, HKM_GETHOTKEY, 0, 0);
-                hotKeyVk = LOBYTE(LOWORD(hk));
-                hotKeyMod = HIBYTE(LOWORD(hk));
+				hotKeyInfo.ReadFromCtrl(hotKeyCtrl);
                 // Reset the system hot key.
                 if (!ResetHotKey()) {
                     // Clear hot key values if unable to register the hot key.
-                    hotKeyVk = 0;
-                    hotKeyMod = 0;
+					hotKeyInfo.SetValue(0);
                     // Clear the hot key control.
                     SendMessage(hotKeyCtrl, HKM_SETHOTKEY, 0, 0);
                     SetFocus(hotKeyCtrl);
                     break;
                 }
+				UpdateNotification(mainWindow);
                 WriteConfig();
             }
             EndDialog(hDlg, LOWORD(wParam));
@@ -882,7 +982,16 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     }
     data.uCallbackMessage = UM_NOTIFY;
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
-    wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_NOTIFICATION_TIP).c_str(), VERSION);
+    if (hotKeyInfo.Empty()) {
+        wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
+            strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 
+            VERSION);
+    } else {
+        wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
+            strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(), 
+            VERSION, hotKeyInfo.GetStr().c_str());
+    }
+    
 	const DWORD message = modify ? NIM_MODIFY : NIM_ADD;
     if (!Shell_NotifyIconW(message, &data)) {
         DWORD err = GetLastError();
@@ -946,8 +1055,7 @@ void ReadConfig() {
         return;
     }
     const int value = GetPrivateProfileIntW(CONFIG_HOTKEY, CONFIG_VALUE, 0, configFilePath.c_str());
-    hotKeyVk = LOBYTE(LOWORD(value));
-    hotKeyMod = HIBYTE(LOWORD(value));
+    hotKeyInfo.SetValue((WORD)value);
 
     enableOnSound = GetPrivateProfileIntW(CONFIG_SOUND, CONFIG_ON_ENABLE, 0, configFilePath.c_str());
     wchar_t buf[1024] = { 0 };
@@ -977,7 +1085,7 @@ void ReadConfig() {
 // Write settings to config file.
 void WriteConfig() {
     WritePrivateProfileStringW(CONFIG_HOTKEY, CONFIG_VALUE,
-        std::to_wstring(MAKEWORD(hotKeyVk, hotKeyMod)).c_str(),
+        std::to_wstring(hotKeyInfo.GetValue()).c_str(),
         configFilePath.c_str());
     WritePrivateProfileStringW(CONFIG_SOUND, CONFIG_ON_ENABLE,
         std::to_wstring(enableOnSound).c_str(),
