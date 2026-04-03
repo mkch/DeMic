@@ -17,12 +17,19 @@
 #include "TimeDebouncer.h"
 #include "Log.h"
 
-// Notify message used by Shell_NotifyIconW.
-static const UINT UM_NOTIFY = WM_USER + 1;
+#include "UpdateChecker.h"
+
+enum {
+    // Notify message used by Shell_NotifyIconW.
+    UM_NOTIFY = WM_USER + 1,
+    // Microphone command message used by command line args.
+    UM_MIC_CMD,
+    // Done message used by UpdateChecker.
+    UM_UPDATE_CHECK_DONE,
+};
 static const int HOTKEY_ID = 1;
 
-// Microphone command message used by command line args.
-static const UINT UM_MIC_CMD = WM_USER + 2;
+
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
@@ -498,11 +505,6 @@ static BOOL OpenFolder(LPCWSTR folder) {
     return ((INT_PTR)h > 32);
 }
 
-static BOOL CheckForUpdates() {
-    HINSTANCE h = ShellExecuteW(NULL, L"open", L"https://github.com/mkch/DeMic/releases", NULL, NULL, SW_SHOWNORMAL);
-    return ((INT_PTR)h > 32);
-}
-
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
     case ID_MENU_HOTKEY_SETTING:
@@ -531,9 +533,7 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         }
         break;
     case ID_HELP_CHECK_FOR_UPDATES:
-        if(!CheckForUpdates()) {
-            LOG_LAST_ERROR();
-		}
+        CheckForUpdate(hInst, mainWindow, UM_UPDATE_CHECK_DONE);
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
@@ -669,18 +669,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case MicCtrl::WM_MUTED_STATE_CHANGED:
 		mutedStatedChangedDebouncer.Emit();
         break;
-    case WM_COMMAND: {
-            int wmId = LOWORD(wParam);
-            // Parse the menu selections:
-            switch (wmId) {
-            case IDM_EXIT:
-                DestroyWindow(hWnd);
-                break;
-            default:
-                return DefWindowProc(hWnd, message, wParam, lParam);
-            }
-        }
-        break;
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
@@ -699,6 +687,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ToggleMuted();
         }
         return 0;
+    case UM_UPDATE_CHECK_DONE:
+        OnUpdateCheckDone(hWnd, wParam, lParam);
+        return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -707,45 +698,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_DESTROY:
+        CancelUpdateCheck();
         WriteConfig();
         RemoveNotification(hWnd);
         UnregisterHotKey(mainWindow, HOTKEY_ID);
         PostQuitMessage(0);
         break;
-    case WM_INITMENUPOPUP:
-        if ((HMENU)wParam == popupMenu) {
+    case WM_INITMENUPOPUP: {
+        auto menu = (HMENU)wParam;
+        if (menu == popupMenu) {
+            MENUITEMINFO info = { sizeof(info) };
+            info.fMask = MIIM_STATE | MIIM_STRING;
+            info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
+			info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+            if(!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
+                LOG_LAST_ERROR();
+			}
             CallPluginInitMenuPopupListener(NULL);
         } else {
-            if ((HMENU)wParam == pluginMenu) {
+            if (menu == pluginMenu) {
                 OnPluginMenuInitPopup();
             }
             CallPluginInitMenuPopupListener((HMENU)wParam);
         }
         break;
+    }
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
     return 0;
-}
-
-// Message handler for about box.
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-        {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
-        }
-        break;
-    }
-    return (INT_PTR)FALSE;
 }
 
 // ResetHotKey resets the hot key.
@@ -797,11 +778,11 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
                 }
 				UpdateNotification(mainWindow);
                 WriteConfig();
+                ShowWindow(hDlg, SW_HIDE);
+                return (INT_PTR)TRUE;
             }
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
         case IDCANCEL:
-            EndDialog(hDlg, LOWORD(wParam));
+            ShowWindow(hDlg, SW_HIDE);
             return (INT_PTR)TRUE;
         }
         break;
@@ -918,11 +899,11 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             offSoundPath = strRes->Load(IDS_NAN) == buf ? L"" : buf;
 
             WriteConfig();
-            EndDialog(hDlg, LOWORD(wParam));
+            ShowWindow(hDlg, SW_HIDE);
             return (INT_PTR)TRUE;
         }
         case IDCANCEL:
-            EndDialog(hDlg, LOWORD(wParam));
+            ShowWindow(hDlg, SW_HIDE);
             return (INT_PTR)TRUE;
         }
         break;

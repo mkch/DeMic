@@ -6,7 +6,6 @@
 #define IDS_APP_TITLE                   103
 #define IDM_ABOUT                       104
 #define IDS_RUNNING_IN_SYSTEM_TRAY      104
-#define IDM_EXIT                        105
 #define IDS_HOTKEY                      105
 #define IDS_ALREADY_RUNNING             106
 #define IDS_NOTIFICATION_TIP            107
@@ -23,6 +22,12 @@
 #define IDD_HOTKEY_SETTING              145
 #define IDC_NOTIF_MENU                  146
 #define IDD_SOUND_SETTINGS              153
+#define IDS_NO_UPDATE                   156
+#define IDS_UPDATE_AVAILABLE            157
+#define IDS_UPDATE_CHECK_FAILED         159
+#define IDS_UPDATE_OR_NOT               160
+#define IDS_CHECK_FOR_UPDATES           161
+#define IDS_CHECKING_FOR_UPDATES        162
 #define IDC_HOTKEY                      1004
 #define IDC_ENABLE_ON_SOUND             1005
 #define IDC_ON_SOUND_PLAY               1006
@@ -46,8 +51,8 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        155
-#define _APS_NEXT_COMMAND_VALUE         32794
+#define _APS_NEXT_RESOURCE_VALUE        157
+#define _APS_NEXT_COMMAND_VALUE         32795
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

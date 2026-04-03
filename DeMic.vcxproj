@@ -184,6 +184,7 @@
     <ClInclude Include="sdk\DemicPlugin.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TimeDebouncer.h" />
+    <ClInclude Include="UpdateChecker.h" />
     <ClInclude Include="Util.h" />
   </ItemGroup>
   <ItemGroup>
@@ -192,6 +193,7 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MicCtrl.cpp" />
     <ClCompile Include="Plugin.cpp" />
+    <ClCompile Include="UpdateChecker.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>

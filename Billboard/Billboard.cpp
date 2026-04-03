@@ -6,7 +6,7 @@
 #include "Billboard.h"
 #include <codecvt>
 #include <fstream>
-#include "nlohmann/json.hpp"
+#include "../nlohmann/json.hpp"
 
 HINSTANCE hInstance = NULL;
 
