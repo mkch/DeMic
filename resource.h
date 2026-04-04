@@ -16,10 +16,10 @@
 #define IDS_CAN_NOT_LOAD_PLUGIN         111
 #define IDS_HOTKEY_CONFILCT             112
 #define IDS_NOTIFICATION_TIP_HOTKEY     113
-#define IDS_HOTKEY_SETTING              114
+#define IDS_HOTKEY_SETTINGS             114
 #define IDI_MICPHONE                    138
 #define IDI_MICROPHONE_MUTED            141
-#define IDD_HOTKEY_SETTING              145
+#define IDD_HOTKEY_SETTINGS             145
 #define IDD_SOUND_SETTINGS              153
 #define IDS_NO_UPDATE                   156
 #define IDS_UPDATE_AVAILABLE            157
@@ -44,10 +44,8 @@
 #define ID_MENU_PLUGIN                  32781
 #define ID_HELP_SHOW_LOG                32789
 #define ID_HELP_CHECK_FOR_UPDATES       32792
-#define ID_MENU_HOTKEY_SETTING          32793
 #define ID_MENU_HELP                    32795
-#define ID_MENU_HELP32797               32797
-#define ID_MENU_32798                   32798
+#define ID_MENU_HOTKEY_SETTINGS         32799
 #define IDC_HOTKEY_STATIC               -1
 
 // Next default values for new objects
@@ -55,8 +53,8 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        160
-#define _APS_NEXT_COMMAND_VALUE         32799
+#define _APS_NEXT_RESOURCE_VALUE        161
+#define _APS_NEXT_COMMAND_VALUE         32800
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

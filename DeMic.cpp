@@ -419,7 +419,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
       return FALSE;
    }
 
-   hotKeySettingWindow = CreateDialog(hInst, MAKEINTRESOURCE(IDD_HOTKEY_SETTING), mainWindow, HotKeySetting);
+   hotKeySettingWindow = CreateDialog(hInst, MAKEINTRESOURCE(IDD_HOTKEY_SETTINGS), mainWindow, HotKeySetting);
    if (!hotKeySettingWindow) {
        return FALSE;
    }
@@ -512,7 +512,7 @@ static BOOL OpenFolder(LPCWSTR folder) {
 
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
-    case ID_MENU_HOTKEY_SETTING:
+    case ID_MENU_HOTKEY_SETTINGS:
         ShowHotKeySettingWindow();
         break;
     case ID_MENU_SOUND_SETTINGS:

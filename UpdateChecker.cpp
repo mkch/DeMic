@@ -6,6 +6,7 @@
 #include "DeMic.h"
 #include "Log.h"
 #include "nlohmann/json.hpp"
+#include "Semver.h"
 
 #include <string>
 #include <thread>
@@ -147,21 +148,29 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         return;
     }
 
-    std::shared_ptr<std::stringstream> body((std::stringstream*)(lParam));
+    auto currentVer = parseSemVer(VERSION);
+    std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     try {
         const auto response = nlohmann::json::parse(*body);
         auto tag = wstrconv.from_bytes(response["tag_name"]);
-        if (tag == VERSION) {
-            MessageBoxW(hwnd, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
-        } else {
+        auto v = tag;
+        if(v.length() > 1 && v[0] == L'v') {
+            v = v.substr(1);
+		}
+        if (*parseSemVer(v, false) > *currentVer) {
+			// New version available.
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + tag + strRes->Load(IDS_UPDATE_OR_NOT);
             if (MessageBoxW(hwnd, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION | MB_YESNO) == IDYES) {
                 if (!NavigateURL(wstrconv.from_bytes(response["html_url"]).c_str())) {
                     LOG_LAST_ERROR();
                 }
             }
+            return;
         }
+        // No update.
+        MessageBoxW(hwnd, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
     } catch (...) {
+        // Failed.
         MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
     }
 }
