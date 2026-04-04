@@ -203,6 +203,7 @@ bool silentMode = false;
 
 HMENU popupMenu = NULL;
 HMENU pluginMenu = NULL;
+HMENU helpMenu = NULL;
 
 // Command line args of microphone commands.
 enum MIC_CMD {
@@ -428,11 +429,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
        return FALSE;
    }
 
-   // This menu is never destroyed via my code.
-   const HMENU menu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_NOTIF_MENU));
-   popupMenu = GetSubMenu(menu, 0);
+   // These menus are never destroyed in code.
+   popupMenu = GetSubMenu(LoadMenuW(hInst, MAKEINTRESOURCEW(IDR_NOTIF_MENU)), 0);
+   helpMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_HELP_MENU)), 0);
+   MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, helpMenu, 0 };
+   if (!SetMenuItemInfoW(popupMenu, ID_MENU_HELP, FALSE, &menuInfo)) {
+       LOG_LAST_ERROR();
+   }
    pluginMenu = CreatePopupMenu();
-   MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, pluginMenu, 0 };
+   menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, pluginMenu, 0 };
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
        LOG_LAST_ERROR();
    }
@@ -707,17 +712,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
         auto menu = (HMENU)wParam;
         if (menu == popupMenu) {
-            MENUITEMINFO info = { sizeof(info) };
-            info.fMask = MIIM_STATE | MIIM_STRING;
-            info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
-			info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
-            if(!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
-                LOG_LAST_ERROR();
-			}
             CallPluginInitMenuPopupListener(NULL);
-        } else {
+        }  else {
             if (menu == pluginMenu) {
                 OnPluginMenuInitPopup();
+            } else if (menu == helpMenu) {
+                MENUITEMINFO info = { sizeof(info) };
+                info.fMask = MIIM_STATE | MIIM_STRING;
+                info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+                if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
+                    LOG_LAST_ERROR();
+                }
             }
             CallPluginInitMenuPopupListener((HMENU)wParam);
         }
