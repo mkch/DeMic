@@ -99,7 +99,7 @@ public:
         if (mod & HOTKEYF_SHIFT) {
             modifier |= MOD_SHIFT;
         }
-        return ::RegisterHotKey(mainWindow, HOTKEY_ID, modifier, vk);
+        return ::RegisterHotKey(hwnd, HOTKEY_ID, modifier, vk);
 	}
     const std::wstring& GetStr() const {
         return str;
@@ -706,7 +706,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         CancelUpdateCheck();
         WriteConfig();
         RemoveNotification(hWnd);
-        UnregisterHotKey(mainWindow, HOTKEY_ID);
+        UnregisterHotKey(hWnd, HOTKEY_ID);
         PostQuitMessage(0);
         break;
     case WM_INITMENUPOPUP: {
