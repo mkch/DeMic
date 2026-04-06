@@ -121,7 +121,7 @@ bool CheckingUpdate() {
 void CheckForUpdate(HINSTANCE instance, HWND hwnd, UINT doneMessage) {
     if (updateCheckThread) {
         // Already checking
-		LOG(Logger::LevelWarn, L"Update check already in progress.");
+		LOG(Logger::LevelError, L"Update check already in progress.");
         return;
     }
 	StartUpdateCheckThread(hwnd, doneMessage);

@@ -12,6 +12,7 @@
 #include <fstream>
 #include <strsafe.h>
 #include <windowsx.h>
+#include <shlobj.h>
 
 #include "Plugin.h"
 #include "TimeDebouncer.h"
@@ -193,7 +194,7 @@ ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 MicCtrl micCtrl;
@@ -312,8 +313,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        if (IsDialogMessage(hotKeySettingWindow, &msg) || 
-            IsDialogMessage(soundSettingsWindow, &msg)) {
+        if (hotKeySettingWindow && IsDialogMessage(hotKeySettingWindow, &msg) ||
+            soundSettingsWindow && IsDialogMessage(soundSettingsWindow, &msg)) {
             continue;
         }
         if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
@@ -419,16 +420,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
       return FALSE;
    }
 
-   hotKeySettingWindow = CreateDialog(hInst, MAKEINTRESOURCE(IDD_HOTKEY_SETTINGS), mainWindow, HotKeySetting);
-   if (!hotKeySettingWindow) {
-       return FALSE;
-   }
-
-   soundSettingsWindow = CreateDialog(hInst, MAKEINTRESOURCE(IDD_SOUND_SETTINGS), mainWindow, SoundSettings);
-   if (!soundSettingsWindow) {
-       return FALSE;
-   }
-
    // These menus are never destroyed in code.
    popupMenu = GetSubMenu(LoadMenuW(hInst, MAKEINTRESOURCEW(IDR_NOTIF_MENU)), 0);
    helpMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_HELP_MENU)), 0);
@@ -447,32 +438,21 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
    return TRUE;
 }
 
-void ShowHotKeySettingWindow() {
-    HWND hotKey = GetDlgItem(hotKeySettingWindow, IDC_HOTKEY);
-	hotKeyInfo.SetToCtrl(hotKey);
-    ShowWindow(hotKeySettingWindow, SW_SHOW);
+void ShowHotKeySettingsWindow() {
+    if (hotKeySettingWindow) {
+		LOG(Logger::LevelError, L"Hotkey settings window already open.");
+        return;
+    }
+	DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_HOTKEY_SETTINGS), mainWindow, HotKeySettings);
 }
 
 void ShowSoundSettingsWindow() {
-    HWND onEnable = GetDlgItem(soundSettingsWindow, IDC_ENABLE_ON_SOUND);
-    HWND onPath = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_PATH);
-    HWND onPathSelect = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_SELECT);
-    HWND onPlay = GetDlgItem(soundSettingsWindow, IDC_ON_SOUND_PLAY);
-
-    HWND offEnable = GetDlgItem(soundSettingsWindow, IDC_ENABLE_OFF_SOUND);
-    HWND offPath = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_PATH);
-    HWND offPathSelect = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_SELECT);
-    HWND offPlay = GetDlgItem(soundSettingsWindow, IDC_OFF_SOUND_PLAY);
-
-    Button_SetCheck(onEnable, enableOnSound);
-    SetWindowTextW(onPath, onSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : onSoundPath.c_str());
-    SetWindowTextW(offPath, offSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : offSoundPath.c_str());
-
-    Button_SetCheck(offEnable, enableOffSound);
-
-    ShowWindow(soundSettingsWindow, SW_SHOW);
+    if (soundSettingsWindow) {
+        LOG(Logger::LevelError, L"Sound settings window already open.");
+        return;
+    }
+    DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_SOUND_SETTINGS), mainWindow, SoundSettings);
 }
-#include <shlobj.h>
 
 // Opens the folder containing the specified file and select the file.
 // If the filePath does not exist, returns FALSE.
@@ -513,7 +493,7 @@ static BOOL OpenFolder(LPCWSTR folder) {
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     switch (cmd) {
     case ID_MENU_HOTKEY_SETTINGS:
-        ShowHotKeySettingWindow();
+        ShowHotKeySettingsWindow();
         break;
     case ID_MENU_SOUND_SETTINGS:
         ShowSoundSettingsWindow();
@@ -550,10 +530,13 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     }
 }
 
+// NULL path to stop sound.
 void PlaySoundFile(LPCWSTR path) {
-    DWORD dwAttrib = GetFileAttributes(path);
-    if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
-        LOG_ERROR((std::wstringstream() << L"File path does not exist: " << path).str().c_str());
+    if (path) {
+        DWORD dwAttrib = GetFileAttributes(path);
+        if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+            LOG_ERROR((std::wstringstream() << L"File path does not exist: " << path).str().c_str());
+        }
     }
     // Async sond playing does not return FALSE if path does not exist.
     PlaySoundW(path, NULL,
@@ -712,22 +695,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
         auto menu = (HMENU)wParam;
         if (menu == popupMenu) {
-            CallPluginInitMenuPopupListener(NULL);
-        }  else {
-            if (menu == pluginMenu) {
-                OnPluginMenuInitPopup();
-            } else if (menu == helpMenu) {
-                MENUITEMINFO info = { sizeof(info) };
-                info.fMask = MIIM_STATE | MIIM_STRING;
-                info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
-                info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
-                if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
-                    LOG_LAST_ERROR();
-                }
+            MENUITEMINFO info = { sizeof(info) };
+            info.fMask = MIIM_STATE;
+            info.fState = hotKeySettingWindow ? MFS_DISABLED : MFS_ENABLED;
+            if (!SetMenuItemInfoW(menu, ID_MENU_HOTKEY_SETTINGS, FALSE, &info)) {
+                LOG_LAST_ERROR();
             }
-            CallPluginInitMenuPopupListener((HMENU)wParam);
+            info.fState = soundSettingsWindow ? MFS_DISABLED : MFS_ENABLED;
+            if (!SetMenuItemInfoW(menu, ID_MENU_SOUND_SETTINGS, FALSE, &info)) {
+                LOG_LAST_ERROR();
+            }
+            CallPluginInitMenuPopupListener(NULL);
+            break;
         }
-        break;
+        if (menu == pluginMenu) {
+            OnPluginMenuInitPopup();
+            CallPluginInitMenuPopupListener((HMENU)wParam);
+            break;
+        }
+        if (menu == helpMenu) {
+            MENUITEMINFO info = { sizeof(info) };
+            info.fMask = MIIM_STATE | MIIM_STRING;
+            info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
+            info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+            if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
+                LOG_LAST_ERROR();
+            }
+            break;
+        }
     }
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -753,20 +748,16 @@ bool ResetHotKey(HWND hwnd) {
     return true;
 }
 
-// Message handler for hotkey setting box.
-INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+// Message handler for hotkey settings box.
+INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
     switch (message)
     {
     case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
-    case WM_ACTIVATE:
-        if (LOWORD(wParam) > 0) { // The window is actived.
-            // Focus the hotkey control.
-            SetFocus(GetDlgItem(hDlg, IDC_HOTKEY));
-        }
-        return (INT_PTR)TRUE;
+        hotKeyInfo.SetToCtrl(GetDlgItem(hDlg, IDC_HOTKEY));
+        hotKeySettingWindow = hDlg;
+        return TRUE;
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDOK: {
@@ -784,11 +775,11 @@ INT_PTR CALLBACK HotKeySetting(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
                 }
 				UpdateNotification(mainWindow);
                 WriteConfig();
-                ShowWindow(hDlg, SW_HIDE);
-                return (INT_PTR)TRUE;
             }
+            // fallthrough
         case IDCANCEL:
-            ShowWindow(hDlg, SW_HIDE);
+            EndDialog(hDlg, 0);
+            hotKeySettingWindow = NULL;
             return (INT_PTR)TRUE;
         }
         break;
@@ -850,6 +841,11 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     switch (message)
     {
     case WM_INITDIALOG:
+        Button_SetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND), enableOnSound);
+        SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), onSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : onSoundPath.c_str());
+        SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), offSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : offSoundPath.c_str());
+        Button_SetCheck(GetDlgItem(hDlg, IDC_ENABLE_OFF_SOUND), enableOffSound);
+        soundSettingsWindow = hDlg;
         return (INT_PTR)TRUE;
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
@@ -905,11 +901,11 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             offSoundPath = strRes->Load(IDS_NAN) == buf ? L"" : buf;
 
             WriteConfig();
-            ShowWindow(hDlg, SW_HIDE);
-            return (INT_PTR)TRUE;
+            // fallthorugh
         }
         case IDCANCEL:
-            ShowWindow(hDlg, SW_HIDE);
+            EndDialog(hDlg, 0);
+			soundSettingsWindow = NULL;
             return (INT_PTR)TRUE;
         }
         break;
