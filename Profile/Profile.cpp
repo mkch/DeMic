@@ -140,7 +140,7 @@ void ReadConfig() {
         std::for_each(devices->begin(), devices->end(), [](const json& dev) {
             auto id = dev[CONFIG_ID].get<std::string>();
             auto name = dev[CONFIG_NAME].get<std::string>();
-            selectedDev[FromUTF8(std::u8string(id.begin(), id.end()))] = FromUTF8(std::u8string(name.begin(), name.end()));
+            selectedDev[FromUTF8((const char8_t*)id.c_str())] = FromUTF8((const char8_t*)name.c_str());
         });
     } catch(...) {
         ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
@@ -150,7 +150,7 @@ void ReadConfig() {
 void WriteConfig() {
     auto devices = json::array();
     std::for_each(selectedDev.begin(), selectedDev.end(), [&devices](auto const& dev) {
-        devices.push_back({ {CONFIG_ID, ToUTF8(dev.first)}, {CONFIG_NAME, ToUTF8(dev.second) }});
+        devices.push_back({ {CONFIG_ID, (const char*)ToUTF8(dev.first).c_str()}, {CONFIG_NAME, (const char*)ToUTF8(dev.second).c_str()}});
     });
     json config = { {CONFIG_DEFAULT_PROFILE_NAME,
         {{CONFIG_EXCLUDE, excludeSelected},
