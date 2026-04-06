@@ -710,10 +710,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         if (menu == pluginMenu) {
             OnPluginMenuInitPopup();
-            CallPluginInitMenuPopupListener((HMENU)wParam);
-            break;
-        }
-        if (menu == helpMenu) {
+        } else if (menu == helpMenu) {
             MENUITEMINFO info = { sizeof(info) };
             info.fMask = MIIM_STATE | MIIM_STRING;
             info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
@@ -721,8 +718,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
                 LOG_LAST_ERROR();
             }
-            break;
         }
+        CallPluginInitMenuPopupListener(menu);
     }
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
