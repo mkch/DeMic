@@ -131,8 +131,6 @@ void CancelUpdateCheck() {
     StopUpdateCheckThread();
 }
 
-static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
-
 void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     struct defer {
         ~defer() {
@@ -152,7 +150,7 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     try {
         const auto response = nlohmann::json::parse(*body);
-        auto tag = wstrconv.from_bytes(response["tag_name"]);
+        auto tag = FromUTF8(response["tag_name"]);
         auto v = tag;
         if(v.length() > 1 && v[0] == L'v') {
             v = v.substr(1);
@@ -161,7 +159,7 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 			// New version available.
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + tag + strRes->Load(IDS_UPDATE_OR_NOT);
             if (MessageBoxW(hwnd, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION | MB_YESNO) == IDYES) {
-                if (!NavigateURL(wstrconv.from_bytes(response["html_url"]).c_str())) {
+                if (!NavigateURL(FromUTF8(response["html_url"]).c_str())) {
                     LOG_LAST_ERROR();
                 }
             }

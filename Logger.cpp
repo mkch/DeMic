@@ -1,8 +1,7 @@
 #include "Logger.h"
 #include <iomanip>
 #include <ctime>
-
-std::wstring_convert<std::codecvt_utf8<wchar_t>> Logger::sWstrConv;
+#include "Util.h"
 
 // Extract the base part of a file path.
 // E.g. file_path_base(L"C:\\a\\b\\c.txt",'\\') == "c.txt"
@@ -42,8 +41,8 @@ bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring&
 	// Output log message
     (*mStream) << "[" << std::put_time(&tm, "%Y-%m-%d_%H:%M:%S") << "] "
                << levelStr << " "
-               << sWstrConv.to_bytes(file_path_base(file)) << ":" << line << " "
-               << sWstrConv.to_bytes(message) << std::endl;
+               << ToUTF8(file_path_base(file)) << ":" << line << " "
+               << ToUTF8(message) << std::endl;
     const bool good = mStream->good();
     if (!good) {
 		mStream->clear();

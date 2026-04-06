@@ -63,8 +63,6 @@ const static char* const CONFIG_RIGHT = "right";
 const static char* const CONFIG_BOTTOM = "bottom";
 const static char* const CONFIG_HIDE_CAPTION = "HideCaption";
 
-static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
-
 using json = nlohmann::json;
 
 void ReadConfig() {

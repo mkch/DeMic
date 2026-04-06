@@ -122,8 +122,6 @@ const static char* const CONFIG_ID = "ID";
 const static char* const CONFIG_NAME = "Name";
 const static char* const CONFIG_EXCLUDE = "Exclude";
 
-static std::wstring_convert<std::codecvt_utf8<wchar_t>> wstrconv;
-
 void ReadConfig() {
     std::ifstream in(configFilePath);
     if (!in) {
@@ -142,7 +140,7 @@ void ReadConfig() {
         std::for_each(devices->begin(), devices->end(), [](const json& dev) {
             auto id = dev[CONFIG_ID].get<std::string>();
             auto name = dev[CONFIG_NAME].get<std::string>();
-            selectedDev[wstrconv.from_bytes(id)] = wstrconv.from_bytes(name);
+            selectedDev[FromUTF8(id)] = FromUTF8(name);
         });
     } catch(...) {
         ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
@@ -152,7 +150,7 @@ void ReadConfig() {
 void WriteConfig() {
     auto devices = json::array();
     std::for_each(selectedDev.begin(), selectedDev.end(), [&devices](auto const& dev) {
-        devices.push_back({ {CONFIG_ID, wstrconv.to_bytes(dev.first)}, {CONFIG_NAME, wstrconv.to_bytes(dev.second) }});
+        devices.push_back({ {CONFIG_ID, ToUTF8(dev.first)}, {CONFIG_NAME, ToUTF8(dev.second) }});
     });
     json config = { {CONFIG_DEFAULT_PROFILE_NAME,
         {{CONFIG_EXCLUDE, excludeSelected},

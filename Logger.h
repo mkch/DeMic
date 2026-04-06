@@ -13,7 +13,6 @@ public:
 private:
 	std::ostream* mStream;
 	Level mLevel;
-	static std::wstring_convert<std::codecvt_utf8<wchar_t>> sWstrConv;
 public:
 	Logger(std::ostream* stream, Level level) :
 		mStream(stream), mLevel(level) {}
