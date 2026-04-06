@@ -28,29 +28,29 @@ std::vector<wchar_t> DupCStr(const std::wstring& str) {
     return r;
 }
 
-std::wstring FromUTF8(const char* str, size_t len) {
+std::wstring FromUTF8(const char8_t* str, size_t len) {
     if (str == nullptr) {
 		throw std::invalid_argument("str is null");
     }
     if(len == (size_t)-1) {
-        len = strlen(str);
+        len = std::char_traits<char8_t>::length(str);
     }
-    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str, (int)len, NULL, 0);
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(str), (int)len, NULL, 0);
     if (size_needed <= 0) {
         return L"";
     }
-    std::vector<wchar_t> buf(size_needed);
-    if (MultiByteToWideChar(CP_UTF8, 0, str, (int)len, buf.data(), size_needed) == 0) {
+	std::wstring result(size_needed, 0);
+    if (MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(str), (int)len, result.data(), size_needed) == 0) {
         return L"";
     }
-    return std::wstring(buf.data(),  size_needed);
+    return result;
 }
 
-std::wstring FromUTF8(const std::string& str) {
+std::wstring FromUTF8(const std::u8string& str) {
     return FromUTF8(str.c_str(), str.size());
 }
 
-std::string ToUTF8(const wchar_t* str, size_t len) {
+std::u8string ToUTF8(const wchar_t* str, size_t len) {
     if (str == nullptr) {
         throw std::invalid_argument("str is null");
     }
@@ -59,15 +59,15 @@ std::string ToUTF8(const wchar_t* str, size_t len) {
     }
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, str, (int)len, NULL, 0, NULL, NULL);
     if (size_needed <= 0) {
-        return "";
+        return u8"";
     }
-    std::vector<char> buf(size_needed);
-    if (WideCharToMultiByte(CP_UTF8, 0, str, (int)len, buf.data(), size_needed, NULL, NULL) == 0) {
-        return "";
+    std::u8string result(size_needed, 0);
+    if (WideCharToMultiByte(CP_UTF8, 0, str, (int)len, (char*)result.data(), size_needed, NULL, NULL) == 0) {
+        return u8"";
     }
-    return std::string(buf.data(), size_needed);
+    return result;
 }
 
-std::string ToUTF8(const std::wstring& str) {
+std::u8string ToUTF8(const std::wstring& str) {
     return ToUTF8(str.c_str(), str.size());
 }

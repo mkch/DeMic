@@ -41,8 +41,8 @@ bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring&
 	// Output log message
     (*mStream) << "[" << std::put_time(&tm, "%Y-%m-%d_%H:%M:%S") << "] "
                << levelStr << " "
-               << ToUTF8(file_path_base(file)) << ":" << line << " "
-               << ToUTF8(message) << std::endl;
+               << (const char*)ToUTF8(file_path_base(file)).c_str() << ":" << line << " "
+               << (const char*)ToUTF8(message).c_str() << std::endl;
     const bool good = mStream->good();
     if (!good) {
 		mStream->clear();

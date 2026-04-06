@@ -53,8 +53,8 @@ void Split(const std::wstring& str, const std::wstring& del, const F& f) {
 }
 
 // FromtUTF8 converts a UTF-8 encoded string to a wide string. Returns an empty string if conversion fails.
-std::wstring FromUTF8(const char* str, size_t len = (size_t)-1);
-std::wstring FromUTF8(const std::string& str);
+std::wstring FromUTF8(const char8_t* str, size_t len = (size_t)-1);
+std::wstring FromUTF8(const std::u8string& str);
 // ToUTF8 converts a wide string to a UTF-8 encoded string. Returns an empty string if conversion fails.
-std::string ToUTF8(const wchar_t* str, size_t len = (size_t)-1);
-std::string ToUTF8(const std::wstring& str);
+std::u8string ToUTF8(const wchar_t* str, size_t len = (size_t)-1);
+std::u8string ToUTF8(const std::wstring& str);
