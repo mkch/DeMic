@@ -140,7 +140,9 @@ void ReadConfig() {
         std::for_each(devices->begin(), devices->end(), [](const json& dev) {
             auto id = dev[CONFIG_ID].get<std::string>();
             auto name = dev[CONFIG_NAME].get<std::string>();
-            selectedDev[FromUTF8((const char8_t*)id.c_str())] = FromUTF8((const char8_t*)name.c_str());
+            auto u8Id = std::u8string_view((const char8_t*)id.data(), id.length());
+			auto u8Name = std::u8string_view((const char8_t*)name.data(), name.length());
+            selectedDev[FromUTF8(u8Id)] = FromUTF8(u8Name);
         });
     } catch(...) {
         ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());

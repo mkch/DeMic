@@ -50,6 +50,10 @@ std::wstring FromUTF8(const std::u8string& str) {
     return FromUTF8(str.c_str(), str.size());
 }
 
+std::wstring FromUTF8(const std::u8string_view& str) {
+    return FromUTF8(str.data(), str.size());
+}
+
 std::u8string ToUTF8(const wchar_t* str, size_t len) {
     if (str == nullptr) {
         throw std::invalid_argument("str is null");
@@ -70,4 +74,8 @@ std::u8string ToUTF8(const wchar_t* str, size_t len) {
 
 std::u8string ToUTF8(const std::wstring& str) {
     return ToUTF8(str.c_str(), str.size());
+}
+
+std::u8string ToUTF8(const std::wstring_view& str) {
+    return ToUTF8(str.data(), str.size());
 }
