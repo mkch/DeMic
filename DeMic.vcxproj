@@ -216,6 +216,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="cli.md" />
+    <None Include="Compress.ps1" />
     <None Include="config.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

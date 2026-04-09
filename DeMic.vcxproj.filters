@@ -106,5 +106,6 @@
   <ItemGroup>
     <None Include="cli.md" />
     <None Include="config.md" />
+    <None Include="Compress.ps1" />
   </ItemGroup>
 </Project>
