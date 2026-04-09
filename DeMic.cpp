@@ -422,6 +422,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
    // These menus are never destroyed in code.
    popupMenu = GetSubMenu(LoadMenuW(hInst, MAKEINTRESOURCEW(IDR_NOTIF_MENU)), 0);
+   // We make the Help menu a separated menu resource because there is no
+   // way to specify both a submenu and an ID for a menu item in menu resource.
+   // Without an ID, we can not find the Help menu at runtime.
    helpMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_HELP_MENU)), 0);
    MENUITEMINFOW menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, helpMenu, 0 };
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_HELP, FALSE, &menuInfo)) {
@@ -440,7 +443,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
 void ShowHotKeySettingsWindow() {
     if (hotKeySettingWindow) {
-		LOG(Logger::LevelError, L"Hotkey settings window already open.");
+		SetForegroundWindow(hotKeySettingWindow);
         return;
     }
 	DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_HOTKEY_SETTINGS), mainWindow, HotKeySettings);
@@ -448,7 +451,7 @@ void ShowHotKeySettingsWindow() {
 
 void ShowSoundSettingsWindow() {
     if (soundSettingsWindow) {
-        LOG(Logger::LevelError, L"Sound settings window already open.");
+		SetForegroundWindow(soundSettingsWindow);
         return;
     }
     DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_SOUND_SETTINGS), mainWindow, SoundSettings);
@@ -635,7 +638,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 ToggleMuted();
                 break;
         }
-        break;
+        return 0;
     case WM_CREATE:
         if (!ResetHotKey(hWnd)) {
             // Clear hot key values if unable to register the hot key.
@@ -650,13 +653,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case MicCtrl::WM_DEVICE_STATE_CHANGED:
 		deviceStateChangedDebouncer.Emit();
-        break;
+        return 0;
     case MicCtrl::WM_DEFAULT_DEVICE_CHANGED:
         defaultDeviceChangedDebouncer.Emit();
-        break;
+        return 0;
     case MicCtrl::WM_MUTED_STATE_CHANGED:
 		mutedStatedChangedDebouncer.Emit();
-        break;
+        return 0;
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
@@ -693,38 +696,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         break;
     case WM_INITMENUPOPUP: {
-        auto menu = (HMENU)wParam;
-        if (menu == popupMenu) {
-            MENUITEMINFO info = { sizeof(info) };
-            info.fMask = MIIM_STATE;
-            info.fState = hotKeySettingWindow ? MFS_DISABLED : MFS_ENABLED;
-            if (!SetMenuItemInfoW(menu, ID_MENU_HOTKEY_SETTINGS, FALSE, &info)) {
-                LOG_LAST_ERROR();
+            auto menu = (HMENU)wParam;
+            if (menu == popupMenu) {
+                CallPluginInitMenuPopupListener(NULL);
+                break;
             }
-            info.fState = soundSettingsWindow ? MFS_DISABLED : MFS_ENABLED;
-            if (!SetMenuItemInfoW(menu, ID_MENU_SOUND_SETTINGS, FALSE, &info)) {
-                LOG_LAST_ERROR();
+            if (menu == pluginMenu) {
+                OnPluginMenuInitPopup();
+            } else if (menu == helpMenu) {
+                MENUITEMINFO info = { sizeof(info) };
+                info.fMask = MIIM_STATE | MIIM_STRING;
+                info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+                if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
+                    LOG_LAST_ERROR();
+                }
             }
-            CallPluginInitMenuPopupListener(NULL);
+            CallPluginInitMenuPopupListener(menu);
             break;
         }
-        if (menu == pluginMenu) {
-            OnPluginMenuInitPopup();
-        } else if (menu == helpMenu) {
-            MENUITEMINFO info = { sizeof(info) };
-            info.fMask = MIIM_STATE | MIIM_STRING;
-            info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
-            info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
-            if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
-                LOG_LAST_ERROR();
-            }
-        }
-        CallPluginInitMenuPopupListener(menu);
     }
-    default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
-    }
-    return 0;
+   return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
 // ResetHotKey resets the hot key.
