@@ -36,7 +36,7 @@ static std::wstring GetLastInternetError() {
 }
 
 // HTTP_GET fetches the url. 
-static bool HTTP_GET(const wchar_t* url, std::ostream& body, std::atomic<bool>& cancel) {
+static bool HTTP_GET(const wchar_t* url, const wchar_t* headers, std::ostream& body, std::atomic<bool>& cancel) {
     HINTERNET hInternet = InternetOpenW(strRes->Load(IDS_APP_TITLE).c_str(), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) {
         LOG_ERROR(GetLastInternetError().c_str());
@@ -48,7 +48,7 @@ static bool HTTP_GET(const wchar_t* url, std::ostream& body, std::atomic<bool>& 
         return false;
     }
 
-    HINTERNET hUrl = InternetOpenUrlW(hInternet, url, NULL, 0, INTERNET_FLAG_NO_UI | INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES, 0);
+    HINTERNET hUrl = InternetOpenUrlW(hInternet, url, headers, 0, INTERNET_FLAG_NO_UI | INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES, 0);
     if (!hUrl) {
         LOG_ERROR(GetLastInternetError().c_str());
         InternetCloseHandle(hInternet);
@@ -97,12 +97,16 @@ static void StopUpdateCheckThread() {
 
 static void StartUpdateCheckThread(HWND hwnd, UINT doneMessage) {
     static const wchar_t* endpoint = L"https://api.github.com/repos/mkch/DeMic/releases/latest";
+    static const wchar_t* headers =
+        L"Accept: application/vnd.github+json\r\n"
+        L"X-GitHub-Api-Version: 2026-03-10\r\n";
+
     StopUpdateCheckThread();
 
 	cancelUpdateCheck = false;
     updateCheckThread = new std::thread([hwnd, doneMessage]() {
         auto stream = new(std::stringstream);
-        bool ok  = HTTP_GET(endpoint, *stream, cancelUpdateCheck);
+        bool ok  = HTTP_GET(endpoint, headers, *stream, cancelUpdateCheck);
         // WPARAM: HTTPGet result (bool)
         // LPARAM: HTTPGet response (std::stringstream*). Need delete by receiver.
 		PostMessageW(hwnd, doneMessage, ok, (LPARAM)stream);
