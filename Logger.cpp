@@ -30,13 +30,13 @@ bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring&
     localtime_s(&tm, &t);
 
     // Level string
-    const char* levelStr = "????";
-    switch (level) {
-    case LevelDebug: levelStr = "DEBUG"; break;
-    case LevelInfo: levelStr = "INFO"; break;
-    case LevelWarn: levelStr = "WARN"; break;
-    case LevelError: levelStr = "ERROR"; break;
-    }
+    std::string levelStr { 
+        level == LevelDebug ? "DEBUG" :
+        level == LevelInfo ? "INFO" : 
+        level == LevelWarn ? "WARN" : 
+        level == LevelError ? "ERROR" : 
+        std::to_string(level)
+    };
 
 	// Output log message
     (*mStream) << "[" << std::put_time(&tm, "%Y-%m-%d_%H:%M:%S") << "] "
