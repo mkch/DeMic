@@ -271,6 +271,10 @@ static void UnloadPlugin(const std::wstring& path) {
 		return;
 	}
 	PluginState* state = it->second;
+	auto plugin = state->PluginInfo;
+	if (plugin->SDKVersion >= 3 && plugin->OnUnload) {
+		plugin->OnUnload();
+	}
 	loadedPlugins.erase(path);
 	FreeLibrary(state->hModule);
 	DeletePluginRootMenuItem(state);

@@ -12,7 +12,7 @@ extern "C" {
 	struct DeMic_Host;
 	struct DeMic_OnLoadedArgs;
 
-	static const DWORD DEMIC_CURRENT_SDK_VERSION = 2;
+	static const DWORD DEMIC_CURRENT_SDK_VERSION = 3;
 	
 	struct DeMic_PluginInfo {
 		// Version of this SDK.
@@ -32,6 +32,9 @@ extern "C" {
 		// Argument id is 0 if the root menu item is selected.
 		// Can be NULL.
 		void (*OnMenuItemCmd)(UINT id);
+		// OnUnload is called before this plugin is unloaded. Can be NULL.
+		// Added in SDK v3.
+		void(*OnUnload)();
 	};
 
 	enum LogLevel {
