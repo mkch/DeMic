@@ -17,7 +17,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Profile", "Profile\Profile.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UnitTests", "UnitTests\UnitTests.vcxproj", "{F83AA37D-A7CF-463C-B995-9E23A615FA9C}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WebServer", "WebServer\WebServer.vcxproj", "{BC9FB24F-C740-47D3-8359-FBAF7D927F4C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WebRemote", "WebRemote\WebRemote.vcxproj", "{BC9FB24F-C740-47D3-8359-FBAF7D927F4C}"
 	ProjectSection(ProjectDependencies) = postProject
 		{C47EE243-F4CF-4331-9566-A6CDA754BE26} = {C47EE243-F4CF-4331-9566-A6CDA754BE26}
 	EndProjectSection

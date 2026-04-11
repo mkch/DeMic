@@ -3,7 +3,7 @@
 #include "../Util.h"
 #include "../sdk/DemicPluginUtil.h"
 
-#include "WebServer.h"
+#include "WebRemote.h"
 #include "HTTPServer.h"
 
 HINSTANCE hInstance = NULL;

@@ -22,7 +22,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{bc9fb24f-c740-47d3-8359-fbaf7d927f4c}</ProjectGuid>
-    <RootNamespace>WebServer</RootNamespace>
+    <RootNamespace>WebRemote</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -102,7 +102,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <ModuleDefinitionFile>WebServer.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>WebRemote.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(BOOST_1_90_0)\lib64-msvc-14.3</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -124,7 +124,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <ModuleDefinitionFile>WebServer.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>WebRemote.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(BOOST_1_90_0)\lib64-msvc-14.3</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -144,7 +144,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <ModuleDefinitionFile>WebServer.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>WebRemote.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(BOOST_1_90_0)\lib64-msvc-14.3</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -166,7 +166,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <ModuleDefinitionFile>WebServer.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>WebRemote.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(BOOST_1_90_0)\lib64-msvc-14.3</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -175,7 +175,7 @@
     <ClInclude Include="HTTPServer.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="WebServer.h" />
+    <ClInclude Include="WebRemote.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Util.cpp">
@@ -185,7 +185,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="HTTPServer.cpp" />
-    <ClCompile Include="WebServer.cpp" />
+    <ClCompile Include="WebRemote.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -194,7 +194,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="WebServer.rc" />
+    <ResourceCompile Include="WebRemote.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -27,12 +27,12 @@
     <ClInclude Include="HTTPServer.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="WebServer.h">
+    <ClInclude Include="WebRemote.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="WebServer.cpp">
+    <ClCompile Include="WebRemote.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
@@ -46,7 +46,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="WebServer.rc">
+    <ResourceCompile Include="WebRemote.rc">
       <Filter>资源文件</Filter>
     </ResourceCompile>
   </ItemGroup>

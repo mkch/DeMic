@@ -10,7 +10,7 @@
 #include <boost/beast.hpp>
 
 #include "../Util.h"
-#include "WebServer.h"
+#include "WebRemote.h"
 
 namespace urls = boost::urls;
 namespace net = boost::asio;

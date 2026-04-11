@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ 生成的包含文件。
-// 供 WebServer.rc 使用
+// 供 WebRemote.rc 使用
 //
 #define IDS_APP_NAME                    101
 
