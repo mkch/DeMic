@@ -33,6 +33,11 @@ void* state = NULL;
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
+    
+    host->SetMicMuteStateListener(state, [] {
+        NotifyStateChange(host->IsMuted());
+	});
+    NotifyStateChange(host->IsMuted());
 
     auto ok = StartHTTPServer();
 
@@ -42,6 +47,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 }
 
 static void OnUnload() {
+    CancelStateChangeNotifications();
     StopHTTPServer();
 }
 
