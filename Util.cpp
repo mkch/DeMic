@@ -54,6 +54,32 @@ std::wstring FromUTF8(const std::u8string_view& str) {
     return FromUTF8(str.data(), str.size());
 }
 
+std::wstring FromACP(const char* str, size_t len) {
+    if (str == nullptr) {
+        throw std::invalid_argument("str is null");
+    }
+    if (len == (size_t)-1) {
+        len = std::char_traits<char>::length(str);
+    }
+    int size_needed = MultiByteToWideChar(CP_THREAD_ACP, 0, reinterpret_cast<const char*>(str), (int)len, NULL, 0);
+    if (size_needed <= 0) {
+        return L"";
+    }
+    std::wstring result(size_needed, 0);
+    if (MultiByteToWideChar(CP_THREAD_ACP, 0, reinterpret_cast<const char*>(str), (int)len, result.data(), size_needed) == 0) {
+        return L"";
+    }
+    return result;
+}
+
+std::wstring FromACP(const std::string& str) {
+    return FromACP(str.c_str(), str.size());
+}
+
+std::wstring FromACP(const std::string_view& str) {
+    return FromACP(str.data(), str.size());
+}
+
 std::u8string ToUTF8(const wchar_t* str, size_t len) {
     if (str == nullptr) {
         throw std::invalid_argument("str is null");

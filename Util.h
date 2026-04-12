@@ -56,6 +56,11 @@ void Split(const std::wstring& str, const std::wstring& del, const F& f) {
 std::wstring FromUTF8(const char8_t* str, size_t len = (size_t)-1);
 std::wstring FromUTF8(const std::u8string& str);
 std::wstring FromUTF8(const std::u8string_view& str);
+// FromACP converts an string encoded in ANSI code page for the current thread
+// to a wide string. Returns an empty string if conversion fails.
+std::wstring FromACP(const char* str, size_t len = (size_t)-1);
+std::wstring FromACP(const std::string& str);
+std::wstring FromACP(const std::string_view& str);
 // ToUTF8 converts a wide string to a UTF-8 encoded string. Returns an empty string if conversion fails.
 std::u8string ToUTF8(const wchar_t* str, size_t len = (size_t)-1);
 std::u8string ToUTF8(const std::wstring& str);
