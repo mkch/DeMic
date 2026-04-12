@@ -30,6 +30,9 @@
     <ClInclude Include="WebRemote.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CoEvent.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WebRemote.cpp">

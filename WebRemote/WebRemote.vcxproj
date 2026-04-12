@@ -171,6 +171,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CoEvent.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="HTTPServer.h" />
     <ClInclude Include="pch.h" />
