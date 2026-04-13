@@ -39,7 +39,7 @@ TEST(CoEventTest, Simple) {
 	EXPECT_EQ("coroutine2: abc", *coroutine2_received.load());
 }
 
-TEST(CoEventTest, Cancellation) {
+TEST(CoEventTest, CoroutineCancellation) {
 	std::atomic<bool> coroutine1_exited;
 	std::atomic<bool> coroutine2_exited;
 
@@ -77,4 +77,56 @@ TEST(CoEventTest, Cancellation) {
 
 	EXPECT_FALSE(coroutine1_exited);
 	EXPECT_FALSE(coroutine2_exited);
+}
+
+TEST(CoEventTest, Cancellation) {
+	std::atomic<bool> coroutine1_exited;
+	std::atomic<bool> coroutine2_exited;
+
+	boost::asio::io_context ioc{ 1 };
+	CoEvent<std::string> event{ ioc };
+
+	boost::asio::steady_timer wait_ready(ioc);
+	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());
+
+	boost::asio::cancellation_signal sig1, sig2;
+
+	std::thread scheduler([&ioc, &event, &coroutine1_exited, &coroutine2_exited, &wait_ready, &sig1, &sig2] {
+		boost::asio::co_spawn(ioc, [&ioc, &event, &coroutine1_exited, &sig1]()->boost::asio::awaitable<void> {
+			try {
+				co_await event.async_wait(bind_cancellation_slot(sig1.slot(), boost::asio::use_awaitable));
+			} catch (boost::system::system_error e) {
+				if (e.code() != boost::asio::error::operation_aborted) {
+					throw e;
+				}
+			}
+			coroutine1_exited = true; // should run.
+		}, boost::asio::detached);
+
+		boost::asio::co_spawn(ioc, [&ioc, &event, &coroutine2_exited, &sig2]()->boost::asio::awaitable<void> {
+			try {
+				co_await event.async_wait(bind_cancellation_slot(sig2.slot(), boost::asio::use_awaitable));
+			} catch (boost::system::system_error e) {
+				if (e.code() != boost::asio::error::operation_aborted) {
+					throw e;
+				}
+			}
+			coroutine2_exited = true; // should run.
+			}, boost::asio::detached);
+
+		// Run the scheduler until the coroutines are waiting on the event.
+		ioc.poll();
+		wait_ready.cancel();
+		ioc.run();
+		});
+	// Wait for the coroutines to start and be waiting on the event.
+	wait_ready.async_wait(boost::asio::use_future).wait();
+	// Cancel the waiting coroutines.
+	sig1.emit(boost::asio::cancellation_type::all);
+	sig2.emit(boost::asio::cancellation_type::all);
+
+	scheduler.join();
+
+	EXPECT_TRUE(coroutine1_exited);
+	EXPECT_TRUE(coroutine2_exited);
 }
