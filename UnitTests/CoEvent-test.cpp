@@ -9,7 +9,11 @@ TEST(CoEventTest, Simple) {
 
 	boost::asio::io_context ioc{ 1 };
 	CoEvent<std::string> event{ ioc };
-	std::thread scheduler([&ioc, &event, &coroutine1_received, &coroutine2_received] {
+
+	boost::asio::steady_timer wait_ready(ioc);
+	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());
+
+	std::thread scheduler([&ioc, &event, &coroutine1_received, &coroutine2_received, &wait_ready] {
 		boost::asio::co_spawn(ioc, [&ioc, &event, &coroutine1_received]()->boost::asio::awaitable<void> {
 			std::string v = co_await event.async_wait(boost::asio::use_awaitable);
 			coroutine1_received = std::make_shared<std::string>("coroutine1: " + v);
@@ -20,15 +24,57 @@ TEST(CoEventTest, Simple) {
 			coroutine2_received = std::make_shared<std::string>("coroutine2: " + v);
 		}, boost::asio::detached);
 
+		// Run the scheduler until the coroutines are waiting on the event.
+		ioc.poll();
+		wait_ready.cancel();
 		ioc.run();
 	});
 	// Wait for the coroutines to start and be waiting on the event.
-	// TODO: better synchronization here.
-	std::this_thread::sleep_for(std::chrono::seconds(2));
+	wait_ready.async_wait(boost::asio::use_future).wait();
 	event.NotifyAll("abc");
 
 	scheduler.join();
 
 	EXPECT_EQ("coroutine1: abc", *coroutine1_received.load());
 	EXPECT_EQ("coroutine2: abc", *coroutine2_received.load());
+}
+
+TEST(CoEventTest, Cancellation) {
+	std::atomic<bool> coroutine1_exited;
+	std::atomic<bool> coroutine2_exited;
+
+	boost::asio::io_context ioc{ 1 };
+	CoEvent<std::string> event{ ioc };
+
+	boost::asio::steady_timer wait_ready(ioc);
+	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());
+
+	boost::asio::cancellation_signal sig1, sig2;
+
+	std::thread scheduler([&ioc, &event, &coroutine1_exited, &coroutine2_exited, &wait_ready, &sig1, &sig2] {
+		boost::asio::co_spawn(ioc, [&ioc, &event, &coroutine1_exited, &sig1]()->boost::asio::awaitable<void> {
+			std::string v = co_await event.async_wait(boost::asio::use_awaitable);
+			coroutine1_exited = true; // never run.
+		}, bind_cancellation_slot(sig1.slot(), boost::asio::detached));
+
+		boost::asio::co_spawn(ioc, [&ioc, &event, &coroutine2_exited, &sig2]()->boost::asio::awaitable<void> {
+			std::string v = co_await event.async_wait(boost::asio::use_awaitable);
+			coroutine2_exited = true; // never run.
+		}, bind_cancellation_slot(sig2.slot(), boost::asio::detached));
+
+		// Run the scheduler until the coroutines are waiting on the event.
+		ioc.poll();
+		wait_ready.cancel();
+		ioc.run();
+		});
+	// Wait for the coroutines to start and be waiting on the event.
+	wait_ready.async_wait(boost::asio::use_future).wait();
+	// Cancel the waiting coroutines.
+	sig1.emit(boost::asio::cancellation_type::all);
+	sig2.emit(boost::asio::cancellation_type::all);
+
+	scheduler.join();
+
+	EXPECT_FALSE(coroutine1_exited);
+	EXPECT_FALSE(coroutine2_exited);
 }
