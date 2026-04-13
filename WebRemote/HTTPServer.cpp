@@ -24,19 +24,27 @@ template <typename T>
 using Channel = net::experimental::concurrent_channel<void(boost::system::error_code, T)>;
 
 static std::mutex ListenersMutex;
-static std::vector<std::shared_ptr<Channel<bool>>> StateChangeEventListeners;
-static std::atomic<bool> CurrentState;
+using StateType = std::string;
+static const StateType Muted = "muted";
+static const StateType Unmuted = "unmuted";
+using StateChannelType = Channel<StateType>;
+static std::vector<std::shared_ptr<StateChannelType>> StateChangeEventListeners;
+static StateType CurrentState;
 
 void NotifyStateChange(bool muted) {
-    CurrentState = muted;
-    std::lock_guard<std::mutex> guard(ListenersMutex);
-    for (auto& listener : StateChangeEventListeners) {
+    std::vector<std::shared_ptr<StateChannelType>> listeners;
+    {
+        CurrentState = muted ? Muted : Unmuted;
+        std::lock_guard<std::mutex> guard(ListenersMutex);
+		StateChangeEventListeners.swap(listeners);  
+    }
+    for (auto& listener : listeners) {
         boost::system::error_code ec;
-        listener->async_send(ec, CurrentState, boost::asio::detached);
-        if (ec) {
-            if(ec != boost::asio::experimental::error::channel_cancelled) {
-                HOST_LOG(LevelError,std::format(L"Failed to notify state change: {}",FromACP(ec.message())).c_str());
-			}
+        auto future = listener->async_send(ec, CurrentState, boost::asio::use_future);
+        if (!ec) {
+            future.get();
+        } else  if (ec != boost::asio::experimental::error::channel_cancelled) {
+            HOST_LOG(LevelError, std::format(L"Failed to notify state change: {}", FromACP(ec.message())).c_str());
         }
     }
 }
@@ -49,14 +57,18 @@ void CancelStateChangeNotifications() {
     StateChangeEventListeners.clear();
 }
 
-void RegisterStateChangeListener(const std::shared_ptr<Channel<bool>>& listener) {
-    std::lock_guard<std::mutex> guard(ListenersMutex);
-    StateChangeEventListeners.push_back(listener);
-}
-
-void UnregisterStateChangeListener(const std::shared_ptr<Channel<bool>>& listener) {
-    std::lock_guard<std::mutex> guard(ListenersMutex);
-    std::erase(StateChangeEventListeners, listener);
+// async_wait_state_change waits for the microphone state to change
+// to a different state other than oldState and returns the new state.
+static net::awaitable<StateType> async_wait_state_change(beast::tcp_stream::executor_type executor, const StateType& oldState) {
+    ListenersMutex.lock();
+    if(oldState != CurrentState) {
+		ListenersMutex.unlock();
+        co_return CurrentState;
+	}
+    auto ch = std::make_shared<StateChannelType>(executor);
+    StateChangeEventListeners.push_back(ch);
+    ListenersMutex.unlock();
+    co_return co_await ch->async_receive(net::use_awaitable);
 }
 
 class Server {
@@ -231,24 +243,12 @@ R"(
     co_await conn.WriteResponse(response);
 }
 
-static net::awaitable<void> handleState(Server::Conn& conn, urls::url_view url) {
-	auto stateStr = [](bool state) -> std::string { return state ? "1" : "0"; };
-
+static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_view url) {
     auto params = url.params();
-	auto old_param_it = params.find("current");
+	auto old_param_it = params.find("old");
 	auto old_param = old_param_it != params.end() ? (*old_param_it).value : "";
 
-    std::string body;
-    auto curr = stateStr(CurrentState.load());
-    if (old_param != curr) {
-        body = curr;
-    } else {
-        auto listener = std::make_shared<Channel<bool>>(conn.get_executor());
-        RegisterStateChangeListener(listener);
-        body = stateStr(co_await listener->async_receive(boost::asio::use_awaitable));
-        UnregisterStateChangeListener(listener);
-    }
-
+    std::string body = co_await async_wait_state_change(conn.get_executor(), old_param);
     http::response<http::string_body> response{ http::status::ok, conn.RequestHeader().version() };
     response.set(http::field::server, "Demic Web Server");
     response.set(http::field::content_type, "text/html");
@@ -272,8 +272,8 @@ static net::awaitable<void> handler(Server::Conn& conn) {
         co_await handleIndex(conn);
         co_return;
     }
-    if (url.path() == "/state") {
-        co_await handleState(conn, url);
+    if (url.path() == "/wait_state_change") {
+        co_await handleWaitStateChange(conn, url);
         co_return;
     }
 
