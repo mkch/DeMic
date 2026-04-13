@@ -12,7 +12,7 @@ private:
     struct Waiter {
 		boost::asio::any_io_executor executor;
         std::function<HandlerType> handler;
-        bool cancelled = false;
+        bool invoked = false;
     };
     std::mutex waitersLock;
     std::list<std::shared_ptr<Waiter>> waiters;
@@ -55,8 +55,11 @@ public:
 
 						// Resume handler in executor with cancellation indication.
                         asio::post(waiter->executor, [waiter]() mutable {
-                            waiter->cancelled = true;
+                            if (waiter->invoked) {
+								return; // Handler already invoked, do not call again.
+                            }
                             waiter->handler(boost::asio::error::operation_aborted, T{});
+                            waiter->invoked = true;
                         });
                     });
                 }
@@ -75,10 +78,12 @@ public:
         }
 
         for (auto& waiter : waitersToNotify) {
-            asio::post(asio::get_associated_executor(waiter->executor, ioc.get_executor()), [waiter, value = value]() mutable {
-                if (!waiter->cancelled) {
-                    waiter->handler({}, value);
+            asio::post(waiter->executor, [waiter, value = value]() mutable {
+                if (waiter->invoked) {
+                    return; // Handler already invoked, do not call again.
                 }
+                waiter->handler({}, value);
+                waiter->invoked = true;
             });
         }
     }
