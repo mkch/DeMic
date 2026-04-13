@@ -8,7 +8,7 @@ TEST(CoEventTest, Simple) {
 	std::atomic<std::shared_ptr<std::string>> coroutine2_received;
 
 	boost::asio::io_context ioc{ 1 };
-	CoEvent<std::string> event{ ioc };
+	co_event<std::string> event{ ioc };
 
 	boost::asio::steady_timer wait_ready(ioc);
 	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());
@@ -31,7 +31,7 @@ TEST(CoEventTest, Simple) {
 	});
 	// Wait for the coroutines to start and be waiting on the event.
 	wait_ready.async_wait(boost::asio::use_future).wait();
-	event.NotifyAll("abc");
+	event.notify_all("abc");
 
 	scheduler.join();
 
@@ -44,7 +44,7 @@ TEST(CoEventTest, CoroutineCancellation) {
 	std::atomic<bool> coroutine2_exited;
 
 	boost::asio::io_context ioc{ 1 };
-	CoEvent<std::string> event{ ioc };
+	co_event<std::string> event{ ioc };
 
 	boost::asio::steady_timer wait_ready(ioc);
 	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());
@@ -84,7 +84,7 @@ TEST(CoEventTest, Cancellation) {
 	std::atomic<bool> coroutine2_exited;
 
 	boost::asio::io_context ioc{ 1 };
-	CoEvent<std::string> event{ ioc };
+	co_event<std::string> event{ ioc };
 
 	boost::asio::steady_timer wait_ready(ioc);
 	wait_ready.expires_at(std::chrono::steady_clock::time_point::max());

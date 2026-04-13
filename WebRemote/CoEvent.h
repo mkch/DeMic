@@ -4,31 +4,31 @@
 #include <list>
 #include <ranges>
 
-// CoEvent is a synchronization primitive that allows multiple coroutines to wait for an event and be notified when the event occurs.
+// co_event is a synchronization primitive that allows multiple coroutines to wait for an event and be notified when the event occurs.
 template<class T>
-class CoEvent {
+class co_event {
 private:
-    using HandlerType = void(boost::system::error_code, T);
-    struct Waiter {
+    using handler_type = void(boost::system::error_code, T);
+    struct waiter {
 		boost::asio::any_io_executor executor;
-        std::function<HandlerType> handler;
+        std::function<handler_type> handler;
         bool invoked = false;
     };
     std::mutex waitersLock;
-    std::list<std::shared_ptr<Waiter>> waiters;
+    std::list<std::shared_ptr<waiter>> waiters;
     boost::asio::io_context& ioc;
 public:
-    CoEvent(boost::asio::io_context& ioc) : ioc(ioc) {}
-    CoEvent(const CoEvent&) = delete;
+    co_event(boost::asio::io_context& ioc) : ioc(ioc) {}
+    co_event(const co_event&) = delete;
 public:
 	// async_wait starts an asynchronous wait on the event.
     template <typename CompletionToken>
     auto async_wait(CompletionToken&& token) {
         namespace asio = boost::asio;
-        return asio::async_initiate<CompletionToken, HandlerType>(
+        return asio::async_initiate<CompletionToken, handler_type>(
             [this](auto&& handler) {
                 auto slot = asio::get_associated_cancellation_slot(handler);
-                auto waiter = std::make_shared<Waiter>();
+                auto waiter = std::make_shared<co_event::waiter>();
                 waiter->executor = asio::get_associated_executor(handler, ioc.get_executor());
 
                 auto sharedHandler = std::make_shared<std::decay_t<decltype(handler)>>(std::move(handler));
@@ -56,7 +56,7 @@ public:
 						// Resume handler in executor with cancellation indication.
                         asio::post(waiter->executor, [waiter]() mutable {
                             if (waiter->invoked) {
-								return; // Handler already invoked, do not call again.
+								return; // Avoid double-invocation.
                             }
                             waiter->handler(boost::asio::error::operation_aborted, T{});
                             waiter->invoked = true;
@@ -66,21 +66,21 @@ public:
             }, token);
     }
 
-    // NotifyAll resume all waiting coroutines with the provided value. 
+    // notify_all resume all waiting coroutines with the provided value. 
     // This function is thread-safe and can be called from any thread.
-    void NotifyAll(T&& value) {
+    void notify_all(T&& value) {
         namespace asio = boost::asio;
 
-        std::list<std::shared_ptr<Waiter>> waitersToNotify;
+        std::list<std::shared_ptr<waiter>> waiters_to_resume;
         {
             std::lock_guard<std::mutex> guard(waitersLock);
-            waiters.swap(waitersToNotify);
+            waiters.swap(waiters_to_resume);
         }
 
-        for (auto& waiter : waitersToNotify) {
+        for (auto& waiter : waiters_to_resume) {
             asio::post(waiter->executor, [waiter, value = value]() mutable {
                 if (waiter->invoked) {
-                    return; // Handler already invoked, do not call again.
+                    return; // Avoid double-invocation.
                 }
                 waiter->handler({}, value);
                 waiter->invoked = true;
