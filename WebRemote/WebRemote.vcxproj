@@ -171,6 +171,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\Util.h" />
     <ClInclude Include="CoEvent.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="HTTPServer.h" />
@@ -196,6 +197,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WebRemote.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="server_resource\index.html" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="web_resource">
+      <UniqueIdentifier>{6123b979-1b07-4aad-8cbc-7e0569f64031}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -31,6 +34,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="CoEvent.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -52,5 +58,10 @@
     <ResourceCompile Include="WebRemote.rc">
       <Filter>资源文件</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="server_resource\index.html">
+      <Filter>web_resource</Filter>
+    </None>
   </ItemGroup>
 </Project>

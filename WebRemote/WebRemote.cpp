@@ -19,6 +19,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         strRes = new StringRes(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
+
+        InitHTTPServer();
         break;
     }
     case DLL_PROCESS_DETACH:

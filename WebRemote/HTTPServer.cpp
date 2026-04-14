@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "resource.h"
 #include "HTTPServer.h"
 #include <thread>
 #include <vector>
@@ -225,6 +226,12 @@ bool StopHTTPServer() {
     return true;
 }
 
+static std::span<const std::byte> IndexResource;
+
+void InitHTTPServer() {
+    IndexResource = LoadModuleResource(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
+}
+
 static net::awaitable<void> handleNotFound(Server::Conn& conn) {
     http::response<http::string_body> response{ http::status::not_found, conn.RequestHeader().version() };
     response.set(http::field::content_type, "text/html");
@@ -235,11 +242,7 @@ static net::awaitable<void> handleIndex(Server::Conn& conn) {
     http::response<http::string_body> response{ http::status::ok, conn.RequestHeader().version() };
     response.set(http::field::server, "Demic Web Server");
     response.set(http::field::content_type, "text/html");
-    response.body() = 
-R"(
-<html>
-    <div>Hello there!</div>
-</html>)";
+    response.body() = std::string_view(reinterpret_cast<const char*>(IndexResource.data()), IndexResource.size());
     co_await conn.WriteResponse(response);
 }
 

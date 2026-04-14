@@ -1,5 +1,7 @@
 #pragma once
 
+void InitHTTPServer();
+
 bool StartHTTPServer();
 bool StopHTTPServer();
 
