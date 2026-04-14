@@ -3,14 +3,15 @@
 #include "HTTPServer.h"
 #include <thread>
 #include <vector>
+#include <mutex>
 
 #include <boost/url/url_view.hpp>
-
 #include <boost/url.hpp>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
-#include <mutex>
+
+#include <curl/curl.h>
 
 #include "../Util.h"
 #include "WebRemote.h"
@@ -72,6 +73,60 @@ static net::awaitable<StateType> async_wait_state_change(beast::tcp_stream::exec
     co_return co_await ch->async_receive(net::use_awaitable);
 }
 
+// loadTime is the time when this module is loaded.
+const std::time_t loadTime = std::time(nullptr);
+
+static std::string make_http_date(const std::time_t& t) {
+    std::tm gm{};
+
+#if defined(_WIN32)
+    gmtime_s(&gm, &t);
+#else
+    gmtime_r(&t, &gm);
+#endif
+
+    std::ostringstream oss;
+    oss << std::put_time(&gm, "%a, %d %b %Y %H:%M:%S GMT");
+    return oss.str();
+}
+
+static const std::string getCachedHttpDate() {
+    struct cache {
+        cache(time_t time, std::string&& date) : lastTime(time), httpDate(std::move(date)) {}
+        time_t lastTime = 0;
+        std::string httpDate;
+    };
+    static std::atomic<std::shared_ptr<cache>> cachePtr = std::make_shared<cache>(0, "");
+
+    auto ptr = cachePtr.load(std::memory_order_acquire);
+    auto now = std::time(nullptr);
+    if (now != ptr->lastTime) {
+        auto newPtr = std::make_shared<cache>(now, make_http_date(now));
+        // CAS
+        if (!cachePtr.compare_exchange_strong(
+            ptr, newPtr,
+            std::memory_order_release,
+            std::memory_order_acquire)) {
+            // already updated by other thread, use the updated value.
+            ptr = cachePtr.load(std::memory_order_acquire);
+        } else {
+            ptr = newPtr;
+        }
+    }
+    return ptr->httpDate;
+}
+
+template<class Body>
+static void setHttpDateHeader(http::response<Body>& response) {
+    response.set(http::field::date, getCachedHttpDate());
+}
+
+template<class Body>
+static void setHttpLastModifiedHeader(http::response<Body>& response, const time_t& t) {
+    response.set(http::field::last_modified, make_http_date(t));
+}
+
+
 class Server {
 private:
     // Read & write timeout.
@@ -124,11 +179,16 @@ public:
 
         // WriteResponse writes the response to the client.
         template<class Body>
-        net::awaitable<void> WriteResponse(http::response<Body>& response) {
+        net::awaitable<void> WriteResponse(http::response<Body>&& response) {
             if (responseWritten) {
                 throw std::logic_error("Response already written");
             }
+            // Set "Server" header.
             response.set(http::field::server, "Demic Web Server");
+            // Add "Date" header if not set.
+            if(response.find(http::field::date) == response.end()) {
+				setHttpDateHeader(response);
+			}
             response.prepare_payload();
             responseWritten = true;
             responseKeepAlive = response.keep_alive();
@@ -232,18 +292,58 @@ void InitHTTPServer() {
     IndexResource = LoadModuleResource(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
 }
 
+// handleHtppIfModifiedSince checks the "If-Modified-Since" header and
+// writes a 304 Not Modified response if the resource has not been modified since the specified time.
+// It returns true if a response has been written, and false otherwise.
+static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, const time_t& lastModified) {
+    auto requestHeader = conn.RequestHeader();
+    auto ifModSinceHeader = requestHeader.find(http::field::if_modified_since);
+    if (ifModSinceHeader == requestHeader.end()) {
+        co_return false;
+    }
+    auto ifModSince = curl_getdate(std::string(ifModSinceHeader->value()).c_str(), NULL);
+    if (ifModSince == -1) {
+        HOST_LOG_WSTRING(LevelError, std::format(L"{}: invalid \"If-Modified-Since\" value {}", 
+            FromUTF8(std::u8string_view((const char8_t*)requestHeader.target().data(), requestHeader.target().size())),
+            FromUTF8(std::u8string_view((const char8_t*)ifModSinceHeader->value().data(), ifModSinceHeader->value().size()))));
+		co_await conn.WriteResponse(http::response<http::string_body>{ http::status::bad_request, requestHeader.version() });
+        co_return true;
+    }
+    if(lastModified > ifModSince) {
+        // Modified
+		co_return false;
+    }
+	// Write 304 Not Modified response.
+    co_await conn.WriteResponse(http::response<http::string_body>{ http::status::not_modified, requestHeader.version() });
+    co_return true;
+}
+
 static net::awaitable<void> handleNotFound(Server::Conn& conn) {
     http::response<http::string_body> response{ http::status::not_found, conn.RequestHeader().version() };
     response.set(http::field::content_type, "text/html");
-    co_await conn.WriteResponse(response);
+    co_await conn.WriteResponse(std::move(response));
 }
 
 static net::awaitable<void> handleIndex(Server::Conn& conn) {
-    http::response<http::string_body> response{ http::status::ok, conn.RequestHeader().version() };
-    response.set(http::field::server, "Demic Web Server");
-    response.set(http::field::content_type, "text/html");
-    response.body() = std::string_view(reinterpret_cast<const char*>(IndexResource.data()), IndexResource.size());
-    co_await conn.WriteResponse(response);
+    using status = http::status;
+    
+	const auto version = conn.RequestHeader().version(); 
+    const auto method = conn.RequestHeader().method();
+
+    if (method != http::verb::get && method != http::verb::head) {
+        co_await conn.WriteResponse(http::response<http::string_body>{ status::method_not_allowed, version});
+        co_return;
+    }
+    if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
+        co_return;
+    }
+    http::response<http::string_body> response{ http::status::ok, version };
+    setHttpLastModifiedHeader(response, loadTime);
+    if (method != http::verb::head) {
+        response.set(http::field::content_type, "text/html");
+        response.body() = std::string_view(reinterpret_cast<const char*>(IndexResource.data()), IndexResource.size());
+    }
+    co_await conn.WriteResponse(std::move(response));
 }
 
 static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_view url) {
@@ -253,10 +353,9 @@ static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_
 
     std::string body = co_await async_wait_state_change(conn.get_executor(), old_param);
     http::response<http::string_body> response{ http::status::ok, conn.RequestHeader().version() };
-    response.set(http::field::server, "Demic Web Server");
     response.set(http::field::content_type, "text/html");
 	response.body() = body;
-    co_await conn.WriteResponse(response);
+    co_await conn.WriteResponse(std::move(response));
 }
 
 
