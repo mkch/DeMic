@@ -3,6 +3,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <span>
+#include <cstddef> // for std::byte
+#include <stdexcept>
+#include <format>
+
 
 class StringRes {
 public:
@@ -65,3 +70,39 @@ std::wstring FromACP(const std::string_view& str);
 std::u8string ToUTF8(const wchar_t* str, size_t len = (size_t)-1);
 std::u8string ToUTF8(const std::wstring& str);
 std::u8string ToUTF8(const std::wstring_view& str);
+
+
+class Win32Error : public std::runtime_error {
+private:
+	static const DWORD FormatMessageFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER 
+		| FORMAT_MESSAGE_FROM_SYSTEM 
+		| FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_MAX_WIDTH_MASK;
+public:
+	// GetMessageW returns the error message of the given error code.
+	// If hModule is given, it also looks up the message in the module.
+	inline static std::wstring GetMessageW(DWORD lastError, HMODULE hModule = NULL) {
+		wchar_t* msg = NULL;
+		FormatMessageW(FormatMessageFlags | (hModule ? FORMAT_MESSAGE_FROM_HMODULE : 0), hModule, lastError, 0, (LPWSTR)&msg, 0, NULL);
+		const std::wstring message = std::format(L"{}: {}", lastError, msg ? msg : L"");
+		LocalFree(msg);
+		return message;
+	}
+	// GetMessageA returns the error message of the given error code.
+	// If hModule is given, it also looks up the message in the module.
+	inline static std::string GetMessageA(DWORD lastError, HMODULE hModule = NULL) {
+		char* msg = NULL;
+		FormatMessageA(FormatMessageFlags | (hModule ? FORMAT_MESSAGE_FROM_HMODULE : 0), hModule, lastError, 0, (LPSTR)&msg, 0, NULL);
+		const std::string message = std::format("{}: {}", lastError, msg ? msg : "");
+		LocalFree(msg);
+		return message;
+	}
+private:
+	DWORD code;
+public:
+	Win32Error(DWORD errorCode, HMODULE hModule = NULL) : std::runtime_error(GetMessageA(errorCode, hModule)), code(errorCode) {}
+	DWORD Code() const { return code; }
+};
+
+// LoadModuleResource loads a resource in the module and returns its content as a byte span.
+// If the resource is not found, throws a Win32Error.
+std::span<const std::byte> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
