@@ -16,6 +16,7 @@
 #include "../Util.h"
 #include "WebRemote.h"
 #include "MessageWindow.h"
+#include "NetUtil.h"
 
 namespace urls = boost::urls;
 namespace net = boost::asio;
@@ -79,13 +80,7 @@ const std::time_t loadTime = std::time(nullptr);
 
 static std::string make_http_date(const std::time_t& t) {
     std::tm gm{};
-
-#if defined(_WIN32)
     gmtime_s(&gm, &t);
-#else
-    gmtime_r(&t, &gm);
-#endif
-
     std::ostringstream oss;
     oss << std::put_time(&gm, "%a, %d %b %Y %H:%M:%S GMT");
     return oss.str();
@@ -224,23 +219,87 @@ private:
 		return std::make_unique<std::thread>(std::forward<F>(f));
     }
 public:
-    Server(HTTPHandler&& h) : handler(std::move(h)) {
-        serverThread = std::move(createThread([this] {
+    class InvalidPortException : public std::invalid_argument {
+    public:
+        InvalidPortException() : std::invalid_argument("") {}
+    };
+    class ResolveEndpointException : public std::invalid_argument {
+    public:
+		ResolveEndpointException() : std::invalid_argument("") {}
+		ResolveEndpointException(const std::string& message) : std::invalid_argument(message) {}
+    };
+    class ListenException : public std::invalid_argument {
+    public:
+        ListenException(const std::string& message) : std::invalid_argument(message) {}
+    };
+    class BindException : public std::invalid_argument {
+    public:
+        BindException(const std::string& message) : std::invalid_argument(message) {}
+    };
+public:
+    // Throws
+    // InvalidPortException, NoEndpointException,
+    // or boost::system::system_error.
+	Server(const std::string& listen_host, const std::string& listen_port, HTTPHandler&& h) : handler(std::move(h)) {
+        if (listen_port.empty()) {
+			throw InvalidPortException();
+        }
+
+        unsigned long portNumber = 0;
+        try {
+            portNumber = std::stoul(listen_port);
+        } catch (const std::exception&) {
+            throw InvalidPortException();
+        }
+
+        if (portNumber > 0xFFFF) {
+            throw InvalidPortException();
+        }
+
+        tcp::endpoint endpoint;
+        tcp::acceptor acceptor{ ioc };
+        bool emptyHost = listen_port.empty();
+        if (emptyHost) {
+            // Empty host means listening on all interfaces.
+            // Listen on v6 first, and allow both v4 and v6 later on by:
+            // acceptor.set_option(net::ip::v6_only(false));
+            endpoint = tcp::endpoint(tcp::v6(), (net::ip::port_type)portNumber);
+            acceptor.open(endpoint.protocol());
+            // Allow both v4 and v6 connections.
+            acceptor.set_option(net::ip::v6_only(false));
+        } else {
+            tcp::resolver::results_type endpoints;
             try {
-                tcp::endpoint endpoint{ tcp::v4(), 8080 };
-                tcp::acceptor acceptor{ ioc, endpoint };
-
-                net::co_spawn(ioc, do_listen(acceptor), net::detached);
-
-                HOST_LOG(LevelDebug, L"HTTP Server started on on http://0.0.0.0:8080");
-
-                ioc.run();
-
-                HOST_LOG(LevelDebug, L"Server exited gracefully");
-            } catch (const std::exception& e) {
-                HOST_LOG(LevelError, std::format(L"Server error: {}", FromACP(e.what())).c_str());
+                endpoints = tcp::resolver(ioc).resolve(listen_host, listen_port);
+            } catch (const boost::system::system_error& e) {
+                throw ResolveEndpointException(e.code().message());
+			}
+            if (endpoints.empty()) {
+                throw ResolveEndpointException();
             }
-         }));
+            endpoint = endpoints.begin()->endpoint();
+            acceptor.open(endpoint.protocol());
+        }
+        try {
+            acceptor.bind(endpoint);
+        } catch (const boost::system::system_error& e) {
+            throw BindException(e.code().message());
+        }
+        try {
+            acceptor.listen();
+        } catch (const boost::system::system_error& e) {
+            throw ListenException(e.code().message());
+		}
+
+        serverThread = std::move(createThread([this, acceptor = std::move(acceptor)]() mutable {
+            try {
+                net::co_spawn(ioc, do_listen(std::move(acceptor)), net::detached);
+                ioc.run();
+                HOST_LOG(LevelDebug, L"Server exited gracefully");
+            } catch (const boost::system::system_error& e) {
+                HOST_LOG(LevelError, std::format(L"Server error: {}", FromACP(e.code().message())).c_str());
+            }
+            }));
     }
 
     ~Server() {
@@ -250,7 +309,7 @@ public:
         }
     }
 private:
-    net::awaitable<void> do_listen(tcp::acceptor& acceptor) {
+    net::awaitable<void> do_listen(tcp::acceptor&& acceptor) {
         for (;;) {
             tcp::socket socket = co_await acceptor.async_accept(net::use_awaitable);
             net::co_spawn(acceptor.get_executor(),
@@ -282,8 +341,8 @@ private:
 			// Gracefully close the socket.
             beast::error_code ec;
 			stream.socket().shutdown(tcp::socket::shutdown_send, ec); // Ignore shutdown errors.
-        } catch (const std::exception& e) {
-            HOST_LOG(LevelDebug, std::format(L"Server error: {}", FromACP(e.what())).c_str());
+        } catch (const boost::system::system_error& e) {
+            HOST_LOG(LevelDebug, std::format(L"Server error: {}", FromACP(e.code().message())).c_str());
         }
     }
 };
@@ -468,10 +527,34 @@ static net::awaitable<void> handler(Server::Conn& conn) {
 };
 
 
-bool StartHTTPServer() {
+HTTPServerResult StartHTTPServer(const std::wstring& address, std::wstring& errorMessage) {
     if (server) {
-        return false; // Already running.
+		throw std::logic_error("Server already running");
     }
-    server.reset(new Server(std::move(handler)));
-    return true;
+    auto u8addr = ToUTF8(address);
+    auto addr = std::string_view((const char*)u8addr.data(), u8addr.size());
+
+    net_util::HostPort hostPort{};
+    if (!net_util::SplitHostPort(addr, &hostPort)) {
+        return SERVER_INVALID_ADDRESS_FORMAT;
+    }
+    try {
+        server.reset(new Server(hostPort.Host, hostPort.Port, std::move(handler)));
+    } catch (const Server::InvalidPortException& e) {
+        errorMessage = FromACP(e.what());
+        return SERVER_INVALID_PORT;
+    } catch (const Server::ResolveEndpointException& e) {
+        errorMessage = FromACP(e.what());
+        return SERVER_RESOLVE_ENDPOINT;
+    } catch (const Server::BindException& e) {
+        errorMessage = FromACP(e.what());
+        return SERVER_BIND_ERROR;
+    } catch (const Server::ListenException& e) {
+		errorMessage = FromACP(e.what());
+        return SERVER_LISTEN_ERROR; 
+    } catch (const boost::system::system_error& e) {
+        errorMessage = FromACP(e.code().message());
+        return SERVER_ERROR;
+	}
+    return SERVER_OK;
 }

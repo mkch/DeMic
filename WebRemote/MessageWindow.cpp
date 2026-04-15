@@ -2,7 +2,9 @@
 #include <windows.h>
 #include "WebRemote.h"
 
+static const wchar_t* wndClassName = L"Web Remote Message Window";
 static HWND messageWindow = NULL;
+
 enum {
     UM_TOGGLE = WM_USER + 1, // Toggle mic state.
 };
@@ -21,6 +23,7 @@ void DestroyMessageWindow() {
     if (messageWindow) {
         DestroyWindow(messageWindow);
         messageWindow = NULL;
+		UnregisterClassW(wndClassName, hInstance);
     }
 }
 
@@ -33,7 +36,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-
 bool CreateMessageWindow() {
     if (messageWindow) {
 		throw std::logic_error("Message window already created");
@@ -41,12 +43,12 @@ bool CreateMessageWindow() {
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = L"Web Remote Message Window";
+    wc.lpszClassName = wndClassName;
 
     if (!RegisterClassW(&wc)) {
         return false;
     }
-
+ 
     messageWindow = CreateWindowEx(
         0,
         wc.lpszClassName,

@@ -199,6 +199,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="HTTPServer.h" />
     <ClInclude Include="MessageWindow.h" />
+    <ClInclude Include="NetUtil.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="WebRemote.h" />
@@ -212,6 +213,7 @@
     </ClCompile>
     <ClCompile Include="HTTPServer.cpp" />
     <ClCompile Include="MessageWindow.cpp" />
+    <ClCompile Include="NetUtil.cpp" />
     <ClCompile Include="WebRemote.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

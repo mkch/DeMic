@@ -4,17 +4,21 @@
 //
 #define IDS_APP_NAME                    101
 #define IDR_SERVER_INDEX_HTML           102
+#define IDS_INVALID_ADDRESS_FORMAT      102
 #define IDB_UNMUTED                     103
-#define IDB_PNG2                        104
+#define IDS_INVALID_PORT                103
 #define IDB_MUTED                       104
-#define IDB_PNG1                        105
+#define IDS_RESOLVE_ENDPOINT            104
 #define IDB_LOADING                     105
+#define IDS_SERVER_START_ERROR          105
+#define IDS_SERVER_LISTEN_ERROR         106
+#define IDS_SERVER_BIND_ERROR           107
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        106
+#define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         40001
 #define _APS_NEXT_CONTROL_VALUE         1001
 #define _APS_NEXT_SYMED_VALUE           101
