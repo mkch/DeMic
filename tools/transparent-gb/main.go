@@ -77,8 +77,7 @@ func processFile(inputPath, outputPath string) {
 		}
 	}
 
-	outputFile, err := os.Create(outputPath)
-	os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	outputFile, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
