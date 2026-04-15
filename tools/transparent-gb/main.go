@@ -1,0 +1,91 @@
+// This program converts BMP images on a white background (R: 255, G: 255, B: 255)
+// containing only pure black (0, 0, 0) and pure red (255, 0, 0) into PNG images with an alpha channel.
+// Since the original images use antialiasing on object edges, the alpha channel is calculated
+// based on the G channel values, and the R channel is binarized to ensure sharp edges.
+package main
+
+import (
+	"image"
+	"image/color"
+	"image/png"
+	"log"
+	"os"
+
+	_ "golang.org/x/image/bmp"
+)
+
+func main() {
+	processFile("Microphone.bmp", "Microphone.png")
+	processFile("MicrophoneMuted.bmp", "MicrophoneMuted.png")
+}
+
+func processFile(inputPath, outputPath string) {
+	// 1. 打开原始 BMP 文件
+	inputFile, err := os.Open(inputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer inputFile.Close()
+
+	img, _, err := image.Decode(inputFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bounds := img.Bounds()
+	// Create a new image with RGBA format to hold the processed pixels
+	newImg := image.NewRGBA(bounds)
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			// R, G, B, A (0-65535)
+			r, g, _, _ := img.At(x, y).RGBA()
+
+			// Map R and G from 0-65535 to 0-255
+			R_old := float64(r >> 8)
+			G_old := float64(g >> 8)
+			//B_old := float64(b >> 8)
+
+			// Calculate Alpha (based on G channel, as G is always 0 in object color)
+			alpha := 1.0 - (G_old / 255.0)
+
+			var finalColor color.Color
+
+			if alpha <= 0 {
+				// Totally transparent
+				finalColor = color.RGBA{0, 0, 0, 0}
+			} else {
+				// Restore R component based on alpha
+				R_new := (R_old - 255.0*(1.0-alpha)) / alpha
+
+				// Binarize R to ensure clean edges (since the original might have anti-aliasing)
+				var rOut uint8
+				if R_new > 128 {
+					rOut = 255
+				} else {
+					rOut = 0
+				}
+
+				finalColor = color.RGBA{
+					R: rOut,
+					G: 0,
+					B: 0,
+					A: uint8(alpha * 255.0),
+				}
+			}
+			newImg.Set(x, y, finalColor)
+		}
+	}
+
+	outputFile, err := os.Create(outputPath)
+	os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outputFile.Close()
+
+	err = png.Encode(outputFile, newImg)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
