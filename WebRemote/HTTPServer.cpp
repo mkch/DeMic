@@ -159,6 +159,14 @@ public:
             return requestKeepAlive && responseKeepAlive;
         }
     public:
+        void SetExpiresAfter(const std::chrono::steady_clock::duration& d) {
+            stream->expires_after(d);
+		}
+
+        void SetExpiresNever() {
+			stream->expires_never();
+        }
+
 		// RequestHeader returns the HTTP request header.
         const http::request_header<>& RequestHeader() const {
             return header;
@@ -189,7 +197,6 @@ public:
             if(response.find(http::field::date) == response.end()) {
 				setHttpDateHeader(response);
 			}
-            response.prepare_payload();
             responseWritten = true;
             responseKeepAlive = response.keep_alive();
             stream->expires_after(RW_TIMEOUT);
@@ -287,16 +294,20 @@ bool StopHTTPServer() {
 }
 
 static std::span<const std::byte> IndexResource;
+static std::span<const std::byte> MutedPngResource;
+static std::span<const std::byte> UnmutedPngResource;
 
 void InitHTTPServer() {
     IndexResource = LoadModuleResource(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
+	MutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
+	UnmutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_UNMUTED));
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
 // writes a 304 Not Modified response if the resource has not been modified since the specified time.
 // It returns true if a response has been written, and false otherwise.
-static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, const time_t& lastModified) {
-    auto requestHeader = conn.RequestHeader();
+static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, time_t lastModified) {
+    const auto& requestHeader = conn.RequestHeader();
     auto ifModSinceHeader = requestHeader.find(http::field::if_modified_since);
     if (ifModSinceHeader == requestHeader.end()) {
         co_return false;
@@ -339,14 +350,19 @@ static net::awaitable<void> handleIndex(Server::Conn& conn) {
     }
     http::response<http::string_body> response{ http::status::ok, version };
     setHttpLastModifiedHeader(response, loadTime);
-    if (method != http::verb::head) {
-        response.set(http::field::content_type, "text/html");
+    response.set(http::field::content_type, "text/html");
+    if (method == http::verb::head) {
+        response.set(http::field::content_length, std::to_string(IndexResource.size_bytes()));
+    } else {
         response.body() = std::string_view(reinterpret_cast<const char*>(IndexResource.data()), IndexResource.size());
+        response.prepare_payload();
     }
     co_await conn.WriteResponse(std::move(response));
 }
 
 static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_view url) {
+    conn.SetExpiresNever(); // Long-polling connection. Never expires.
+
     auto params = url.params();
 	auto old_param_it = params.find("old");
 	auto old_param = old_param_it != params.end() ? (*old_param_it).value : "";
@@ -355,13 +371,42 @@ static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_
     http::response<http::string_body> response{ http::status::ok, conn.RequestHeader().version() };
     response.set(http::field::content_type, "text/html");
 	response.body() = body;
+    response.prepare_payload();
+    co_await conn.WriteResponse(std::move(response));
+}
+
+static net::awaitable<void> handlePNG(Server::Conn& conn, std::span<const std::byte> res) {
+    using status = http::status;
+
+    const auto version = conn.RequestHeader().version();
+    const auto method = conn.RequestHeader().method();
+
+    if (method != http::verb::get && method != http::verb::head) {
+        co_await conn.WriteResponse(http::response<http::string_body>{ status::method_not_allowed, version});
+        co_return;
+    }
+    if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
+        co_return;
+    }
+    http::response<http::buffer_body> response{ http::status::ok, version };
+    setHttpLastModifiedHeader(response, loadTime);
+    response.set(http::field::content_type, "image/png");
+    if (method == http::verb::head) {
+		response.set(http::field::content_length, std::to_string(res.size_bytes()));
+    } else {
+        response.set(http::field::content_type, "image/png");
+        response.body().data = const_cast<std::byte*>(res.data());
+        response.body().size = res.size();
+        response.body().more = false;
+        response.prepare_payload();
+    }
     co_await conn.WriteResponse(std::move(response));
 }
 
 
 static net::awaitable<void> handler(Server::Conn& conn) {
     // Read Header
-    auto header = conn.RequestHeader();
+    const auto& header = conn.RequestHeader();
 	const auto& headerTarget = header.target();
     // Routing
     auto target = urls::parse_origin_form(headerTarget);
@@ -376,6 +421,14 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     }
     if (url.path() == "/wait_state_change") {
         co_await handleWaitStateChange(conn, url);
+        co_return;
+    }
+    if(url.path() == "/res/muted.png") {
+        co_await handlePNG(conn, MutedPngResource);
+        co_return;
+	}
+    if (url.path() == "/res/unmuted.png") {
+        co_await handlePNG(conn, UnmutedPngResource);
         co_return;
     }
 

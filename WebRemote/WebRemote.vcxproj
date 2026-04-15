@@ -220,6 +220,10 @@
   <ItemGroup>
     <None Include="server_resource\index.html" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="Microphone.png" />
+    <Image Include="MicrophoneMuted.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

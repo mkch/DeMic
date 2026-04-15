@@ -64,4 +64,12 @@
       <Filter>web_resource</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="Microphone.png">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="MicrophoneMuted.png">
+      <Filter>资源文件</Filter>
+    </Image>
+  </ItemGroup>
 </Project>
