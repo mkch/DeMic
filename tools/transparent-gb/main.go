@@ -5,6 +5,7 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"image/color"
 	"image/png"
@@ -15,8 +16,11 @@ import (
 )
 
 func main() {
-	processFile("Microphone.bmp", "Microphone.png")
-	processFile("MicrophoneMuted.bmp", "MicrophoneMuted.png")
+	flag.Parse()
+	for _, src := range flag.Args() {
+		dst := src + "-out.png"
+		processFile(src, dst)
+	}
 }
 
 func processFile(inputPath, outputPath string) {
