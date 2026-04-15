@@ -15,6 +15,7 @@
 
 #include "../Util.h"
 #include "WebRemote.h"
+#include "MessageWindow.h"
 
 namespace urls = boost::urls;
 namespace net = boost::asio;
@@ -197,6 +198,10 @@ public:
             if(response.find(http::field::date) == response.end()) {
 				setHttpDateHeader(response);
 			}
+			// Add "Content-Length" header if not set.
+            if(response.find(http::field::content_length) == response.end()) {
+                response.set(http::field::content_length, "0");
+			}
             responseWritten = true;
             responseKeepAlive = response.keep_alive();
             stream->expires_after(RW_TIMEOUT);
@@ -296,11 +301,13 @@ bool StopHTTPServer() {
 static std::span<const std::byte> IndexResource;
 static std::span<const std::byte> MutedPngResource;
 static std::span<const std::byte> UnmutedPngResource;
+static std::span<const std::byte> LoadingPngResource;
 
 void InitHTTPServer() {
     IndexResource = LoadModuleResource(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
 	MutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
 	UnmutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_UNMUTED));
+	LoadingPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_LOADING));
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
@@ -330,8 +337,14 @@ static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, time_t
 }
 
 static net::awaitable<void> handleNotFound(Server::Conn& conn) {
-    http::response<http::string_body> response{ http::status::not_found, conn.RequestHeader().version() };
+    http::response<http::empty_body> response{ http::status::not_found, conn.RequestHeader().version() };
+    co_await conn.WriteResponse(std::move(response));
+}
+
+static net::awaitable<void> handleServerError(Server::Conn& conn, const std::string& reason) {
+    http::response<http::string_body> response{ http::status::internal_server_error, conn.RequestHeader().version() };
     response.set(http::field::content_type, "text/html");
+	response.body() = reason;
     co_await conn.WriteResponse(std::move(response));
 }
 
@@ -342,7 +355,7 @@ static net::awaitable<void> handleIndex(Server::Conn& conn) {
     const auto method = conn.RequestHeader().method();
 
     if (method != http::verb::get && method != http::verb::head) {
-        co_await conn.WriteResponse(http::response<http::string_body>{ status::method_not_allowed, version});
+        co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
         co_return;
     }
     if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
@@ -382,8 +395,7 @@ static net::awaitable<void> handlePNG(Server::Conn& conn, std::span<const std::b
     const auto method = conn.RequestHeader().method();
 
     if (method != http::verb::get && method != http::verb::head) {
-        co_await conn.WriteResponse(http::response<http::string_body>{ status::method_not_allowed, version});
-        co_return;
+        co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
     }
     if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
         co_return;
@@ -403,6 +415,23 @@ static net::awaitable<void> handlePNG(Server::Conn& conn, std::span<const std::b
     co_await conn.WriteResponse(std::move(response));
 }
 
+static net::awaitable<void>handleToggle(Server::Conn& conn) {
+    using status = http::status;
+
+    const auto version = conn.RequestHeader().version();
+    const auto method = conn.RequestHeader().method();
+
+    if (method != http::verb::get) {
+        co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
+    }
+
+    auto ok = PostToggle();
+    if (!ok) {
+		co_return co_await handleServerError(conn, "Failed to toggle microphone state.");
+    }
+	co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::ok, version }));
+}
+
 
 static net::awaitable<void> handler(Server::Conn& conn) {
     // Read Header
@@ -415,21 +444,24 @@ static net::awaitable<void> handler(Server::Conn& conn) {
         co_return;
     }
     auto url = target.value();
-    if(url.path() == "/") {
-        co_await handleIndex(conn);
-        co_return;
+	const auto path = url.path();
+    if(path == "/") {
+        co_return co_await handleIndex(conn);
     }
-    if (url.path() == "/wait_state_change") {
-        co_await handleWaitStateChange(conn, url);
-        co_return;
+    if (path == "/wait_state_change") {
+        co_return co_await handleWaitStateChange(conn, url);
     }
-    if(url.path() == "/res/muted.png") {
-        co_await handlePNG(conn, MutedPngResource);
-        co_return;
+    if(path == "/res/muted.png") {
+        co_return co_await handlePNG(conn, MutedPngResource);
 	}
-    if (url.path() == "/res/unmuted.png") {
-        co_await handlePNG(conn, UnmutedPngResource);
-        co_return;
+    if (path == "/res/unmuted.png") {
+        co_return co_await handlePNG(conn, UnmutedPngResource);
+    }
+    if (path == "/res/loading.png") {
+        co_return co_await handlePNG(conn, LoadingPngResource);
+    }
+    if (path == "/toggle") {
+		co_return co_await handleToggle(conn);
     }
 
     co_await handleNotFound(conn);

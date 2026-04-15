@@ -2,13 +2,100 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
     <title>DeMic WebRemote</title>
     <style>
-    </style>    
+        .custom-btn {
+            display: inline-block;
+            padding: 50px;
+            margin: 10px;
+            width: 160px;
+            height: 160px;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background-image: url('/res/loading.png');
+            background-size: 85%;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: #F0F0F0;
+        }
+
+            .custom-btn:hover {
+                transform: scale(1.01);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            }
+
+            .custom-btn:active {
+                transform: scale(0.98);
+            }
+
+        .center-div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
 </head>
 
 <body>
-    Hello, World!
+    <div class='center-div' style='height:30px'>
+        DeMic WebRemote
+    </div>
+    <div class='center-div' style='height:180px'>
+        <button id='toggle-btn' class='custom-btn' onclick='handleClick()'></button>
+    </div>
+    <script>
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function startStatePolling() {
+            let currentStatus = "";
+            while (true) {
+                try {
+                    const response = await fetch(`/wait_state_change?old=${encodeURIComponent(currentStatus)}`);
+                    if (!response.ok) {
+                        throw new Error('bad status');
+                    }
+                    currentStatus = await response.text()
+                    const btn = document.querySelector('#toggle-btn');
+                    if (currentStatus == 'muted') {
+                        btn.style.backgroundImage = "url('/res/muted.png')";
+                    } else {
+                        btn.style.backgroundImage = "url('/res/unmuted.png')";
+                    }
+                } catch (error) {
+                    await sleep(1000); // Retry 1s later.
+                }
+
+            }
+        }
+
+
+        async function handleClick() {
+            try {
+                const response = await fetch('/toggle');
+                if (response.ok) {
+                    return
+                }
+            } catch (error) {
+                console.log(error);
+            }
+            alert("Server error!")
+        }
+
+        (async function () {
+            await sleep(100); // Avoid flickering caused by the initial loading icon.
+            startStatePolling();
+        })();
+    </script>
 </body>   
 
 </html>

@@ -5,6 +5,7 @@
 
 #include "WebRemote.h"
 #include "HTTPServer.h"
+#include "MessageWindow.h"
 
 HINSTANCE hInstance = NULL;
 StringRes* strRes = NULL;
@@ -20,10 +21,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
 
-        InitHTTPServer();
+        if (!CreateMessageWindow()) {
+			throw(Win32Error(GetLastError()));
+        }
         break;
     }
     case DLL_PROCESS_DETACH:
+        if (lpReserved != nullptr) {
+            break; // do not do cleanup if process termination scenario
+        }
+        DestroyMessageWindow();
         break;
     }
     return TRUE;
@@ -36,6 +43,8 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
     
+    InitHTTPServer();
+
     host->SetMicMuteStateListener(state, [] {
         NotifyStateChange(host->IsMuted());
 	});

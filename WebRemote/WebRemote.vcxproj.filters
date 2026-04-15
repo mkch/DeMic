@@ -39,6 +39,9 @@
     <ClInclude Include="..\Util.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="MessageWindow.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WebRemote.cpp">
@@ -51,6 +54,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="HTTPServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MessageWindow.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -69,6 +75,15 @@
       <Filter>资源文件</Filter>
     </Image>
     <Image Include="MicrophoneMuted.png">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="server_resource\res\Microphone-loading.png">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="server_resource\res\Microphone.png">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="server_resource\res\MicrophoneMuted.png">
       <Filter>资源文件</Filter>
     </Image>
   </ItemGroup>
