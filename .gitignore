@@ -39,3 +39,4 @@ x64/
 /packages
 *.user
 /WebRemote/vcpkg_installed
+.vscode/

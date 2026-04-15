@@ -24,7 +24,6 @@ func main() {
 }
 
 func processFile(inputPath, outputPath string) {
-	// 1. 打开原始 BMP 文件
 	inputFile, err := os.Open(inputPath)
 	if err != nil {
 		log.Fatal(err)
@@ -37,44 +36,25 @@ func processFile(inputPath, outputPath string) {
 	}
 
 	bounds := img.Bounds()
-	// Create a new image with RGBA format to hold the processed pixels
-	newImg := image.NewRGBA(bounds)
+	// Create a new image with NRGBA format to hold the processed pixels
+	newImg := image.NewNRGBA(bounds)
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			// R, G, B, A (0-65535)
 			r, g, _, _ := img.At(x, y).RGBA()
-
-			// Map R and G from 0-65535 to 0-255
-			R_old := float64(r >> 8)
-			G_old := float64(g >> 8)
-			//B_old := float64(b >> 8)
-
 			// Calculate Alpha (based on G channel, as G is always 0 in object color)
-			alpha := 1.0 - (G_old / 255.0)
-
+			alpha := 1.0 - (float64(g) / 65535.0)
 			var finalColor color.Color
-
 			if alpha <= 0 {
 				// Totally transparent
-				finalColor = color.RGBA{0, 0, 0, 0}
+				finalColor = color.Transparent
 			} else {
-				// Restore R component based on alpha
-				R_new := (R_old - 255.0*(1.0-alpha)) / alpha
-
-				// Binarize R to ensure clean edges (since the original might have anti-aliasing)
-				var rOut uint8
-				if R_new > 128 {
-					rOut = 255
-				} else {
-					rOut = 0
-				}
-
-				finalColor = color.RGBA{
-					R: rOut,
+				finalColor = color.NRGBA64{
+					R: uint16(float64(r) / alpha), // Restore R based on alpha
 					G: 0,
 					B: 0,
-					A: uint8(alpha * 255.0),
+					A: uint16(alpha * 65535.0),
 				}
 			}
 			newImg.Set(x, y, finalColor)
