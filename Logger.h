@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <codecvt>
+#include <mutex>
 
 class Logger {
 public:
@@ -11,6 +12,7 @@ public:
 		LevelError = 8,
 	};
 private:
+	std::mutex mMutex;
 	std::ostream* mStream;
 	Level mLevel;
 public:

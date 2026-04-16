@@ -1,6 +1,7 @@
 #include "Logger.h"
 #include <iomanip>
 #include <ctime>
+#include <filesystem>
 #include "Util.h"
 
 // Extract the base part of a file path.
@@ -29,6 +30,10 @@ bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring&
     std::tm tm = { 0 };
     localtime_s(&tm, &t);
 
+    auto time = std::put_time(&tm, "%Y-%m-%d_%H:%M:%S");
+	auto u8FileName = std::filesystem::path(file).filename().u8string();
+	auto u8Message = ToUTF8(message);
+
     // Level string
     std::string levelStr { 
         level == LevelDebug ? "DEBUG" :
@@ -39,10 +44,11 @@ bool Logger::Log(Level level, const wchar_t* file, int line, const std::wstring&
     };
 
 	// Output log message
-    (*mStream) << "[" << std::put_time(&tm, "%Y-%m-%d_%H:%M:%S") << "] "
+	std::lock_guard lock(mMutex); // Support concurrent logging from multiple threads.
+    (*mStream) << "[" << time << "] "
                << levelStr << " "
-               << (const char*)ToUTF8(file_path_base(file)).c_str() << ":" << line << " "
-               << (const char*)ToUTF8(message).c_str() << std::endl;
+               << std::string_view((const char*)u8FileName.data(), u8FileName.size()) << ":" << line << " "
+               << std::string_view((const char*)u8Message.data(), u8Message.size()) << std::endl;
     const bool good = mStream->good();
     if (!good) {
 		mStream->clear();

@@ -174,6 +174,7 @@ static bool LoadPlugin(const std::wstring& path) {
 	}
 
 	loadedPlugins[path] = pluginState;
+	LOG(Logger::LevelDebug, (L"Plugin loaded: " + path).c_str());
 	return true;
 }
 

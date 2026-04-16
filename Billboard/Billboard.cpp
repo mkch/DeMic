@@ -120,8 +120,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	if (!ok) {
 		host->DeleteRootMenuItem(state);
 	}
-
-	LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
 	return ok;
 }
 
@@ -136,7 +134,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
 	NULL,			/*Name*/
-	{1, 3},			/*Version*/
+	{1, 4},			/*Version*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
