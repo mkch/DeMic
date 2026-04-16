@@ -4,8 +4,8 @@
 #include <windows.h>
 #include <sstream>
 
-static inline void ShowError(const wchar_t* title, const wchar_t* msg) {
-	MessageBoxW(NULL, msg, title, MB_ICONERROR);
+static inline int ShowError(DeMic_Host* host, void* state, const wchar_t* msg) {
+	return host->ShowMessageBox(state, msg, MB_ICONERROR);
 }
 
 static inline void _LogError(DeMic_Host* host, void* state, const wchar_t* file, int line, DWORD lastError) {

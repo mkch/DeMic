@@ -91,6 +91,10 @@ extern "C" {
 		BOOL(*DeleteRootMenuItem)(void* state);
 		// Writes a log message to the default log file.
 		void (*WriteLog)(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message);
+		// Show a message box with a title containing the plugin name.
+		// This function uses the same type flags and return value as MessageBoxW.
+		// Added in SDK v3.
+		int(*ShowMessageBox)(void* state, const wchar_t* message, UINT utype);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

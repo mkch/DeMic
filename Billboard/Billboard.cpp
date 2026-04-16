@@ -77,7 +77,7 @@ void ReadConfig() {
 		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
-		ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
+		ShowError(host, state, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
 	}
 }
 
@@ -96,7 +96,7 @@ void WriteConfig() {
 	std::ofstream out(configFilePath);
 	out << std::setw(2) << config;
 	if (out.fail()) {
-		ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+		ShowError(host, state, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
 	}
 }
 

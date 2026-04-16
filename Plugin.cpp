@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <iostream>
+#include <format>
 #include "Plugin.h"
 #include "DeMic.h"
 #include "sdk/DeMicPlugin.h"
@@ -498,6 +499,11 @@ static void HostWriteLog(void* state, LogLevel level, const wchar_t* file, int l
 	Log(Logger::Level(level), file, line, message, ((PluginState*)state)->PluginInfo);
 }
 
+static int HostShowMessageBox(void* state, const wchar_t* message, UINT utype) {
+	auto title = std::format(L"{} - {}", strRes->Load(IDS_APP_TITLE), ((PluginState*)state)->PluginInfo->Name);
+	return MessageBoxW(mainWindow, message, title.c_str(), utype);
+}
+
 bool ProcessPluginMenuCmd(UINT id) {;
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
 		const auto state = plugin.second;
@@ -529,4 +535,5 @@ static DeMic_Host host = {
 	HostSetDefaultDevChangedListener,
 	HostDeleteRootMenuItem,
 	HostWriteLog,
+	HostShowMessageBox,
 };

@@ -41,7 +41,7 @@ static void ReadConfig() {
         config.ServerListenHost = configJson[CONFIG_SERVER_LISTEN_HOST].as_string();
         config.ServerListenPort = configJson[CONFIG_SERVER_LISTEN_PORT].as_string();
     } catch (const std::exception&) {
-        ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath.c_str()).c_str());
+        ShowError(host, state, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath.c_str()).c_str());
     }
 }
 
@@ -53,7 +53,7 @@ static void WriteConfig() {
     std::ofstream out(configFilePath);
     out << std::setw(2) << json::serialize(configJson);
     if (out.fail()) {
-        ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+        ShowError(host, state, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
     }
 }
 
@@ -101,7 +101,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     ReadConfig();
 
     if(config.ServerListenHost.empty() && config.ServerListenPort.empty()) {
-        ShowError(appTitle, strRes->Load(IDS_LACK_CONFIG).c_str());
+        ShowError(host, state, strRes->Load(IDS_LACK_CONFIG).c_str());
         return FALSE;
 	}
     InitHTTPServer();
@@ -110,22 +110,22 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     auto status = StartHTTPServer(config.ServerListenHost, config.ServerListenPort, errorMessage);
     switch (status) {
     case SERVER_INVALID_ADDRESS_FORMAT:
-        ShowError(appTitle, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
+        ShowError(host, state, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
         return false;
     case SERVER_INVALID_PORT:
-		ShowError(appTitle, formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str());
+		ShowError(host, state, formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str());
         return false;
     case SERVER_RESOLVE_ENDPOINT:
-        ShowError(appTitle, formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage).c_str());
+        ShowError(host, state, formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage).c_str());
         return false;
     case SERVER_BIND_ERROR:
-        ShowError(appTitle, formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage).c_str());
+        ShowError(host, state, formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage).c_str());
         return false;
     case SERVER_LISTEN_ERROR:
-        ShowError(appTitle, formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage).c_str());
+        ShowError(host, state, formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage).c_str());
 		return false;
     case SERVER_ERROR:
-        ShowError(appTitle, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
+        ShowError(host, state, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
         return false;
     }
 
