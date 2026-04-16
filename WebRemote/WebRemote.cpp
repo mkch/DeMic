@@ -17,7 +17,6 @@ StringRes* strRes = NULL;
 
 extern DeMic_PluginInfo plugin;
 std::vector<wchar_t> pluginName;
-const wchar_t* appTitle = NULL;
 
 
 static const char* const CONFIG_SERVER_LISTEN_HOST = "ServerListenHost";
@@ -66,7 +65,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         strRes = new StringRes(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
-        appTitle = plugin.Name;
 
         if (!CreateMessageWindow()) {
 			throw(Win32Error(GetLastError()));
