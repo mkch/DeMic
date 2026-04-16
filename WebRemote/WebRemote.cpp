@@ -4,7 +4,7 @@
 #include "../sdk/DemicPluginUtil.h"
 
 #include "WebRemote.h"
-#include "HTTPServer.h"
+#include "Server.h"
 #include "MessageWindow.h"
 
 HINSTANCE hInstance = NULL;
@@ -41,7 +41,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 DeMic_Host* host = NULL;
 void* state = NULL;
 
-std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
+static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
     auto& reason = strRes->Load(resId);
     if (message.empty()) {
         return reason;

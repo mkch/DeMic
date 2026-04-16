@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <ctime>
 
 namespace net_util {
 	
@@ -10,4 +11,6 @@ namespace net_util {
 	};
 
 	HostPort* SplitHostPort(const std::string_view& hostPort, HostPort* result);
+
+	std::string MakeHttpDate(const std::time_t& t);
 }

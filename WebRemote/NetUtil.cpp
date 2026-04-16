@@ -1,5 +1,7 @@
 #include "pch.h"
 #include <boost/url.hpp>
+#include <sstream>
+#include <iomanip>
 #include "NetUtil.h"
 
 namespace net_util {
@@ -23,5 +25,13 @@ namespace net_util {
 		auto port = authority->port();
 		result->Port = result->Port = std::string(port.data(), port.size());
 		return result;
+	}
+
+	std::string MakeHttpDate(const std::time_t& t) {
+		std::tm gm{};
+		gmtime_s(&gm, &t);
+		std::ostringstream oss;
+		oss << std::put_time(&gm, "%a, %d %b %Y %H:%M:%S GMT");
+		return oss.str();
 	}
 }
