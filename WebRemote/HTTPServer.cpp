@@ -15,11 +15,10 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
     }
 
     unsigned long portNumber = 0;
-    try {
-        portNumber = std::stoul(listen_port);
-    } catch (const std::exception&) {
+    if (std::from_chars(listen_port.data(), listen_port.data() + listen_port.size(), portNumber).ptr
+        != listen_port.data() + listen_port.size()) {
         throw InvalidPortException();
-    }
+	}
 
     if (portNumber > 0xFFFF) {
         throw InvalidPortException();
