@@ -27,15 +27,20 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
 
     tcp::endpoint endpoint;
     tcp::acceptor acceptor{ ioc };
-    bool emptyHost = listen_port.empty();
+    bool emptyHost = listen_host.empty();
     if (emptyHost) {
         // Empty host means listening on all interfaces.
-        // Listen on v6 first, and allow both v4 and v6 later on by:
-        // acceptor.set_option(net::ip::v6_only(false));
-        endpoint = tcp::endpoint(tcp::v6(), (net::ip::port_type)portNumber);
-        acceptor.open(endpoint.protocol());
-        // Allow both v4 and v6 connections.
-        acceptor.set_option(net::ip::v6_only(false));
+		boost::system::error_code ec;
+        // Try resove v6 first
+        if (!tcp::resolver(ioc).resolve(tcp::endpoint(tcp::v6(), 0), ec).empty() && !ec) { // IPv6 is supported.
+            endpoint = tcp::endpoint(tcp::v6(), (net::ip::port_type)portNumber);
+            acceptor.open(endpoint.protocol());
+            // Allow both v4 and v6 connections.
+            acceptor.set_option(net::ip::v6_only(false));
+		} else { // IPv6 is not supported, fallback to v4.
+            endpoint = tcp::endpoint(tcp::v4(), (net::ip::port_type)portNumber);
+            acceptor.open(endpoint.protocol());
+        }
     } else {
         tcp::resolver::results_type endpoints;
         try {

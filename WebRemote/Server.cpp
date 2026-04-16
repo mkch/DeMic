@@ -261,19 +261,13 @@ static net::awaitable<void> handler(Server::Conn& conn) {
 };
 
 
-HTTPServerResult StartHTTPServer(const std::wstring& address, std::wstring& errorMessage) {
+HTTPServerResult StartHTTPServer(const std::string& host, const std::string& port, std::wstring& errorMessage) {
     if (server) {
         throw std::logic_error("Server already running");
     }
-    auto u8addr = ToUTF8(address);
-    auto addr = std::string_view((const char*)u8addr.data(), u8addr.size());
 
-    net_util::HostPort hostPort{};
-    if (!net_util::SplitHostPort(addr, &hostPort)) {
-        return SERVER_INVALID_ADDRESS_FORMAT;
-    }
     try {
-        server.reset(new Server(hostPort.Host, hostPort.Port, std::move(handler)));
+        server.reset(new Server(host, port, std::move(handler)));
     } catch (const Server::InvalidPortException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_INVALID_PORT;

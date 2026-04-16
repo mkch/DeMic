@@ -13,7 +13,7 @@ enum HTTPServerResult {
 	SERVER_ERROR,
 };
 
-HTTPServerResult StartHTTPServer(const std::wstring& address, std::wstring& errorMessage);
+HTTPServerResult StartHTTPServer(const std::string& host, const std::string& port, std::wstring& errorMessage);
 bool StopHTTPServer();
 
 void NotifyStateChange(bool newState);

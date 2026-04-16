@@ -7,17 +7,62 @@
 #include "Server.h"
 #include "MessageWindow.h"
 
+#include <boost/json.hpp>
+#include <fstream>
+
 HINSTANCE hInstance = NULL;
+std::filesystem::path moduleFilePath;
+std::filesystem::path configFilePath;
 StringRes* strRes = NULL;
 
 extern DeMic_PluginInfo plugin;
 std::vector<wchar_t> pluginName;
 const wchar_t* appTitle = NULL;
 
+
+static const char* const CONFIG_SERVER_LISTEN_HOST = "ServerListenHost";
+static const char* const CONFIG_SERVER_LISTEN_PORT = "ServerListenPort";
+
+struct Configuration {
+	std::string ServerListenHost;
+    std::string ServerListenPort;
+};
+
+static Configuration config;
+
+static void ReadConfig() {
+    namespace json = boost::json;
+    std::ifstream in(configFilePath);
+    if (!in) {
+        return;
+    }
+    try {
+        auto configJson = json::parse(in).as_object();
+        config.ServerListenHost = configJson[CONFIG_SERVER_LISTEN_HOST].as_string();
+        config.ServerListenPort = configJson[CONFIG_SERVER_LISTEN_PORT].as_string();
+    } catch (const std::exception&) {
+        ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath.c_str()).c_str());
+    }
+}
+
+static void WriteConfig() {
+    namespace json = boost::json;
+    json::object configJson;
+    configJson[CONFIG_SERVER_LISTEN_HOST] = config.ServerListenHost;
+    configJson[CONFIG_SERVER_LISTEN_PORT] = config.ServerListenPort;
+    std::ofstream out(configFilePath);
+    out << std::setw(2) << json::serialize(configJson);
+    if (out.fail()) {
+        ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+    }
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH: {
         hInstance = hModule;
+		moduleFilePath = GetModuleFilePath(hModule);
+		configFilePath =moduleFilePath.replace_extension(L".json").wstring();
         strRes = new StringRes(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
@@ -53,15 +98,16 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
     
+    ReadConfig();
+
+    if(config.ServerListenHost.empty() && config.ServerListenPort.empty()) {
+        ShowError(appTitle, strRes->Load(IDS_LACK_CONFIG).c_str());
+        return FALSE;
+	}
     InitHTTPServer();
 
-    host->SetMicMuteStateListener(state, [] {
-        NotifyStateChange(host->IsMuted());
-	});
-    NotifyStateChange(host->IsMuted());
-
     std::wstring errorMessage;
-    auto status = StartHTTPServer(L"127.0.0.1:8080", errorMessage);
+    auto status = StartHTTPServer(config.ServerListenHost, config.ServerListenPort, errorMessage);
     switch (status) {
     case SERVER_INVALID_ADDRESS_FORMAT:
         ShowError(appTitle, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
@@ -82,12 +128,19 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         ShowError(appTitle, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
         return false;
     }
+
+    host->SetMicMuteStateListener(state, [] {
+        NotifyStateChange(host->IsMuted());
+        });
+    NotifyStateChange(host->IsMuted());
+
     return true;
 }
 
 static void OnUnload() {
     CancelStateChangeNotifications();
     StopHTTPServer();
+    WriteConfig();
 }
 
 
