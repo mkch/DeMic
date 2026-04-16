@@ -36,7 +36,6 @@ static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 
-std::wstring GetModuleFilePath();
 const std::wstring moduleFilePath = GetModuleFilePath(); // Full path of this exe.
 
 StringRes* strRes = NULL;
@@ -324,23 +323,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     return (int) msg.wParam;
-}
-
-// GetModuleFilePath returns the file path of this exe module.
-std::wstring GetModuleFilePath() {
-	DWORD size = MAX_PATH;
-	while(1) {
-		std::vector<wchar_t> buffer(size);
-		DWORD ret = GetModuleFileNameW(NULL, buffer.data(), DWORD(buffer.size()));
-		if (ret == 0) {
-			ShowError((std::wstringstream() << L"GetModuleFileNameW: " << GetLastError()).str().c_str());
-			DebugBreak();
-		}
-		if(ret < size) {
-			return std::wstring(buffer.data(), ret);
-		}
-		size *= 2;
-	}
 }
 
 // CommandLine returns the whole command line of this exe

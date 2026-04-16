@@ -7,6 +7,7 @@
 #include <cstddef> // for std::byte
 #include <stdexcept>
 #include <format>
+#include <filesystem>
 
 
 class StringRes {
@@ -106,3 +107,5 @@ public:
 // LoadModuleResource loads a resource in the module and returns its content as a byte span.
 // If the resource is not found, throws a Win32Error.
 std::span<const std::byte> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
+
+std::filesystem::path GetModuleFilePath(HMODULE hModule = 0);

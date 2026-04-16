@@ -125,3 +125,23 @@ std::span<const std::byte> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, L
     }
     return std::span<std::byte>(reinterpret_cast<std::byte*>(resData), resSize);
 }
+
+std::filesystem::path GetModuleFilePath(HMODULE hModule) {
+	std::wstring path(MAX_PATH, '\0');
+	for (;;) {
+		DWORD size = GetModuleFileNameW(hModule, path.data(), (DWORD)path.size());
+		if (size == 0) {
+			throw Win32Error(GetLastError());
+		}
+		if (size < path.size()) {
+			path.resize(size);
+			return path;
+		}
+		// The buffer is too small, increase it and try again.
+		const size_t newSize = path.size() * 2;
+		if (newSize > 32767) {
+			throw Win32Error(ERROR_FILENAME_EXCED_RANGE);
+		}
+		path.resize(newSize);
+	}
+}

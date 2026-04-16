@@ -145,7 +145,7 @@ void ReadConfig() {
             selectedDev[FromUTF8(u8Id)] = FromUTF8(u8Name);
         });
     } catch(...) {
-        ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
+        ShowError(plugin.Name, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath).c_str());
     }
 }
 
@@ -348,7 +348,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 3},			/*Version*/
+    {1, 4},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };
