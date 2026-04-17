@@ -15,6 +15,7 @@
 #include "WebRemote.h"
 #include "MessageWindow.h"
 #include "NetUtil.h"
+#include "VerificationCode.h"
 
 namespace urls = boost::urls;
 namespace net = boost::asio;
@@ -225,6 +226,25 @@ static net::awaitable<void>handleToggle(Server::Conn& conn) {
     co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::ok, version }));
 }
 
+static net::awaitable<void>handleVerifyCode(Server::Conn& conn, urls::url_view target) {
+    using status = http::status;
+
+    const auto version = conn.RequestHeader().version();
+    const auto method = conn.RequestHeader().method();
+
+    if (method != http::verb::get) {
+        co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
+    }
+
+    auto params = target.params();
+    auto code = params.find("code");
+    if (code == params.end() || !VerifyCode((*code).value)) {
+        co_return co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::bad_request, version }));
+    }
+    
+    co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::ok, version }));
+}
+
 
 static net::awaitable<void> handler(Server::Conn& conn) {
     // Read Header
@@ -255,6 +275,9 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     }
     if (path == "/toggle") {
         co_return co_await handleToggle(conn);
+    }
+    if (path == "/verify_code") {
+        co_return co_await handleVerifyCode(conn, url);
     }
 
     co_await handleNotFound(conn);

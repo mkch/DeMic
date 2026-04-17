@@ -6,6 +6,7 @@
 #include "WebRemote.h"
 #include "Server.h"
 #include "MessageWindow.h"
+#include "VerificationCode.h"
 
 #include <boost/json.hpp>
 #include <fstream>
@@ -92,6 +93,9 @@ static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
     return reason + L" " + message;
 }
 
+static HMENU subMenu = NULL;
+static UINT showVerificationCodeMenuItemId = 0;
+
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
     state = args->State;
@@ -132,10 +136,42 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         });
     NotifyStateChange(host->IsMuted());
 
+	subMenu = CreatePopupMenu();
+    if (subMenu == NULL) {
+        LOG_LAST_ERROR(host, state);
+        return FALSE;
+    }
+
+    showVerificationCodeMenuItemId = args->FirstMenuItemID;
+    auto showCodeTitle = strRes->Load(IDS_SHOW_VERIFICATION_CODE);
+    MENUITEMINFOW showCodeMenuItem = { sizeof(showCodeMenuItem), 0 };
+	showCodeMenuItem.fMask = MIIM_STRING | MIIM_ID;
+	showCodeMenuItem.dwTypeData = showCodeTitle.data();
+	showCodeMenuItem.cch = UINT(showCodeTitle.length());
+    showCodeMenuItem.wID = showVerificationCodeMenuItemId;
+    if(!InsertMenuItemW(subMenu, showVerificationCodeMenuItemId, FALSE, &showCodeMenuItem)) {
+        return FALSE;
+    }   
+
+    MENUITEMINFOW rootMenuItem = { sizeof(rootMenuItem), 0 };
+    rootMenuItem.fMask = MIIM_STRING | MIIM_SUBMENU;
+    rootMenuItem.dwTypeData = &pluginName[0];
+    rootMenuItem.cch = UINT(pluginName.size() - 1);
+    rootMenuItem.hSubMenu = subMenu;
+    if (!host->CreateRootMenuItem(state, &rootMenuItem)) {
+        return FALSE;
+    }
     return true;
 }
 
+static void OnMenuItemCmd(UINT id) {
+    if(id == showVerificationCodeMenuItemId) {
+		ShowVerificationCodeDialog();
+    }
+}
+
 static void OnUnload() {
+    DestroyMenu(subMenu);
     CancelStateChangeNotifications();
     StopHTTPServer();
     WriteConfig();
@@ -147,7 +183,7 @@ static DeMic_PluginInfo plugin = {
     L"Web Remote",	/*Name*/
     {1, 0},			/*Version*/
     OnLoaded,		/*OnLoaded*/
-    NULL,	        /*OnMenuItemCmd*/
+    OnMenuItemCmd,	/*OnMenuItemCmd*/
 	OnUnload,	    /*OnUnload*/
 
 };
