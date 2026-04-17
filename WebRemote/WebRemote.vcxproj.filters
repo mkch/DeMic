@@ -51,6 +51,9 @@
     <ClInclude Include="VerificationCode.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CryptoUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WebRemote.cpp">
@@ -75,6 +78,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="VerificationCode.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CryptoUtil.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

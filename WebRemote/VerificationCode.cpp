@@ -1,24 +1,19 @@
 #include "pch.h"
 #include <mutex>
 #include <thread>
-#include <random>
 
 #include "resource.h"
 #include "WebRemote.h"
+#include "CryptoUtil.h"
 
 static std::mutex codeMutex;
 static HWND dialog = NULL;
 static std::string verificationCode;
 
 static std::string GenerateRandomCode() {
-	static const int codeLength = 6;
-	static const char digits[] = "234567ACDEFGHJKMNPRSTUWXY";
-	std::random_device rd;
-	std::string code;
-	for (int i = 0; i < 6; i++) {
-		code += digits[rd() % (sizeof(digits)/sizeof(digits[0]) - 1)];
-	}
-	return code;
+	static const size_t CODE_LEN = 6;
+	constexpr std::string_view candidateChars = "234567ACDEFGHJKMNPRSTUWXY";
+	return GenerateRandomCode<char>(candidateChars, CODE_LEN);
 }
 
 static std::string GetDisplayString(const std::string& code) {

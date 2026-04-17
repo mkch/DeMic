@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "resource.h"
 #include <mutex>
+#include <set>
 
 #include <boost/url.hpp>
 #include <boost/asio.hpp>
@@ -16,6 +17,7 @@
 #include "MessageWindow.h"
 #include "NetUtil.h"
 #include "VerificationCode.h"
+#include "CryptoUtil.h"
 
 namespace urls = boost::urls;
 namespace net = boost::asio;
@@ -226,6 +228,37 @@ static net::awaitable<void>handleToggle(Server::Conn& conn) {
     co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::ok, version }));
 }
 
+class SessionStore {
+private:
+    static std::string GenerateSessionId() {
+        constexpr std::string_view candidateChars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_";
+        return GenerateRandomCode<char>(candidateChars, 32);
+    }
+private:
+    std::mutex mutex;
+    std::set<std::string> validSessions;
+public:
+    std::string CreateSession() {
+        std::lock_guard<std::mutex> guard(mutex);
+        std::string sessionId;
+        do {
+            sessionId = GenerateSessionId();
+        } while (validSessions.find(sessionId) != validSessions.end());
+        validSessions.insert(sessionId);
+        return sessionId;
+    }
+    bool VerifySession(const std::string& sessionId) {
+        std::lock_guard<std::mutex> guard(mutex);
+        auto it = validSessions.find(sessionId);
+        if (it == validSessions.end()) {
+            return false;
+        }
+        return true;
+    }
+};
+
+static SessionStore SessionStoreInstance;
+
 static net::awaitable<void>handleVerifyCode(Server::Conn& conn, urls::url_view target) {
     using status = http::status;
 
@@ -242,7 +275,39 @@ static net::awaitable<void>handleVerifyCode(Server::Conn& conn, urls::url_view t
         co_return co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::bad_request, version }));
     }
     
-    co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::ok, version }));
+	const auto sessionId = SessionStoreInstance.CreateSession();
+    http::response<http::empty_body>response{ status::ok, version };
+    response.set(http::field::set_cookie,
+        std::format("sessionid={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400", sessionId)); // 86400s = 24h
+    co_await conn.WriteResponse(std::move(response));
+}
+
+static bool VerifySession(const beast::http::request_header<>& requestHeader) {
+    auto cookieHeader = requestHeader.find(http::field::cookie);
+    if (cookieHeader == requestHeader.end()) {
+        return false; // No cookie.
+    }
+    std::string cookieString = cookieHeader->value();
+    std::string_view cookies = cookieString;
+    std::string_view sessionId;
+    while (!cookies.empty()) {
+        auto pos = cookies.find(';');
+        std::string_view cookie = cookies.substr(0, pos);
+        auto eqPos = cookie.find('=');
+        if (eqPos != std::string_view::npos) {
+            std::string_view name = cookie.substr(0, eqPos);
+            std::string_view value = cookie.substr(eqPos + 1);
+            if (name == "sessionid") {
+                sessionId = value;
+                break;
+            }
+        }
+        if (pos == std::string_view::npos) {
+            break;
+        }
+        cookies.remove_prefix(pos + 1);
+    }
+    return SessionStoreInstance.VerifySession(std::string(sessionId));
 }
 
 
@@ -258,6 +323,17 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     }
     auto url = target.value();
     const auto path = url.path();
+
+    if (path == "/verify_code") {
+        co_return co_await handleVerifyCode(conn, url);
+    }
+
+    if(!VerifySession(header)) {
+        // Not verified and not requesting verification code. Return 401 Unauthorized.
+        co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::unauthorized, header.version() }));
+        co_return;
+	}
+
     if (path == "/") {
         co_return co_await handleIndex(conn);
     }
@@ -275,9 +351,6 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     }
     if (path == "/toggle") {
         co_return co_await handleToggle(conn);
-    }
-    if (path == "/verify_code") {
-        co_return co_await handleVerifyCode(conn, url);
     }
 
     co_await handleNotFound(conn);
