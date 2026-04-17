@@ -93,6 +93,7 @@
     <None Include="server_resource\index.html">
       <Filter>web_resource</Filter>
     </None>
+    <None Include="server_resource\verify.html" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Microphone.png">

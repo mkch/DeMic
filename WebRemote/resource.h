@@ -16,9 +16,9 @@
 #define IDD_VERIFICATION_CODE_DIALOG    107
 #define IDS_READ_CONFIG_FAILED          108
 #define IDS_SAVE_CONFIG_FAILED          109
+#define IDR_SERVER_VERIFY_HTML          109
 #define IDS_LACK_CONFIG                 110
 #define IDS_SHOW_VERIFICATION_CODE      111
-#define IDC_REFRESH                     1003
 #define IDC_REFRESH_CODE                1003
 #define IDC_VERIFICATION_CODE_STATIC    -1
 
@@ -26,7 +26,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        109
+#define _APS_NEXT_RESOURCE_VALUE        110
 #define _APS_NEXT_COMMAND_VALUE         40001
 #define _APS_NEXT_CONTROL_VALUE         1004
 #define _APS_NEXT_SYMED_VALUE           101

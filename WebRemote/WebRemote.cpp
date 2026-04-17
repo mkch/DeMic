@@ -66,17 +66,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         strRes = new StringRes(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
-
-        if (!CreateMessageWindow()) {
-			throw(Win32Error(GetLastError()));
-        }
         break;
     }
     case DLL_PROCESS_DETACH:
         if (lpReserved != nullptr) {
             break; // do not do cleanup if process termination scenario
         }
-        DestroyMessageWindow();
         break;
     }
     return TRUE;
@@ -150,6 +145,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	showCodeMenuItem.cch = UINT(showCodeTitle.length());
     showCodeMenuItem.wID = showVerificationCodeMenuItemId;
     if(!InsertMenuItemW(subMenu, showVerificationCodeMenuItemId, FALSE, &showCodeMenuItem)) {
+        LOG_LAST_ERROR(host, state);
         return FALSE;
     }   
 
@@ -159,9 +155,15 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.cch = UINT(pluginName.size() - 1);
     rootMenuItem.hSubMenu = subMenu;
     if (!host->CreateRootMenuItem(state, &rootMenuItem)) {
+        LOG_LAST_ERROR(host, state);
         return FALSE;
     }
-    return true;
+
+    if (!CreateMessageWindow()) {
+        LOG_LAST_ERROR(host, state);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static void OnMenuItemCmd(UINT id) {
@@ -171,6 +173,8 @@ static void OnMenuItemCmd(UINT id) {
 }
 
 static void OnUnload() {
+    DestroyVerificationCodeDialog();
+    DestroyMessageWindow();
     DestroyMenu(subMenu);
     CancelStateChangeNotifications();
     StopHTTPServer();

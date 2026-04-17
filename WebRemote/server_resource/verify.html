@@ -1,0 +1,59 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <title>DeMic WebRemote Verify</title>
+    <style>
+        .center-div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class='center-div' style='height:40px'>
+        Please input the verification code to verify your device.
+    </div>
+    <form onsubmit='doSubmit(); return false;'>
+        <div class='center-div' style='height:40px'>
+            <input id='code'>
+        </div>
+        <div class='center-div' style='height:30px'>
+            <button id='submit-button' type='submit'>Submit</button>
+        </div>
+    </form>
+
+    <script>
+        async function doSubmit() {
+            const button = document.querySelector('#submit-button');
+            button.disabled = true;
+            const code = document.getElementById('code');
+            try {
+                const response = await fetch(`/verify_code?code=${encodeURIComponent(code.value.trim().toUpperCase())}`);
+                button.disable = false;
+                switch(response.status) {
+                    case 200:
+                        window.location.href = '/';
+                        break;
+                    case 400:
+                        alert('Invalid verification code! Please try again.');
+                        code.value = "";
+                        code.focus();
+                        break;
+                }
+            } catch(e) {
+                alert('Server error!');
+            }
+            button.disabled = false;
+        }
+    </script>
+
+</body>   
+
+</html>

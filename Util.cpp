@@ -106,26 +106,6 @@ std::u8string ToUTF8(const std::wstring_view& str) {
     return ToUTF8(str.data(), str.size());
 }
 
-std::span<const std::byte> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage) {
-    HRSRC hRes = FindResourceExW(hModule, lpType, lpName, wLanguage);
-    if (!hRes) {
-        throw Win32Error(GetLastError());
-    }
-    HGLOBAL hResLoad = LoadResource(hModule, hRes);
-    if (!hResLoad) {
-        throw Win32Error(GetLastError());
-    }
-    DWORD resSize = SizeofResource(hModule, hRes);
-    if (resSize == 0) {
-        throw Win32Error(GetLastError());
-    }
-    void* resData = LockResource(hResLoad);
-    if (!resData) {
-        throw Win32Error(GetLastError());
-    }
-    return std::span<std::byte>(reinterpret_cast<std::byte*>(resData), resSize);
-}
-
 std::filesystem::path GetModuleFilePath(HMODULE hModule) {
 	std::wstring path(MAX_PATH, '\0');
 	for (;;) {

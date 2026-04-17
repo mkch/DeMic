@@ -92,7 +92,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 					EndDialog(hwnd, 0);
 					return TRUE;
 				}
-				case IDC_REFRESH: {
+				case IDC_REFRESH_CODE: {
 					PostMessage(hwnd, UM_REFRESH_CODE, 0, 0);
 					return TRUE;
 				}
@@ -110,13 +110,23 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			verificationCode.clear();
 			dialog = NULL;
 			DeleteObject(codeFont);
+			return TRUE;
 		}
+		case WM_NCDESTROY:
+			dialog = NULL;
+			return TRUE;
 	}
 	return 0;
 }
 
 void ShowVerificationCodeDialog() {
 	DialogBoxW(hInstance, MAKEINTRESOURCE(IDD_VERIFICATION_CODE_DIALOG), nullptr, DlgProc);
+}
+
+void DestroyVerificationCodeDialog() {
+	if (dialog) {
+		DestroyWindow(dialog);
+	}
 }
 
 bool VerifyCode(const std::string& code) {

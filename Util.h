@@ -106,6 +106,25 @@ public:
 
 // LoadModuleResource loads a resource in the module and returns its content as a byte span.
 // If the resource is not found, throws a Win32Error.
-std::span<const std::byte> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
+template<class T>
+static std::span<const T> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL)) {
+	HRSRC hRes = FindResourceExW(hModule, lpType, lpName, wLanguage);
+	if (!hRes) {
+		throw Win32Error(GetLastError());
+	}
+	HGLOBAL hResLoad = LoadResource(hModule, hRes);
+	if (!hResLoad) {
+		throw Win32Error(GetLastError());
+	}
+	DWORD resSize = SizeofResource(hModule, hRes);
+	if (resSize == 0) {
+		throw Win32Error(GetLastError());
+	}
+	void* resData = LockResource(hResLoad);
+	if (!resData) {
+		throw Win32Error(GetLastError());
+	}
+	return std::span<const T>(reinterpret_cast<const T*>(resData), resSize / sizeof(T));
+}
 
 std::filesystem::path GetModuleFilePath(HMODULE hModule = 0);

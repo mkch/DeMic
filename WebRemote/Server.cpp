@@ -76,9 +76,6 @@ static net::awaitable<StateType> async_wait_state_change(beast::tcp_stream::exec
     co_return co_await ch->async_receive(net::use_awaitable);
 }
 
-// loadTime is the time when this module is loaded.
-const std::time_t loadTime = std::time(nullptr);
-
 template<class Body>
 static void setHttpLastModifiedHeader(http::response<Body>& response, const time_t& t) {
     response.set(http::field::last_modified, net_util::MakeHttpDate(t));
@@ -94,16 +91,18 @@ bool StopHTTPServer() {
     return true;
 }
 
-static std::span<const std::byte> IndexResource;
+static std::span<const char> IndexResource;
+static std::span<const char> VerifyResource;
 static std::span<const std::byte> MutedPngResource;
 static std::span<const std::byte> UnmutedPngResource;
 static std::span<const std::byte> LoadingPngResource;
 
 void InitHTTPServer() {
-    IndexResource = LoadModuleResource(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
-    MutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
-    UnmutedPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_UNMUTED));
-    LoadingPngResource = LoadModuleResource(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_LOADING));
+    IndexResource = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
+	VerifyResource = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_VERIFY_HTML));
+    MutedPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
+    UnmutedPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_UNMUTED));
+    LoadingPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_LOADING));
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
@@ -144,8 +143,20 @@ static net::awaitable<void> handleServerError(Server::Conn& conn, const std::str
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> handleIndex(Server::Conn& conn) {
+// handleModuleResource writes the specified resource to the response with the specified content type.
+// It also handles the "If-Modified-Since" header and writes a `304 Not Modified` response if the resource
+// has not been modified since the specified time.
+//
+// The contentType parameter can't be of type `const std::string&` because of warnning C26811.
+// But the data referenced by contentType must be valid until the response is written, i.e. passing
+// a string literal.
+template<class SpanElementType>
+static net::awaitable<void> handleModuleResource(Server::Conn& conn,  const std::string_view contentType, std::span<SpanElementType> res) {
     using status = http::status;
+
+	// The last modified time of the resource.
+    // Since the resource is embedded in the module, we can use the first call time as the last modified time.
+    static const std::time_t lastModified = std::time(nullptr);
 
     const auto version = conn.RequestHeader().version();
     const auto method = conn.RequestHeader().method();
@@ -154,16 +165,18 @@ static net::awaitable<void> handleIndex(Server::Conn& conn) {
         co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
         co_return;
     }
-    if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
+    if (co_await handleHttpIfModifiedSince(conn, lastModified)) { // HERE
         co_return;
     }
-    http::response<http::string_body> response{ http::status::ok, version };
-    setHttpLastModifiedHeader(response, loadTime);
-    response.set(http::field::content_type, "text/html");
+    http::response<http::buffer_body> response{ http::status::ok, version };
+    setHttpLastModifiedHeader(response, lastModified);
+    response.set(http::field::content_type, contentType);
     if (method == http::verb::head) {
-        response.set(http::field::content_length, std::to_string(IndexResource.size_bytes()));
+        response.set(http::field::content_length, std::to_string(res.size_bytes()));
     } else {
-        response.body() = std::string_view(reinterpret_cast<const char*>(IndexResource.data()), IndexResource.size());
+        response.body().data = (void*)(res.data());
+        response.body().size = res.size_bytes();
+        response.body().more = false;
         response.prepare_payload();
     }
     co_await conn.WriteResponse(std::move(response));
@@ -181,33 +194,6 @@ static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_
     response.set(http::field::content_type, "text/html");
     response.body() = body;
     response.prepare_payload();
-    co_await conn.WriteResponse(std::move(response));
-}
-
-static net::awaitable<void> handlePNG(Server::Conn& conn, std::span<const std::byte> res) {
-    using status = http::status;
-
-    const auto version = conn.RequestHeader().version();
-    const auto method = conn.RequestHeader().method();
-
-    if (method != http::verb::get && method != http::verb::head) {
-        co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
-    }
-    if (co_await handleHttpIfModifiedSince(conn, loadTime)) {
-        co_return;
-    }
-    http::response<http::buffer_body> response{ http::status::ok, version };
-    setHttpLastModifiedHeader(response, loadTime);
-    response.set(http::field::content_type, "image/png");
-    if (method == http::verb::head) {
-        response.set(http::field::content_length, std::to_string(res.size_bytes()));
-    } else {
-        response.set(http::field::content_type, "image/png");
-        response.body().data = const_cast<std::byte*>(res.data());
-        response.body().size = res.size();
-        response.body().more = false;
-        response.prepare_payload();
-    }
     co_await conn.WriteResponse(std::move(response));
 }
 
@@ -324,30 +310,40 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     auto url = target.value();
     const auto path = url.path();
 
+    if (path == "/verify") {
+        co_return co_await handleModuleResource(conn, "text/html", VerifyResource);
+    }
     if (path == "/verify_code") {
         co_return co_await handleVerifyCode(conn, url);
     }
 
     if(!VerifySession(header)) {
-        // Not verified and not requesting verification code. Return 401 Unauthorized.
+        if (path == "/") {
+			// Redirect to /verify if not verified when trying to access the index page.
+            http::response<http::string_body> response{ http::status::found, header.version() };
+            response.set(http::field::location, "/verify");
+            response.prepare_payload();
+            co_return co_await conn.WriteResponse(std::move(response));
+        }
+        // Not verified. Return 401 Unauthorized.
         co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::unauthorized, header.version() }));
         co_return;
 	}
 
     if (path == "/") {
-        co_return co_await handleIndex(conn);
+        co_return co_await handleModuleResource(conn, "text/html", IndexResource);
+    }
+    if (path == "/res/muted.png") {
+        co_return co_await handleModuleResource(conn, "image/png", MutedPngResource);
+    }
+    if (path == "/res/unmuted.png") {
+        co_return co_await handleModuleResource(conn, "image/png", UnmutedPngResource);
+    }
+    if (path == "/res/loading.png") {
+        co_return co_await handleModuleResource(conn, "image/png", LoadingPngResource);
     }
     if (path == "/wait_state_change") {
         co_return co_await handleWaitStateChange(conn, url);
-    }
-    if (path == "/res/muted.png") {
-        co_return co_await handlePNG(conn, MutedPngResource);
-    }
-    if (path == "/res/unmuted.png") {
-        co_return co_await handlePNG(conn, UnmutedPngResource);
-    }
-    if (path == "/res/loading.png") {
-        co_return co_await handlePNG(conn, LoadingPngResource);
     }
     if (path == "/toggle") {
         co_return co_await handleToggle(conn);
