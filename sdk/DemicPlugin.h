@@ -97,6 +97,7 @@ extern "C" {
 		// Added in SDK v3.	
 		HWND(*GetMainWindow)(void* state);
 		// Gets the localized DeMic application title.
+		// Added in SDK v3.	
 		const wchar_t* (*GetAppTitle)(void* state);
 	};
 
