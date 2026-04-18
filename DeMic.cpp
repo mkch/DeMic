@@ -641,6 +641,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
+            if (!IsWindowEnabled(mainWindow)) {
+                // Has modal dialog open, do not show menu.
+                return 0;
+            }
             CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
             GetCursorPos(&pt);

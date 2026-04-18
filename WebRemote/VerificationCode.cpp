@@ -120,7 +120,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 }
 
 void ShowVerificationCodeDialog() {
-	DialogBoxW(hInstance, MAKEINTRESOURCE(IDD_VERIFICATION_CODE_DIALOG), nullptr, DlgProc);
+	DialogBoxW(hInstance, MAKEINTRESOURCE(IDD_VERIFICATION_CODE_DIALOG), host->GetMainWindow(state), DlgProc);
 }
 
 void DestroyVerificationCodeDialog() {

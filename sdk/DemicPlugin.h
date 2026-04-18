@@ -95,6 +95,10 @@ extern "C" {
 		// This function uses the same type flags and return value as MessageBoxW.
 		// Added in SDK v3.
 		int(*ShowMessageBox)(void* state, const wchar_t* message, UINT utype);
+		// Gets the main window handle of DeMic. 
+		// Must be used for parent window when creating winows in plugin.
+		// Added in SDK v3.
+		HWND(*GetMainWindow)(void* state);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

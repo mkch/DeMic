@@ -504,6 +504,10 @@ static int HostShowMessageBox(void* state, const wchar_t* message, UINT utype) {
 	return MessageBoxW(mainWindow, message, title.c_str(), utype);
 }
 
+static HWND HostGetMainWindow(void* state) {
+	return mainWindow;
+}
+
 bool ProcessPluginMenuCmd(UINT id) {;
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(), [id](const std::pair<std::wstring, const PluginState*> plugin) {
 		const auto state = plugin.second;
@@ -536,4 +540,5 @@ static DeMic_Host host = {
 	HostDeleteRootMenuItem,
 	HostWriteLog,
 	HostShowMessageBox,
+	HostGetMainWindow,
 };
