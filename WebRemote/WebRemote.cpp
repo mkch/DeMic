@@ -103,29 +103,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	}
     InitHTTPServer();
 
-    std::wstring errorMessage;
-    auto status = StartHTTPServer(config.ServerListenHost, config.ServerListenPort, errorMessage);
-    switch (status) {
-    case SERVER_INVALID_ADDRESS_FORMAT:
-        ShowError(host, state, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
-        return false;
-    case SERVER_INVALID_PORT:
-		ShowError(host, state, formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str());
-        return false;
-    case SERVER_RESOLVE_ENDPOINT:
-        ShowError(host, state, formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage).c_str());
-        return false;
-    case SERVER_BIND_ERROR:
-        ShowError(host, state, formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage).c_str());
-        return false;
-    case SERVER_LISTEN_ERROR:
-        ShowError(host, state, formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage).c_str());
-		return false;
-    case SERVER_ERROR:
-        ShowError(host, state, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
-        return false;
-    }
-
     host->SetMicMuteStateListener(state, [] {
         NotifyStateChange(host->IsMuted());
         });
@@ -156,13 +133,46 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.hSubMenu = subMenu;
     if (!host->CreateRootMenuItem(state, &rootMenuItem)) {
         LOG_LAST_ERROR(host, state);
+		DestroyMenu(subMenu);
         return FALSE;
     }
 
     if (!CreateMessageWindow()) {
         LOG_LAST_ERROR(host, state);
+		host->DeleteRootMenuItem(state);
+        DestroyMenu(subMenu);
         return FALSE;
     }
+
+    std::wstring errorMessage;
+    auto status = StartHTTPServer(config.ServerListenHost, config.ServerListenPort, errorMessage);
+    if(status != SERVER_OK) {
+        switch (status) {
+        case SERVER_INVALID_ADDRESS_FORMAT:
+            ShowError(host, state, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
+            break;
+        case SERVER_INVALID_PORT:
+            ShowError(host, state, formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str());
+            break;
+        case SERVER_RESOLVE_ENDPOINT:
+            ShowError(host, state, formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage).c_str());
+            break;
+        case SERVER_BIND_ERROR:
+            ShowError(host, state, formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage).c_str());
+            break;
+        case SERVER_LISTEN_ERROR:
+            ShowError(host, state, formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage).c_str());
+            break;
+        case SERVER_ERROR:
+            ShowError(host, state, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
+            break;
+        }
+        host->DeleteRootMenuItem(state);
+        DestroyMenu(subMenu);
+        DestroyMessageWindow();
+        return FALSE;
+	}
+    
     return TRUE;
 }
 
@@ -173,11 +183,11 @@ static void OnMenuItemCmd(UINT id) {
 }
 
 static void OnUnload() {
+    StopHTTPServer();
     DestroyVerificationCodeDialog();
     DestroyMessageWindow();
     DestroyMenu(subMenu);
     CancelStateChangeNotifications();
-    StopHTTPServer();
     WriteConfig();
 }
 
