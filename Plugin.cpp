@@ -222,6 +222,20 @@ void LoadPlugins() {
 	});
 }
 
+BOOL OnPluginPreTranslateMessage(MSG* msg) {
+	for (auto plugin : loadedPlugins) {
+		auto pluginInfo = plugin.second->PluginInfo;
+		if(pluginInfo->SDKVersion < 3) {
+			continue;
+		}
+		auto handler = pluginInfo->OnPreTranslateMessage;
+		if (handler && handler(msg)) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static std::wstring GetPluginDisplayName(const std::wstring& path, const DeMic_PluginInfo* info) {
 	return (std::wostringstream() << info->Name
 		<< L" v" << info->Version.Major << L"." << info->Version.Minor
@@ -453,7 +467,7 @@ static void HostSetInitMenuPopupListener(void* st, HMENU menu, void(*listener)(H
 	}
 }
 
-void CallPluginInitMenuPopupListener(HMENU menu) {
+void CallPluginInitMenuPopupListeners(HMENU menu) {
 	std::for_each(loadedPlugins.begin(), loadedPlugins.end(),
 		[menu](const auto pair) {
 			const auto plugin = pair.second;

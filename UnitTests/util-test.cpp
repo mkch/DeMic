@@ -300,7 +300,7 @@ TEST(UtilTest, Win32Error) {
 #include "resource.h"
 
 TEST(UtilTest, LoadModuleResource) {
-    auto resource = LoadModuleResource(NULL, L"TEST_RESOURCE", MAKEINTRESOURCEW(IDR_TEST_RESOURCE1));
+    auto resource = LoadModuleResource<std::byte>(NULL, L"TEST_RESOURCE", MAKEINTRESOURCEW(IDR_TEST_RESOURCE1));
 	auto data = std::string_view(reinterpret_cast<const char*>(resource.data()), resource.size());
 	EXPECT_EQ("ABCD", data);
 }

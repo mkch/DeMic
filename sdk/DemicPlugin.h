@@ -35,6 +35,13 @@ extern "C" {
 		// OnUnload is called before this plugin is unloaded. Can be NULL.
 		// Added in SDK v3.
 		void(*OnUnload)();
+		// OnPreTranslateMessage is called in the main message loop before
+		// TranslateMessage, if not NULL.
+		// It is useful when the plugin needs to call IsDialogMessage for modeless dialogs.
+		// Returning TRUE prevents the call of TranslateMessage.
+		// Can be NULL.
+		// Added in SDK v3.
+		BOOL(*OnPreTranslateMessage)(MSG*);
 	};
 
 	enum LogLevel {

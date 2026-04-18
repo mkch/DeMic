@@ -312,10 +312,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+        if (OnPluginPreTranslateMessage(&msg)) {
+            continue;
         }
+        if (TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     return (int) msg.wParam;
@@ -680,7 +684,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
             auto menu = (HMENU)wParam;
             if (menu == popupMenu) {
-                CallPluginInitMenuPopupListener(NULL);
+                CallPluginInitMenuPopupListeners(NULL);
                 break;
             }
             if (menu == pluginMenu) {
@@ -694,7 +698,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     LOG_LAST_ERROR();
                 }
             }
-            CallPluginInitMenuPopupListener(menu);
+            CallPluginInitMenuPopupListeners(menu);
             break;
         }
     }
