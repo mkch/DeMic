@@ -5,7 +5,7 @@
 #include <sstream>
 
 static inline int ShowError(DeMic_Host* host, void* state, const wchar_t* msg) {
-	return host->ShowMessageBox(state, msg, MB_ICONERROR);
+	return MessageBoxW(host->GetMainWindow(state), msg, host->GetAppTitle(state), MB_ICONERROR);
 }
 
 static inline void _LogError(DeMic_Host* host, void* state, const wchar_t* file, int line, DWORD lastError) {

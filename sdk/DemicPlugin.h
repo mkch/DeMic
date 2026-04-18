@@ -82,7 +82,7 @@ extern "C" {
 		void(*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
 		// Forces DeMic to call micphone state changed handler.
 		void(*NotifyMicStateChanged)();
-		// Get the devault microphone device ID.
+		// Gets the devault microphone device ID.
 		// Empty string if not found.
 		void(*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Sets a listener called when default microphone device is changed.
@@ -91,14 +91,13 @@ extern "C" {
 		BOOL(*DeleteRootMenuItem)(void* state);
 		// Writes a log message to the default log file.
 		void (*WriteLog)(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message);
-		// Show a message box with a title containing the plugin name.
-		// This function uses the same type flags and return value as MessageBoxW.
-		// Added in SDK v3.
-		int(*ShowMessageBox)(void* state, const wchar_t* message, UINT utype);
 		// Gets the main window handle of DeMic. 
-		// Must be used for parent window when creating winows in plugin.
-		// Added in SDK v3.
+		// Must be used for parent window when creating windows in plugin. 
+		// It is important for maintaining correct window modeling. 
+		// Added in SDK v3.	
 		HWND(*GetMainWindow)(void* state);
+		// Gets the localized DeMic application title.
+		const wchar_t* (*GetAppTitle)(void* state);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

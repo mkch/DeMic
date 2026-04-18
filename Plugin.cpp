@@ -499,13 +499,12 @@ static void HostWriteLog(void* state, LogLevel level, const wchar_t* file, int l
 	Log(Logger::Level(level), file, line, message, ((PluginState*)state)->PluginInfo);
 }
 
-static int HostShowMessageBox(void* state, const wchar_t* message, UINT utype) {
-	auto title = std::format(L"{} - {}", strRes->Load(IDS_APP_TITLE), ((PluginState*)state)->PluginInfo->Name);
-	return MessageBoxW(mainWindow, message, title.c_str(), utype);
-}
-
 static HWND HostGetMainWindow(void* state) {
 	return mainWindow;
+}
+
+static const wchar_t* GetAppTitle(void* state) {
+	return strRes->Load(IDS_APP_TITLE).c_str();
 }
 
 bool ProcessPluginMenuCmd(UINT id) {;
@@ -539,6 +538,6 @@ static DeMic_Host host = {
 	HostSetDefaultDevChangedListener,
 	HostDeleteRootMenuItem,
 	HostWriteLog,
-	HostShowMessageBox,
 	HostGetMainWindow,
+	GetAppTitle,
 };
