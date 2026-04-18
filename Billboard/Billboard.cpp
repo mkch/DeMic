@@ -33,23 +33,13 @@ BOOL WINAPI DllMain(
 		strRes = new StringRes(hinstDLL);
 		pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
 		plugin.Name = &pluginName[0];
-
-		wchar_t configFile[1024] = { 0 };
-		const DWORD gmfn = GetModuleFileNameW(hInstance, configFile, sizeof(configFile) / sizeof(configFile[0]));
-		VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
-		configFilePath = configFile;
-		configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
 		break;
 	}
     case DLL_PROCESS_DETACH:
 		// Perform any necessary cleanup.
-		DestroyBillboardWnd(); // We need to trigger WM_DESTROY to save config file.
         if (lpvReserved != nullptr) {
             break; // do not do cleanup if process termination scenario
         }
-		if (host && state) {
-			host->DeleteRootMenuItem(state);
-		}
         break;
     }
     return TRUE;
@@ -107,6 +97,12 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	host = h;
 	state = args->State;
 
+	wchar_t configFile[1024] = { 0 };
+	const DWORD gmfn = GetModuleFileNameW(hInstance, configFile, sizeof(configFile) / sizeof(configFile[0]));
+	VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
+	configFilePath = configFile;
+	configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
+
 	MENUITEMINFOW rootMenuItem = {sizeof(rootMenuItem), 0};
 	rootMenuItem.fMask = MIIM_STRING;
 	auto title = DupCStr(strRes->Load(IDS_OPEN_BILLBOARD));
@@ -123,6 +119,10 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	return ok;
 }
 
+static void OnUnload() {
+	DestroyBillboardWnd(); // We need to trigger WM_DESTROY to save config file.
+}
+
 static void OnMenuItemCmd(UINT id) {
 	switch (id) {
 	case 0: // The root menu item.
@@ -131,12 +131,14 @@ static void OnMenuItemCmd(UINT id) {
 	}
 }
 
+
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
 	NULL,			/*Name*/
 	{1, 4},			/*Version*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
+	OnUnload,		/*OnUnload*/
 };
 
 extern "C" DeMic_PluginInfo* GetPluginInfo(void) {

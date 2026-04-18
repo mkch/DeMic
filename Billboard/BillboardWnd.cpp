@@ -263,7 +263,7 @@ BOOL CreateBillboardWnd() {
         return FALSE;
     }
     BillboardWnd = CreateWindowW(szWindowClass, strRes->Load(IDS_BILLBOARD).c_str(), WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 550, 400, nullptr, nullptr, hInstance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 550, 400, host->GetMainWindow(state), nullptr, hInstance, nullptr);
 
     if (!BillboardWnd) {
         LOG_LAST_ERROR(host, state);
