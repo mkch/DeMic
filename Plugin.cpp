@@ -42,15 +42,17 @@ std::wstring GetPluginDir() {
 static std::unordered_map<std::wstring, PluginState*> loadedPlugins;
 
 struct PluginState {
-	PluginState(const std::wstring& path, HMODULE hDll, DeMic_PluginInfo* pluginInfo, UINT firstMenuItemID, UINT lastMenuItemID) :
+	PluginState(const std::wstring& path, HMODULE hDll, DeMic_PluginInfo* pluginInfo, UINT firstMenuItemID, UINT lastMenuItemID, const std::wstring& messageCaption) :
 		Path(path),
 		hModule(hDll),
 		PluginInfo(pluginInfo),
 		RootMenuItemID(firstMenuItemID),
 		FirstMenuItemID(firstMenuItemID), 
-		LastMenuItemID(lastMenuItemID) {}
+		LastMenuItemID(lastMenuItemID),
+		MessageCaption(messageCaption){}
 	// File path of this plugin.
 	const std::wstring Path;
+	const std::wstring MessageCaption;
 	const HMODULE hModule;
 	const DeMic_PluginInfo* const PluginInfo;
 	const UINT RootMenuItemID;
@@ -163,7 +165,7 @@ static bool LoadPlugin(const std::wstring& path) {
 	const auto lastID = idRange.second;
 	const auto OldNextMenuItemID = nextMenuItemID;
 	nextMenuItemID = lastID + 1;
-	PluginState* pluginState = new PluginState(path, info.first, info.second, firstID, lastID);
+	PluginState* pluginState = new PluginState(path, info.first, info.second, firstID, lastID, std::format(L"{} - {}", strRes->Load(IDS_APP_TITLE), info.second->Name));
 
 	DeMic_OnLoadedArgs args = { pluginState, pluginState->FirstMenuItemID + 1, pluginState->LastMenuItemID };
 
@@ -517,8 +519,8 @@ static HWND HostGetMainWindow(void* state) {
 	return mainWindow;
 }
 
-static const wchar_t* GetAppTitle(void* state) {
-	return strRes->Load(IDS_APP_TITLE).c_str();
+static const wchar_t* HostGetMessageCaption(void* state) {
+	return ((PluginState*)state)->MessageCaption.c_str();
 }
 
 bool ProcessPluginMenuCmd(UINT id) {;
@@ -553,5 +555,5 @@ static DeMic_Host host = {
 	HostDeleteRootMenuItem,
 	HostWriteLog,
 	HostGetMainWindow,
-	GetAppTitle,
+	HostGetMessageCaption,
 };

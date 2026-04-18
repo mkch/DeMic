@@ -103,9 +103,9 @@ extern "C" {
 		// It is important for maintaining correct window modeling. 
 		// Added in SDK v3.	
 		HWND(*GetMainWindow)(void* state);
-		// Gets the localized DeMic application title.
+		// Gets the localized title can be used as dialog caption in plugin.
 		// Added in SDK v3.	
-		const wchar_t* (*GetAppTitle)(void* state);
+		const wchar_t* (*GetMessageCaption)(void* state);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.

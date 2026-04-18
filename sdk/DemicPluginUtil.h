@@ -3,9 +3,10 @@
 #include "DemicPlugin.h"
 #include <windows.h>
 #include <sstream>
+#include <format>
 
 static inline int ShowError(DeMic_Host* host, void* state, const wchar_t* msg) {
-	return MessageBoxW(host->GetMainWindow(state), msg, host->GetAppTitle(state), MB_ICONERROR);
+	return MessageBoxW(host->GetMainWindow(state), msg, host->GetMessageCaption(state), MB_ICONERROR);
 }
 
 static inline void _LogError(DeMic_Host* host, void* state, const wchar_t* file, int line, DWORD lastError) {
