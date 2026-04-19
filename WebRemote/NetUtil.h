@@ -1,7 +1,9 @@
 #pragma once
 
+#include <windows.h>
 #include <string>
 #include <ctime>
+#include <vector>
 
 namespace net_util {
 	
@@ -13,4 +15,6 @@ namespace net_util {
 	HostPort* SplitHostPort(const std::string_view& hostPort, HostPort* result);
 
 	std::string MakeHttpDate(const std::time_t& t);
+
+	std::vector<std::string> GetAllBindableAddresses(DWORD& errorCode);
 }

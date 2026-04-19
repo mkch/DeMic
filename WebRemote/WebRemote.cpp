@@ -7,6 +7,7 @@
 #include "Server.h"
 #include "MessageWindow.h"
 #include "VerificationCode.h"
+#include "ConfigListenAddr.h"
 
 #include <boost/json.hpp>
 #include <fstream>
@@ -23,12 +24,7 @@ std::vector<wchar_t> pluginName;
 static const char* const CONFIG_SERVER_LISTEN_HOST = "ServerListenHost";
 static const char* const CONFIG_SERVER_LISTEN_PORT = "ServerListenPort";
 
-struct Configuration {
-	std::string ServerListenHost;
-    std::string ServerListenPort;
-};
-
-static Configuration config;
+Configuration config;
 
 static void ReadConfig() {
     namespace json = boost::json;
@@ -45,7 +41,7 @@ static void ReadConfig() {
     }
 }
 
-static void WriteConfig() {
+void WriteConfig() {
     namespace json = boost::json;
     json::object configJson;
     configJson[CONFIG_SERVER_LISTEN_HOST] = config.ServerListenHost;
@@ -90,6 +86,7 @@ static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
 
 static HMENU subMenu = NULL;
 static UINT showVerificationCodeMenuItemId = 0;
+static UINT configListenAddrMenuItemID = 0;
 
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     host = h;
@@ -124,7 +121,19 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     if(!InsertMenuItemW(subMenu, showVerificationCodeMenuItemId, FALSE, &showCodeMenuItem)) {
         LOG_LAST_ERROR(host, state);
         return FALSE;
-    }   
+    }
+
+	configListenAddrMenuItemID = args->FirstMenuItemID + 1;
+    auto configAddrTitle = strRes->Load(IDS_CONFIG_LISTEN_ADDR);
+    MENUITEMINFOW configAddrMenuItem = { sizeof(configAddrMenuItem), 0 };
+    configAddrMenuItem.fMask = MIIM_STRING | MIIM_ID;
+    configAddrMenuItem.dwTypeData = configAddrTitle.data();
+    configAddrMenuItem.cch = UINT(configAddrTitle.length());
+    configAddrMenuItem.wID = configListenAddrMenuItemID;
+    if (!InsertMenuItemW(subMenu, configListenAddrMenuItemID, FALSE, &configAddrMenuItem)) {
+        LOG_LAST_ERROR(host, state);
+        return FALSE;
+    }
 
     MENUITEMINFOW rootMenuItem = { sizeof(rootMenuItem), 0 };
     rootMenuItem.fMask = MIIM_STRING | MIIM_SUBMENU;
@@ -144,9 +153,20 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
 
+    if(!StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort)) {
+        host->DeleteRootMenuItem(state);
+        DestroyMenu(subMenu);
+        DestroyMessageWindow();
+        return FALSE;
+	}
+    
+    return TRUE;
+}
+
+bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort) {
     std::wstring errorMessage;
-    auto status = StartHTTPServer(config.ServerListenHost, config.ServerListenPort, errorMessage);
-    if(status != SERVER_OK) {
+    auto status = StartHTTPServer(listenHost, listenPort, errorMessage);
+    if (status != SERVER_OK) {
         switch (status) {
         case SERVER_INVALID_ADDRESS_FORMAT:
             ShowError(host, state, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
@@ -167,18 +187,16 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
             ShowError(host, state, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
             break;
         }
-        host->DeleteRootMenuItem(state);
-        DestroyMenu(subMenu);
-        DestroyMessageWindow();
-        return FALSE;
-	}
-    
-    return TRUE;
+        return false;
+    }
+    return true;
 }
 
 static void OnMenuItemCmd(UINT id) {
     if(id == showVerificationCodeMenuItemId) {
 		ShowVerificationCodeDialog();
+    } else if(id == configListenAddrMenuItemID) {
+        ShowConfigListenAddrDialog();
     }
 }
 

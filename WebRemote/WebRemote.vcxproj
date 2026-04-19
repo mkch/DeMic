@@ -196,6 +196,7 @@
   <ItemGroup>
     <ClInclude Include="..\Util.h" />
     <ClInclude Include="CoEvent.h" />
+    <ClInclude Include="ConfigListenAddr.h" />
     <ClInclude Include="CryptoUtil.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="HTTPServer.h" />
@@ -214,6 +215,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ConfigListenAddr.cpp" />
     <ClCompile Include="CryptoUtil.cpp" />
     <ClCompile Include="HTTPServer.cpp" />
     <ClCompile Include="MessageWindow.cpp" />

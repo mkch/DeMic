@@ -116,7 +116,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			dialog = NULL;
 			return TRUE;
 	}
-	return 0;
+	return FALSE;
 }
 
 void ShowVerificationCodeDialog() {

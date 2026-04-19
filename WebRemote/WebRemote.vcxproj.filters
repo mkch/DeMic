@@ -54,6 +54,9 @@
     <ClInclude Include="CryptoUtil.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="ConfigListenAddr.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WebRemote.cpp">
@@ -81,6 +84,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CryptoUtil.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ConfigListenAddr.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
