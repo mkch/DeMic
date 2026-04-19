@@ -23,6 +23,7 @@ extern DeMic_PluginInfo plugin;
 std::vector<wchar_t> pluginName;
 
 
+static const char* const CONFIG_ENABLED = "Enabled";
 static const char* const CONFIG_SERVER_LISTEN_HOST = "ServerListenHost";
 static const char* const CONFIG_SERVER_LISTEN_PORT = "ServerListenPort";
 
@@ -36,6 +37,7 @@ static void ReadConfig() {
     }
     try {
         auto configJson = json::parse(in).as_object();
+        config.Enabled = configJson[CONFIG_ENABLED].as_bool();
         config.ServerListenHost = configJson[CONFIG_SERVER_LISTEN_HOST].as_string();
         config.ServerListenPort = configJson[CONFIG_SERVER_LISTEN_PORT].as_string();
     } catch (const std::exception&) {
@@ -46,6 +48,7 @@ static void ReadConfig() {
 void WriteConfig() {
     namespace json = boost::json;
     json::object configJson;
+	configJson[CONFIG_ENABLED] = config.Enabled;
     configJson[CONFIG_SERVER_LISTEN_HOST] = config.ServerListenHost;
     configJson[CONFIG_SERVER_LISTEN_PORT] = config.ServerListenPort;
     std::ofstream out(configFilePath);
@@ -97,12 +100,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     state = args->State;
     
     ReadConfig();
-
-    if(config.ServerListenHost.empty() && config.ServerListenPort.empty()) {
-        ShowError(host, state, strRes->Load(IDS_LACK_CONFIG).c_str());
-        return FALSE;
-	}
-    InitHTTPServer();
 
     host->SetMicMuteStateListener(state, [] {
         NotifyStateChange(host->IsMuted());
@@ -172,12 +169,18 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
     host->SetInitMenuPopupListener(state, subMenu, [](HMENU menu) {
+		EnableMenuItem(subMenu, showVerificationCodeMenuItemId, MF_BYCOMMAND | (HTTPServerRunning() ? MF_ENABLED : MF_DISABLED));
+
         auto u8HostPort = net_util::JoinHostPort(config.ServerListenHost, config.ServerListenPort);
 		auto hostPort = FromUTF8(std::u8string_view((const char8_t*)u8HostPort.data(), u8HostPort.size()));
         ModifyMenuW(subMenu, 
-            enableMenuItemId, MF_BYCOMMAND | MF_STRING | (HTTPServerRunning() ? MF_CHECKED : MF_UNCHECKED),
+            enableMenuItemId, MF_BYCOMMAND | MF_STRING 
+                | (HTTPServerRunning() ? MF_CHECKED : MF_UNCHECKED)
+                | (config.ServerListenPort.empty() ? MF_DISABLED : MF_ENABLED),
             enableMenuItemId, 
-            std::format(L"{}  {}", strRes->Load(IDS_ENABLE), hostPort).c_str()
+            config.ServerListenPort.empty() 
+                ? strRes->Load(IDS_ENABLE).c_str() 
+                : std::format(L"{} - http://{}", strRes->Load(IDS_ENABLE), hostPort).c_str()
         );
 	});
 
@@ -188,7 +191,15 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
 
-    StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+    InitHTTPServer();
+
+    if (config.Enabled) {
+        if (config.ServerListenPort.empty()) {
+            ShowError(host, state, strRes->Load(IDS_LACK_CONFIG).c_str());
+            ShowConfigListenAddrDialog();
+        }
+        config.Enabled = StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+    }
     
     return TRUE;
 }
@@ -229,9 +240,11 @@ static void OnMenuItemCmd(UINT id) {
     if (id == enableMenuItemId) {
         if(HTTPServerRunning()) {
             StopHTTPServer();
+			config.Enabled = false;
         } else {
-            StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+            config.Enabled = StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
 		}
+        WriteConfig();
     } else if(id == showVerificationCodeMenuItemId) {
 		ShowVerificationCodeDialog();
     } else if(id == configListenAddrMenuItemID) {

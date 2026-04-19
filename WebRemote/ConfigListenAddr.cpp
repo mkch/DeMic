@@ -3,6 +3,8 @@
 #include <windowsx.h>
 
 #include <algorithm>
+#include <format>
+#include <boost/algorithm/string.hpp>
 
 #include "resource.h"
 #include "ConfigListenAddr.h"
@@ -34,6 +36,12 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 		case WM_INITDIALOG: {
 			dialog = hwnd;
 			serverRunnintWhenLuanch = HTTPServerRunning();
+			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_LISTEN_ADDR));
+			SetWindowTextW(hwnd, title.c_str());
+
+			SetDlgItemTextW(hwnd, IDC_LISTEN_ADDR_CONFIG_TIP_STATIC, strRes->Load(IDS_LISTEN_ADDR_CONFIG_TIP).c_str());
+
+			dialog = hwnd;
 			HWND hostCombo = GetDlgItem(hwnd, IDC_LISTEN_HOST_COMBO);
 			SetComboHeight(hostCombo, GetDpiForWindow(hwnd));
 			// Set current listen host.
@@ -69,12 +77,15 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 					GetDlgItemTextA(hwnd, IDC_LISTEN_HOST_COMBO, hostBuf, sizeof(hostBuf));
 					GetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, portBuf, sizeof(portBuf));
 					StopHTTPServer();
-					if (!StartHTTPServerWithPrompt(hostBuf, portBuf, hwnd)) {
+					if (!StartHTTPServerWithPrompt(boost::trim_copy(std::string(hostBuf)), boost::trim_copy(std::string(portBuf)), hwnd)) {
 						return TRUE;
 					}
 					// Save config and exit dialog.
 					config.ServerListenHost = GetHTTPServerListenHost();
 					config.ServerListenPort = std::to_string(GetHTTPServerListenPort());
+					if (!config.Enabled) {
+						StopHTTPServer();
+					}
 					WriteConfig();
 					EndDialog(hwnd, 0);
 					return TRUE;

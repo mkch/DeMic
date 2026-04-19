@@ -37,7 +37,9 @@ namespace net_util {
 
     std::string JoinHostPort(const std::string_view& host, const std::string_view& port) {
         if (host.empty()) {
-            return ":" + std::string(port);
+            // Empty host means all interfaces,
+            // and "*" is a common notation for that in server listen address.
+			return "*" + std::string(port); 
         }
         if(host.find(':') != std::string_view::npos) { // IPv6 literal
             return std::format("[{}]:{}", host, port);

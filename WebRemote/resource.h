@@ -22,18 +22,22 @@
 #define IDS_SHOW_VERIFICATION_CODE      111
 #define IDS_CONFIG_LISTEN_ADDR          112
 #define IDS_ENABLE                      113
+#define IDS_LISTEN_ADDR_CONFIG_TIP      114
+#define IDS_TITLE_VERIFICATION_CODE     117
+#define IDS_TITLE_LISTEN_ADDR           118
 #define IDC_REFRESH_CODE                1003
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
+#define IDC_LISTEN_ADDR_CONFIG_TIP_STATIC 1006
 #define IDC_VERIFICATION_CODE_STATIC    -1
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        112
+#define _APS_NEXT_RESOURCE_VALUE        115
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1006
+#define _APS_NEXT_CONTROL_VALUE         1007
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

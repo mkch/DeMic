@@ -88,7 +88,13 @@
 
             let ok = false;
             try {
-                ok = (await fetch('/toggle')).ok;
+                const response = (await fetch('/toggle'));
+                if (response.status == 401) {
+                    window.location.href = '/verify';
+                    ok = true;
+                } else {
+                    ok = response.status == 200;
+                }
             } catch (error) {
                 console.log(error);
             }

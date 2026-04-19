@@ -31,7 +31,7 @@ enum {
 static HFONT codeFont = NULL;
 
 static void ApplyFont(HWND hwnd, UINT dpi) {
-	static const int FONT_SIZE = 35; // in points
+	static const int FONT_SIZE = 25; // in points
 
 	HWND hCtrl = GetDlgItem(hwnd, IDC_VERIFICATION_CODE_STATIC);
 
@@ -64,6 +64,9 @@ static void ApplyFont(HWND hwnd, UINT dpi) {
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	switch (message) {
 		case WM_INITDIALOG: {
+			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_VERIFICATION_CODE));
+			SetWindowTextW(hwnd, title.c_str());
+
 			ApplyFont(hwnd, GetDpiForWindow(hwnd));
 
 			std::lock_guard<std::mutex> guard(codeMutex);

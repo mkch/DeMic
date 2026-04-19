@@ -1,13 +1,16 @@
 #pragma once
 
+#include "../Util.h"
 #include "../sdk/DemicPluginUtil.h"
 
 extern HINSTANCE hInstance;
 extern DeMic_Host* host;
 extern void* state;
+extern StringRes* strRes;
 
 // Configuration in configuration file.
 struct Configuration {
+	bool Enabled = false;
 	std::string ServerListenHost;
 	std::string ServerListenPort;
 };
