@@ -259,6 +259,8 @@ static net::awaitable<void>handleVerifyCode(Server::Conn& conn, urls::url_view t
     auto params = target.params();
     auto code = params.find("code");
     if (code == params.end() || !VerifyCode((*code).value)) {
+        // Add a small delay to mitigate brute-force attack.
+        co_await net::steady_timer(conn.get_executor(), std::chrono::milliseconds(100)).async_wait(net::use_awaitable);
         co_return co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::bad_request, version }));
     }
     

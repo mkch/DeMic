@@ -10,17 +10,15 @@ static std::mutex codeMutex;
 static HWND dialog = NULL;
 static std::string verificationCode;
 
+static const size_t CODE_LEN = 6;
+
 static std::string GenerateRandomCode() {
-	static const size_t CODE_LEN = 6;
-	constexpr std::string_view candidateChars = "234567ACDEFGHJKMNPRSTUWXY";
+	constexpr std::string_view candidateChars = "234567ACDEFGHJKLMNPQRSTUVWXY";
 	return GenerateRandomCode<char>(candidateChars, CODE_LEN);
 }
 
 static std::string GetDisplayString(const std::string& code) {
-	if(code.length() <= 3) {
-		return code;
-	}
-	return code.substr(0, 3) + " " + GetDisplayString(code.substr(3));
+	return code.substr(0, CODE_LEN/2) + " " + code.substr(CODE_LEN/2);
 }
 
 
