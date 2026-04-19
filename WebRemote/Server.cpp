@@ -88,6 +88,7 @@ bool StopHTTPServer() {
         return false; // Not running.
     }
     server.reset();
+    StateChangeEventListeners.clear();
     return true;
 }
 
