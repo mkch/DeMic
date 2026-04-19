@@ -13,6 +13,7 @@ namespace net_util {
 	};
 
 	HostPort* SplitHostPort(const std::string_view& hostPort, HostPort* result);
+	std::string JoinHostPort(const std::string_view& host, const std::string_view& port);
 
 	std::string MakeHttpDate(const std::time_t& t);
 

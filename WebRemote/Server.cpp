@@ -396,3 +396,10 @@ HTTPServerResult StartHTTPServer(const std::string& host, const std::string& por
 bool HTTPServerRunning() {
     return server != nullptr;
 }
+
+std::string GetHTTPServerListenHost() {
+	return server->GetListenHost();
+}
+unsigned short GetHTTPServerListenPort() {
+    return server->GetListenPort();
+}

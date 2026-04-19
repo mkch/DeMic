@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "resource.h"
 #include "../Util.h"
+#include "NetUtil.h"
 #include "../sdk/DemicPluginUtil.h"
 
 #include "WebRemote.h"
@@ -9,6 +10,7 @@
 #include "VerificationCode.h"
 #include "ConfigListenAddr.h"
 
+#include <format>
 #include <boost/json.hpp>
 #include <fstream>
 
@@ -170,7 +172,13 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
     host->SetInitMenuPopupListener(state, subMenu, [](HMENU menu) {
-        CheckMenuItem(menu, enableMenuItemId, MF_BYCOMMAND | (HTTPServerRunning() ? MF_CHECKED : MF_UNCHECKED));
+        auto u8HostPort = net_util::JoinHostPort(config.ServerListenHost, config.ServerListenPort);
+		auto hostPort = FromUTF8(std::u8string_view((const char8_t*)u8HostPort.data(), u8HostPort.size()));
+        ModifyMenuW(subMenu, 
+            enableMenuItemId, MF_BYCOMMAND | MF_STRING | (HTTPServerRunning() ? MF_CHECKED : MF_UNCHECKED),
+            enableMenuItemId, 
+            std::format(L"{}  {}", strRes->Load(IDS_ENABLE), hostPort).c_str()
+        );
 	});
 
     if (!CreateMessageWindow()) {

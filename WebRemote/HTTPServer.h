@@ -104,6 +104,8 @@ public:
 
     using HTTPHandler = std::function<net::awaitable<void>(Conn&)>;
 private:
+    std::string listenHost;
+	unsigned short listenPort = 0;
     HTTPHandler handler;
     net::io_context ioc{ 1 };
     std::unique_ptr<std::thread> serverThread;
@@ -143,6 +145,9 @@ public:
             serverThread->join();
         }
     }
+public:
+	std::string GetListenHost() { return listenHost; }
+	unsigned short GetListenPort() { return listenPort; }
 private:
     net::awaitable<void> do_listen(tcp::acceptor&& acceptor);
     net::awaitable<void> do_session(tcp::socket socket);

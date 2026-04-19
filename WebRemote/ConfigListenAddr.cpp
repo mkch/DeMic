@@ -73,8 +73,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 						return TRUE;
 					}
 					// Save config and exit dialog.
-					config.ServerListenHost = hostBuf;
-					config.ServerListenPort = portBuf;
+					config.ServerListenHost = GetHTTPServerListenHost();
+					config.ServerListenPort = std::to_string(GetHTTPServerListenPort());
 					WriteConfig();
 					EndDialog(hwnd, 0);
 					return TRUE;

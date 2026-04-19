@@ -29,7 +29,7 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
 		throw InvalidPortException();
     } else {
         try {
-            auto hosts = tcp::resolver(ioc).resolve("", listen_port);
+            auto hosts = tcp::resolver(ioc).resolve("0.0.0.0", listen_port);
             if (hosts.empty()) {
                 throw InvalidPortException();
             }
@@ -39,7 +39,7 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
         }
     }
 
-    if (portNumber < 9) { // unsafe port
+    if (portNumber == 0) {
         throw InvalidPortException();
     }
 
@@ -82,7 +82,8 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
     } catch (const boost::system::system_error& e) {
         throw ListenException(e.code().message());
     }
-
+	listenHost = listen_host;
+	listenPort = endpoint.port();
     serverThread = std::move(createThread([this, acceptor = std::move(acceptor)]() mutable {
         try {
             net::co_spawn(ioc, do_listen(std::move(acceptor)), net::detached);
@@ -91,7 +92,8 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
         } catch (const boost::system::system_error& e) {
             HOST_LOG(LevelError, std::format(L"Server error: {}", FromACP(e.code().message())).c_str());
         }
-        }));
+    }));
+
 }
 
 net::awaitable<void> Server::do_listen(tcp::acceptor&& acceptor) {

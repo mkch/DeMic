@@ -35,6 +35,16 @@ namespace net_util {
         return result;
     }
 
+    std::string JoinHostPort(const std::string_view& host, const std::string_view& port) {
+        if (host.empty()) {
+            return ":" + std::string(port);
+        }
+        if(host.find(':') != std::string_view::npos) { // IPv6 literal
+            return std::format("[{}]:{}", host, port);
+		}
+        return std::format("{}:{}", host, port);
+	}
+
     std::string MakeHttpDate(const std::time_t& t) {
         std::tm gm{};
         gmtime_s(&gm, &t);
