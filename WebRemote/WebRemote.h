@@ -16,7 +16,8 @@ struct Configuration {
 extern Configuration config;
 
 // Starts the HTTP server with the specified listen host and port, and shows error message if failed.
-bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort);
+// Parameter parent is the parent window for the error message box. If it's NULL, host->GetMainWindow() will be used.
+bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort, HWND parent = NULL);
 
 void WriteConfig();
 

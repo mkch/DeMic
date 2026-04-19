@@ -18,7 +18,7 @@ static HWND dialog = NULL;
 static bool serverRunnintWhenLuanch = false;
 
 static void SetComboHeight(HWND combo, int dpi) {
-	int height = MulDiv(200, dpi, 72);
+	int height = MulDiv(100, dpi, 72);
 	RECT hostComboRect = {};
 	GetWindowRect(combo, &hostComboRect);
 	ScreenToClient(dialog, (POINT*)&hostComboRect.left);
@@ -41,7 +41,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			// Config comobo list.
 			DWORD ec = 0;
 			auto addresses = net_util::GetAllBindableAddresses(ec);
-			if (!ec) {
+			if (!ec && !addresses.empty()) {
 				std::sort(addresses.begin(), addresses.end(), [](const std::string& a, const std::string& b) {
 					return a.length() < b.length();
 					});
@@ -58,7 +58,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				case IDCANCEL: {
 					if (!HTTPServerRunning() && serverRunnintWhenLuanch) {
 						// No configuration saved. Starts server with the old configuration.
-						StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+						StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort, hwnd);
 					}
 					EndDialog(hwnd, 0);
 					return TRUE;
@@ -69,7 +69,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 					GetDlgItemTextA(hwnd, IDC_LISTEN_HOST_COMBO, hostBuf, sizeof(hostBuf));
 					GetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, portBuf, sizeof(portBuf));
 					StopHTTPServer();
-					if (!StartHTTPServerWithPrompt(hostBuf, portBuf)) {
+					if (!StartHTTPServerWithPrompt(hostBuf, portBuf, hwnd)) {
 						return TRUE;
 					}
 					// Save config and exit dialog.

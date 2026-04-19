@@ -116,6 +116,7 @@ public:
     class InvalidPortException : public std::invalid_argument {
     public:
         InvalidPortException() : std::invalid_argument("") {}
+        InvalidPortException(const std::string& message) : std::invalid_argument(message) {}
     };
     class ResolveEndpointException : public std::invalid_argument {
     public:

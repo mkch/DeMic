@@ -85,6 +85,8 @@ static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
 }
 
 static HMENU subMenu = NULL;
+
+static UINT enableMenuItemId = 0;
 static UINT showVerificationCodeMenuItemId = 0;
 static UINT configListenAddrMenuItemID = 0;
 
@@ -111,26 +113,48 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
 
-    showVerificationCodeMenuItemId = args->FirstMenuItemID;
-    auto showCodeTitle = strRes->Load(IDS_SHOW_VERIFICATION_CODE);
-    MENUITEMINFOW showCodeMenuItem = { sizeof(showCodeMenuItem), 0 };
-	showCodeMenuItem.fMask = MIIM_STRING | MIIM_ID;
-	showCodeMenuItem.dwTypeData = showCodeTitle.data();
-	showCodeMenuItem.cch = UINT(showCodeTitle.length());
-    showCodeMenuItem.wID = showVerificationCodeMenuItemId;
-    if(!InsertMenuItemW(subMenu, showVerificationCodeMenuItemId, FALSE, &showCodeMenuItem)) {
+	UINT nextUsableID = args->FirstMenuItemID;
+
+
+    auto itemTitle = strRes->Load(IDS_ENABLE);
+    MENUITEMINFOW item = { sizeof(item), 0 };
+
+
+    item.fMask = MIIM_STRING | MIIM_ID;
+    item.dwTypeData = itemTitle.data();
+    item.cch = UINT(itemTitle.length());
+    item.wID = (enableMenuItemId = nextUsableID++);
+    if (!InsertMenuItemW(subMenu, 0, TRUE, &item)) {
         LOG_LAST_ERROR(host, state);
         return FALSE;
     }
 
-	configListenAddrMenuItemID = args->FirstMenuItemID + 1;
-    auto configAddrTitle = strRes->Load(IDS_CONFIG_LISTEN_ADDR);
-    MENUITEMINFOW configAddrMenuItem = { sizeof(configAddrMenuItem), 0 };
-    configAddrMenuItem.fMask = MIIM_STRING | MIIM_ID;
-    configAddrMenuItem.dwTypeData = configAddrTitle.data();
-    configAddrMenuItem.cch = UINT(configAddrTitle.length());
-    configAddrMenuItem.wID = configListenAddrMenuItemID;
-    if (!InsertMenuItemW(subMenu, configListenAddrMenuItemID, FALSE, &configAddrMenuItem)) {
+    item = { sizeof(item), 0 };
+    item.fMask = MIIM_FTYPE;
+    item.fType = MFT_SEPARATOR;
+    if (!InsertMenuItemW(subMenu, 1, TRUE, &item)) {
+        LOG_LAST_ERROR(host, state);
+        return FALSE;
+    }
+
+    itemTitle = strRes->Load(IDS_SHOW_VERIFICATION_CODE);
+    item = { sizeof(item), 0 };
+    item.fMask = MIIM_STRING | MIIM_ID;
+    item.dwTypeData = itemTitle.data();
+    item.cch = UINT(itemTitle.length());
+    item.wID = (showVerificationCodeMenuItemId = nextUsableID++);
+    if (!InsertMenuItemW(subMenu, 2, TRUE, &item)) {
+        LOG_LAST_ERROR(host, state);
+        return FALSE;
+    }
+
+    itemTitle = strRes->Load(IDS_CONFIG_LISTEN_ADDR);
+    item = { sizeof(item), 0 };
+    item.fMask = MIIM_STRING | MIIM_ID;
+    item.dwTypeData = itemTitle.data();
+    item.cch = UINT(itemTitle.length());
+    item.wID = (configListenAddrMenuItemID = nextUsableID++);
+    if (!InsertMenuItemW(subMenu, 3, TRUE, &item)) {
         LOG_LAST_ERROR(host, state);
         return FALSE;
     }
@@ -145,6 +169,9 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 		DestroyMenu(subMenu);
         return FALSE;
     }
+    host->SetInitMenuPopupListener(state, subMenu, [](HMENU menu) {
+        CheckMenuItem(menu, enableMenuItemId, MF_BYCOMMAND | (HTTPServerRunning() ? MF_CHECKED : MF_UNCHECKED));
+	});
 
     if (!CreateMessageWindow()) {
         LOG_LAST_ERROR(host, state);
@@ -153,47 +180,51 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
         return FALSE;
     }
 
-    if(!StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort)) {
-        host->DeleteRootMenuItem(state);
-        DestroyMenu(subMenu);
-        DestroyMessageWindow();
-        return FALSE;
-	}
+    StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
     
     return TRUE;
 }
 
-bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort) {
+bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort, HWND parent) {
     std::wstring errorMessage;
     auto status = StartHTTPServer(listenHost, listenPort, errorMessage);
     if (status != SERVER_OK) {
+        std::wstring message;
         switch (status) {
         case SERVER_INVALID_ADDRESS_FORMAT:
-            ShowError(host, state, formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage).c_str());
+            message = formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage);
             break;
         case SERVER_INVALID_PORT:
-            ShowError(host, state, formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str());
+            message = formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str();
             break;
         case SERVER_RESOLVE_ENDPOINT:
-            ShowError(host, state, formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage).c_str());
+            message = formatErrorMessage(IDS_RESOLVE_ENDPOINT, errorMessage);
             break;
         case SERVER_BIND_ERROR:
-            ShowError(host, state, formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage).c_str());
+            message = formatErrorMessage(IDS_SERVER_BIND_ERROR, errorMessage);
             break;
         case SERVER_LISTEN_ERROR:
-            ShowError(host, state, formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage).c_str());
+            message = formatErrorMessage(IDS_SERVER_LISTEN_ERROR, errorMessage);
             break;
         case SERVER_ERROR:
-            ShowError(host, state, formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage).c_str());
+            message = formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage);
             break;
         }
+
+        ShowError(host, state, message.c_str(), parent);
         return false;
     }
     return true;
 }
 
 static void OnMenuItemCmd(UINT id) {
-    if(id == showVerificationCodeMenuItemId) {
+    if (id == enableMenuItemId) {
+        if(HTTPServerRunning()) {
+            StopHTTPServer();
+        } else {
+            StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+		}
+    } else if(id == showVerificationCodeMenuItemId) {
 		ShowVerificationCodeDialog();
     } else if(id == configListenAddrMenuItemID) {
         ShowConfigListenAddrDialog();

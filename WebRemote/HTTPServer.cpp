@@ -9,18 +9,37 @@
 
 namespace urls = boost::urls;
 
+#undef max
+
 Server::Server(const std::string& listen_host, const std::string& listen_port, HTTPHandler&& h) : handler(std::move(h)) {
-    if (listen_port.empty()) {
-        throw InvalidPortException();
+    net::ip::port_type portNumber = 0;
+    // tcp::resolver does not reject invalid numberic port.
+    // So we need to manually check whether the port is a valid port number.
+    int32_t n = 0;
+    auto r = std::from_chars(listen_port.data(), listen_port.data() + listen_port.size(), n);
+    if (r.ec == std::error_code{}) { // has leading port number
+        if (r.ptr != listen_port.data() + listen_port.size()) { // has extra characters
+			throw InvalidPortException();
+        }
+        if (n < 0 || n > std::numeric_limits<net::ip::port_type>::max()) { // out of range
+			throw InvalidPortException();
+        }
+		portNumber = (net::ip::port_type)n;
+    } else if (r.ec == std::errc::result_out_of_range) { // out of range
+		throw InvalidPortException();
+    } else {
+        try {
+            auto hosts = tcp::resolver(ioc).resolve("", listen_port);
+            if (hosts.empty()) {
+                throw InvalidPortException();
+            }
+            portNumber = hosts.begin()->endpoint().port();
+        } catch (const boost::system::system_error& e) {
+            throw InvalidPortException(e.code().message());
+        }
     }
 
-    unsigned long portNumber = 0;
-    if (std::from_chars(listen_port.data(), listen_port.data() + listen_port.size(), portNumber).ptr
-        != listen_port.data() + listen_port.size()) {
-        throw InvalidPortException();
-	}
-
-    if (portNumber > 0xFFFF) {
+    if (portNumber < 9) { // unsafe port
         throw InvalidPortException();
     }
 

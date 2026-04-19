@@ -21,6 +21,7 @@
 #define IDD_LISTEN_ADDR_DIALOG          110
 #define IDS_SHOW_VERIFICATION_CODE      111
 #define IDS_CONFIG_LISTEN_ADDR          112
+#define IDS_ENABLE                      113
 #define IDC_REFRESH_CODE                1003
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
