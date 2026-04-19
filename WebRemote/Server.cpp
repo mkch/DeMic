@@ -349,20 +349,6 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     if (path == "/toggle") {
         co_return co_await handleToggle(conn);
     }
-    if(path == "/alladdr") {
-        DWORD errCode = 0;
-        auto addrs = net_util::GetAllBindableAddresses(errCode);
-        http::response<http::string_body> response{http::status::ok, conn.RequestHeader().version()};
-        response.set(http::field::content_type, "text/html");
-        std::stringstream s;
-        s << errCode << "<br>";
-        for (auto addr : addrs) {
-            s << addr << "<br>";
-        }
-        response.body() = s.str();
-        response.prepare_payload();
-        co_return co_await conn.WriteResponse(std::move(response));
-    }
 
     co_await handleNotFound(conn);
 };
