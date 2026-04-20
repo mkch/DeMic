@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
 
-    <title>DeMic WebRemote</title>
+    <title>{{title}}</title>
     <style>
         .custom-btn {
             display: inline-block;
@@ -50,9 +50,7 @@
 </head>
 
 <body>
-    <div class='center-div' style='height:30px'>
-        DeMic WebRemote
-    </div>
+    <div class='center-div' style='height:30px'>{{title}}</div>
     <div class='center-div' style='height:180px'>
         <button id='toggle-btn' class='custom-btn' onclick='handleClick(this)'></button>
     </div>
@@ -99,7 +97,7 @@
                 console.log(error);
             }
             if (!ok) {
-                alert("Server error!")
+                alert("{{server_error}}")
             }
             button.disabled = false;
         }

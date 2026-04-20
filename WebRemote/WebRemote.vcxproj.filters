@@ -100,6 +100,7 @@
       <Filter>web_resource</Filter>
     </None>
     <None Include="server_resource\verify.html" />
+    <None Include="server_resource\index_zh-CN.json" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Microphone.png">

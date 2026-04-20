@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
 
-    <title>DeMic WebRemote Verify</title>
+    <title>{{title}}</title>
     <style>
         .center-div {
             width: 100%;
@@ -18,14 +18,14 @@
 
 <body>
     <div class='center-div' style='height:40px'>
-        Please input the verification code to verify your device.
+        {{input_verification_code}}
     </div>
     <form onsubmit='doSubmit(); return false;'>
         <div class='center-div' style='height:40px'>
             <input id='code'>
         </div>
         <div class='center-div' style='height:30px'>
-            <button id='submit-button' type='submit'>Submit</button>
+            <button id='submit-button' type='submit'>{{verify}}</button>
         </div>
     </form>
 
@@ -42,13 +42,13 @@
                         window.location.href = '/';
                         break;
                     case 400:
-                        alert('Invalid verification code! Please try again.');
+                        alert('{{invalid_verification_code}}');
                         code.value = "";
                         code.focus();
                         break;
                 }
             } catch(e) {
-                alert('Server error!');
+                alert('{{server_error}}');
             }
             button.disabled = false;
         }

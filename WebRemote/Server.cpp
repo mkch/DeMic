@@ -1,4 +1,8 @@
 #include "pch.h"
+
+#undef min
+#undef max
+
 #include "resource.h"
 #include <mutex>
 #include <set>
@@ -9,6 +13,7 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 
 #include <curl/curl.h>
+#include <inja/inja.hpp>
 
 #include "Server.h"
 #include "HTTPServer.h"
@@ -92,18 +97,30 @@ bool StopHTTPServer() {
     return true;
 }
 
-static std::span<const char> IndexResource;
-static std::span<const char> VerifyResource;
 static std::span<const std::byte> MutedPngResource;
 static std::span<const std::byte> UnmutedPngResource;
 static std::span<const std::byte> LoadingPngResource;
 
+
+static inja::Environment Inja;
+
+static inja::Template IndexTemplate, VerifyTemplate;
+static inja::json Strings__zh_CN;
+
 void InitHTTPServer() {
-    IndexResource = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
-	VerifyResource = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_VERIFY_HTML));
     MutedPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
     UnmutedPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_UNMUTED));
     LoadingPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_LOADING));
+
+    auto indexRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_HTML));
+    IndexTemplate = Inja.parse(std::string_view(indexRes.data(), indexRes.size()));
+
+    auto verifyRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_VERIFY_HTML));
+	VerifyTemplate = Inja.parse(std::string_view(verifyRes.data(), verifyRes.size()));
+
+
+    auto stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_DATA__zh_CN));
+    Strings__zh_CN = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size()))["resource"];
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
@@ -144,6 +161,10 @@ static net::awaitable<void> handleServerError(Server::Conn& conn, const std::str
     co_await conn.WriteResponse(std::move(response));
 }
 
+// The last modified time of the resource.
+// Since the resource is embedded in the module, we can use the first call time as the last modified time.
+static const std::time_t ResourceLastModified = std::time(nullptr);
+
 // handleModuleResource writes the specified resource to the response with the specified content type.
 // It also handles the "If-Modified-Since" header and writes a `304 Not Modified` response if the resource
 // has not been modified since the specified time.
@@ -152,12 +173,8 @@ static net::awaitable<void> handleServerError(Server::Conn& conn, const std::str
 // But the data referenced by contentType must be valid until the response is written, i.e. passing
 // a string literal.
 template<class SpanElementType>
-static net::awaitable<void> handleModuleResource(Server::Conn& conn,  const std::string_view contentType, std::span<SpanElementType> res) {
+static net::awaitable<void> HandleModuleResource(Server::Conn& conn,  const std::string_view contentType, std::span<SpanElementType> res) {
     using status = http::status;
-
-	// The last modified time of the resource.
-    // Since the resource is embedded in the module, we can use the first call time as the last modified time.
-    static const std::time_t lastModified = std::time(nullptr);
 
     const auto version = conn.RequestHeader().version();
     const auto method = conn.RequestHeader().method();
@@ -166,11 +183,11 @@ static net::awaitable<void> handleModuleResource(Server::Conn& conn,  const std:
         co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
         co_return;
     }
-    if (co_await handleHttpIfModifiedSince(conn, lastModified)) { // HERE
+    if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
         co_return;
     }
     http::response<http::buffer_body> response{ http::status::ok, version };
-    setHttpLastModifiedHeader(response, lastModified);
+    setHttpLastModifiedHeader(response, ResourceLastModified);
     response.set(http::field::content_type, contentType);
     if (method == http::verb::head) {
         response.set(http::field::content_length, std::to_string(res.size_bytes()));
@@ -183,7 +200,37 @@ static net::awaitable<void> handleModuleResource(Server::Conn& conn,  const std:
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_view url) {
+static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::Template t, const nlohmann::json& data) {
+    using status = http::status;
+
+    const auto version = conn.RequestHeader().version();
+    const auto method = conn.RequestHeader().method();
+
+    if (method != http::verb::get && method != http::verb::head) {
+        co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
+        co_return;
+    }
+    if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
+        co_return;
+    }
+    http::response<http::string_body> response{ http::status::ok, version };
+    setHttpLastModifiedHeader(response, ResourceLastModified);
+
+    std::ostringstream out;
+    Inja.render_to(out, t, data);
+    auto body = out.str();
+
+    response.set(http::field::content_type, "text/html");
+    if (method == http::verb::head) {
+        response.set(http::field::content_length, std::to_string(body.size()));
+    } else {
+        response.body() = body;
+        response.prepare_payload();
+    }
+    co_await conn.WriteResponse(std::move(response));
+}
+
+static net::awaitable<void> HandleWaitStateChangeAPI(Server::Conn& conn, urls::url_view url) {
     conn.SetExpiresNever(); // Long-polling connection. Never expires.
 
     auto params = url.params();
@@ -198,7 +245,7 @@ static net::awaitable<void> handleWaitStateChange(Server::Conn& conn, urls::url_
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void>handleToggle(Server::Conn& conn) {
+static net::awaitable<void>HandleToggleAPI(Server::Conn& conn) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -246,7 +293,7 @@ public:
 
 static SessionStore SessionStoreInstance;
 
-static net::awaitable<void>handleVerifyCode(Server::Conn& conn, urls::url_view target) {
+static net::awaitable<void>HandleVerifyCodeAPI(Server::Conn& conn, urls::url_view target) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -300,7 +347,7 @@ static bool VerifySession(const beast::http::request_header<>& requestHeader) {
 }
 
 
-static net::awaitable<void> handler(Server::Conn& conn) {
+static net::awaitable<void> Handler(Server::Conn& conn) {
     // Read Header
     const auto& header = conn.RequestHeader();
     const auto& headerTarget = header.target();
@@ -314,10 +361,10 @@ static net::awaitable<void> handler(Server::Conn& conn) {
     const auto path = url.path();
 
     if (path == "/verify") {
-        co_return co_await handleModuleResource(conn, "text/html", VerifyResource);
+        co_return co_await HandleHTMLTemplate(conn, VerifyTemplate, Strings__zh_CN);
     }
     if (path == "/verify_code") {
-        co_return co_await handleVerifyCode(conn, url);
+        co_return co_await HandleVerifyCodeAPI(conn, url);
     }
 
     if(!VerifySession(header)) {
@@ -334,22 +381,22 @@ static net::awaitable<void> handler(Server::Conn& conn) {
 	}
 
     if (path == "/") {
-        co_return co_await handleModuleResource(conn, "text/html", IndexResource);
+        co_return co_await HandleHTMLTemplate(conn, IndexTemplate, Strings__zh_CN);
     }
     if (path == "/res/muted.png") {
-        co_return co_await handleModuleResource(conn, "image/png", MutedPngResource);
+        co_return co_await HandleModuleResource(conn, "image/png", MutedPngResource);
     }
     if (path == "/res/unmuted.png") {
-        co_return co_await handleModuleResource(conn, "image/png", UnmutedPngResource);
+        co_return co_await HandleModuleResource(conn, "image/png", UnmutedPngResource);
     }
     if (path == "/res/loading.png") {
-        co_return co_await handleModuleResource(conn, "image/png", LoadingPngResource);
+        co_return co_await HandleModuleResource(conn, "image/png", LoadingPngResource);
     }
     if (path == "/wait_state_change") {
-        co_return co_await handleWaitStateChange(conn, url);
+        co_return co_await HandleWaitStateChangeAPI(conn, url);
     }
     if (path == "/toggle") {
-        co_return co_await handleToggle(conn);
+        co_return co_await HandleToggleAPI(conn);
     }
 
     co_await handleNotFound(conn);
@@ -362,7 +409,7 @@ HTTPServerResult StartHTTPServer(const std::string& host, const std::string& por
     }
 
     try {
-        server.reset(new Server(host, port, std::move(handler)));
+        server.reset(new Server(host, port, std::move(Handler)));
     } catch (const Server::InvalidPortException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_INVALID_PORT;

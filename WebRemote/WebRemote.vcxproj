@@ -235,6 +235,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="server_resource\index.html" />
+    <None Include="server_resource\index_zh-CN.json" />
     <None Include="server_resource\verify.html" />
   </ItemGroup>
   <ItemGroup>

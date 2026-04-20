@@ -4,6 +4,7 @@
       "name": "curl",
       "default-features": false,
       "features": []
-    }
+    },
+    "inja"
   ]
 }

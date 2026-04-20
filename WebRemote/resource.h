@@ -23,6 +23,8 @@
 #define IDS_CONFIG_LISTEN_ADDR          112
 #define IDS_ENABLE                      113
 #define IDS_LISTEN_ADDR_CONFIG_TIP      114
+#define IDR_SERVER_INDEX_DATA__zh_CN    116
+#define IDR_SERVER_STRINGS__zh_CN       116
 #define IDS_TITLE_VERIFICATION_CODE     117
 #define IDS_TITLE_LISTEN_ADDR           118
 #define IDC_REFRESH_CODE                1003
@@ -35,7 +37,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        115
+#define _APS_NEXT_RESOURCE_VALUE        117
 #define _APS_NEXT_COMMAND_VALUE         40001
 #define _APS_NEXT_CONTROL_VALUE         1007
 #define _APS_NEXT_SYMED_VALUE           101
