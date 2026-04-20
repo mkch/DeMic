@@ -299,13 +299,15 @@ static net::awaitable<void>HandleVerifyCodeAPI(Server::Conn& conn, urls::url_vie
     const auto version = conn.RequestHeader().version();
     const auto method = conn.RequestHeader().method();
 
-    if (method != http::verb::get) {
+    if (method != http::verb::post) {
         co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
     }
 
-    auto params = target.params();
-    auto code = params.find("code");
-    if (code == params.end() || !VerifyCode((*code).value)) {
+    auto body = co_await conn.ReadRequestBody<http::string_body>();
+    auto query = urls::parse_query(body).value();
+
+    auto code = query.find("code");
+    if (code == query.end() || !(*code).has_value || !VerifyCode(std::string((*code).value))) {
         // Add a small delay to mitigate brute-force attack.
         co_await net::steady_timer(conn.get_executor(), std::chrono::milliseconds(100)).async_wait(net::use_awaitable);
         co_return co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ status::bad_request, version }));

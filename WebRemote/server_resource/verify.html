@@ -35,7 +35,10 @@
             button.disabled = true;
             const code = document.getElementById('code');
             try {
-                const response = await fetch(`/verify_code?code=${encodeURIComponent(code.value.trim().toUpperCase())}`);
+                const response = await fetch(`/verify_code?`,{
+                    method: 'POST',
+                    body: new URLSearchParams({code: code.value.trim().toUpperCase()})
+                });
                 button.disable = false;
                 switch(response.status) {
                     case 200:
@@ -43,13 +46,13 @@
                         break;
                     case 400:
                         alert('{{invalid_verification_code}}');
-                        code.value = "";
                         code.focus();
                         break;
                 }
             } catch(e) {
                 alert('{{server_error}}');
             }
+            code.value = "";
             button.disabled = false;
         }
     </script>
