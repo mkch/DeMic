@@ -18,6 +18,7 @@
 #include "Server.h"
 #include "HTTPServer.h"
 #include "../Util.h"
+#include "NetUtil.h"
 #include "WebRemote.h"
 #include "MessageWindow.h"
 #include "NetUtil.h"
@@ -105,7 +106,7 @@ static std::span<const std::byte> LoadingPngResource;
 static inja::Environment Inja;
 
 static inja::Template IndexTemplate, VerifyTemplate;
-static inja::json Strings__zh_CN;
+static inja::json Strings__zh_CN, Strings__en_US;
 
 void InitHTTPServer() {
     MutedPngResource = LoadModuleResource<std::byte>(hInstance, L"PNG", MAKEINTRESOURCEW(IDB_MUTED));
@@ -119,8 +120,11 @@ void InitHTTPServer() {
 	VerifyTemplate = Inja.parse(std::string_view(verifyRes.data(), verifyRes.size()));
 
 
-    auto stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_INDEX_DATA__zh_CN));
+    auto stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_STRINGS__zh_CN));
     Strings__zh_CN = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size()))["resource"];
+
+    stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_STRINGS__en_US));
+    Strings__en_US = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size()))["resource"];
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
@@ -221,6 +225,7 @@ static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::T
     auto body = out.str();
 
     response.set(http::field::content_type, "text/html");
+    response.set(http::field::vary, "Accept-Language");
     if (method == http::verb::head) {
         response.set(http::field::content_length, std::to_string(body.size()));
     } else {
@@ -348,6 +353,12 @@ static bool VerifySession(const beast::http::request_header<>& requestHeader) {
     return SessionStoreInstance.VerifySession(std::string(sessionId));
 }
 
+static const inja::json& GetLocalizedStrings(const std::string& header) {
+    auto matched = net_util::AcceptLanguageMatcher::Match(header, { "en-US", "zh-CN" });
+    if (matched && *matched == "zh-CN")
+        return Strings__zh_CN;
+    return Strings__en_US; // Default to English if no match found
+}
 
 static net::awaitable<void> Handler(Server::Conn& conn) {
     // Read Header
@@ -363,7 +374,7 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
     const auto path = url.path();
 
     if (path == "/verify") {
-        co_return co_await HandleHTMLTemplate(conn, VerifyTemplate, Strings__zh_CN);
+        co_return co_await HandleHTMLTemplate(conn, VerifyTemplate, GetLocalizedStrings(header[http::field::accept_language]));
     }
     if (path == "/verify_code") {
         co_return co_await HandleVerifyCodeAPI(conn, url);
@@ -383,7 +394,7 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
 	}
 
     if (path == "/") {
-        co_return co_await HandleHTMLTemplate(conn, IndexTemplate, Strings__zh_CN);
+        co_return co_await HandleHTMLTemplate(conn, IndexTemplate, GetLocalizedStrings(header[http::field::accept_language]));
     }
     if (path == "/res/muted.png") {
         co_return co_await HandleModuleResource(conn, "image/png", MutedPngResource);

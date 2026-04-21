@@ -101,6 +101,7 @@
     </None>
     <None Include="server_resource\verify.html" />
     <None Include="server_resource\index_zh-CN.json" />
+    <None Include="server_resource\index_en-US.json" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Microphone.png">

@@ -1,9 +1,9 @@
-﻿#include "pch.h"
-#include "NetUtil.h"
+﻿#include "NetUtil.h"
 
 #include <boost/url.hpp>
 #include <sstream>
 #include <iomanip>
+#include <regex>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -154,5 +154,139 @@ namespace net_util {
         WSACleanup();
 
         return bindableIPs;
+    }
+
+    std::optional<std::string> AcceptLanguageMatcher::Match(std::string_view header, const std::vector<std::string>& candidates) {
+    auto items = AcceptLanguageMatcher::Parse(header);
+
+        for (const auto& pref : items) {
+            if (pref.tag == "*") {
+                if (!candidates.empty())
+                    return candidates.front();
+                return std::nullopt;
+            }
+
+            if (auto exact = FindExact(pref.tag, candidates))
+                return exact;
+
+            if (auto base = FindBase(pref.tag, candidates))
+                return base;
+        }
+
+    return std::nullopt;
+    }
+
+    std::vector<AcceptLanguageMatcher::Item> AcceptLanguageMatcher::Parse(std::string_view header) {
+        std::vector<AcceptLanguageMatcher::Item> out;
+
+        // token ;q=0.8
+        static const std::regex re(
+            R"(\s*([A-Za-z]{1,8}(?:[-_][A-Za-z0-9]{1,8})*|\*)\s*(?:;\s*q\s*=\s*([0-9.]+))?\s*)",
+            std::regex::icase);
+
+        std::string s(header);
+        size_t pos = 0;
+        size_t order = 0;
+
+        while (pos < s.size()) {
+            size_t comma = s.find(',', pos);
+            std::string part = s.substr(
+                pos,
+                comma == std::string::npos ? std::string::npos : comma - pos);
+
+            std::smatch m;
+            if (std::regex_match(part, m, re)) {
+                Item item;
+                item.tag = Normalize(m[1].str());
+                item.q = 1.0;
+                item.order = order++;
+
+                if (m[2].matched) {
+                    try {
+                        item.q = std::stod(m[2].str());
+                    } catch (...) {
+                        item.q = 1.0;
+                    }
+                    item.q = std::clamp(item.q, 0.0, 1.0);
+                }
+
+                out.push_back(std::move(item));
+            }
+
+            if (comma == std::string::npos)
+                break;
+            pos = comma + 1;
+        }
+
+        std::stable_sort(out.begin(), out.end(),
+            [](const Item& a, const Item& b) {
+                if (a.q != b.q) return a.q > b.q;
+                return a.order < b.order;
+            });
+
+        return out;
+    }
+
+    std::string AcceptLanguageMatcher::Normalize(std::string s) {
+        // language lower, region upper
+        auto p = s.find('-');
+        if (p == std::string::npos) {
+            ToLower(s);
+        } else {
+            std::string left = s.substr(0, p);
+            std::string right = s.substr(p + 1);
+
+            ToLower(left);
+            ToUpper(right);
+
+            s = left + "-" + right;
+        }
+
+        return s;
+    }
+
+    void AcceptLanguageMatcher::ToLower(std::string& s) {
+        for (char& c : s)
+            c = (char)std::tolower((unsigned char)c);
+    }
+
+    void AcceptLanguageMatcher::ToUpper(std::string& s) {
+        for (char& c : s)
+            c = (char)std::toupper((unsigned char)c);
+    }
+
+    std::optional<std::string>
+        AcceptLanguageMatcher::FindExact(const std::string& tag,
+            const std::vector<std::string>& candidates) {
+        for (auto& c : candidates) {
+            if (Normalize(c) == tag)
+                return c;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<std::string>
+        AcceptLanguageMatcher::FindBase(const std::string& tag,
+            const std::vector<std::string>& candidates) {
+        auto p = tag.find('_');
+
+        // en-US -> en
+        if (p != std::string::npos) {
+            std::string lang = tag.substr(0, p);
+            for (auto& c : candidates) {
+                if (Normalize(c) == lang)
+                    return c;
+            }
+        }
+        // en -> en-US
+        else {
+            for (auto& c : candidates) {
+                std::string n = Normalize(c);
+                if (n.rfind(tag + "-", 0) == 0)
+                    return c;
+            }
+        }
+
+        return std::nullopt;
     }
 }

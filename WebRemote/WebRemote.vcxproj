@@ -219,7 +219,12 @@
     <ClCompile Include="CryptoUtil.cpp" />
     <ClCompile Include="HTTPServer.cpp" />
     <ClCompile Include="MessageWindow.cpp" />
-    <ClCompile Include="NetUtil.cpp" />
+    <ClCompile Include="NetUtil.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Server.cpp" />
     <ClCompile Include="VerificationCode.cpp" />
     <ClCompile Include="WebRemote.cpp" />
@@ -235,6 +240,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="server_resource\index.html" />
+    <None Include="server_resource\index_en-US.json" />
     <None Include="server_resource\index_zh-CN.json" />
     <None Include="server_resource\verify.html" />
   </ItemGroup>
