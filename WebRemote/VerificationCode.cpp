@@ -1,6 +1,7 @@
 #include "pch.h"
 #include <mutex>
 #include <thread>
+#include <cmath>
 
 #include "resource.h"
 #include "WebRemote.h"
@@ -11,19 +12,45 @@ static HWND dialog = NULL;
 static std::string verificationCode;
 
 static const size_t CODE_LEN = 6;
-
-static std::string GenerateRandomCode() {
-	constexpr std::string_view candidateChars = "234567ACDEFGHJKLMNPQRSTUVWXY";
-	return GenerateRandomCode<char>(candidateChars, CODE_LEN);
-}
-
-static std::string GetDisplayString(const std::string& code) {
-	return code.substr(0, CODE_LEN/2) + " " + code.substr(CODE_LEN/2);
-}
-
+static const int CODE_EXPIRATION_SECONDS = 2 * 60;
 
 enum {
-	UM_REFRESH_CODE = WM_USER + 1,
+	TIMER_COUNTING_DOWN = 1,
+};
+
+static std::string GetDisplayString(const std::string& code) {
+	if (code.empty()) {
+		return std::string(CODE_LEN / 2, '-') + " " + std::string(CODE_LEN / 2, '-');
+	}
+	return code.substr(0, CODE_LEN / 2) + " " + code.substr(CODE_LEN / 2);
+}
+
+// Generates a new verification code.
+// Must be alled when codeMutex is locked.
+static void GenerateNewCode(HWND hwnd) {
+	static int elapsedSeconds = 0;
+	elapsedSeconds = 0;
+	SetTimer(hwnd, TIMER_COUNTING_DOWN, 1000/*1 second*/, [](HWND hwnd, UINT msg, UINT_PTR id, DWORD elapsed) {
+		const auto remaining = CODE_EXPIRATION_SECONDS - (++elapsedSeconds);
+		if (remaining <= 0) {
+			std::lock_guard<std::mutex> guard(codeMutex);
+			// Expired.
+			KillTimer(hwnd, TIMER_COUNTING_DOWN);
+			verificationCode.clear();
+			SetDlgItemTextA(hwnd, IDC_VERIFICATION_CODE_STATIC, GetDisplayString(verificationCode).c_str());
+			SetDlgItemTextW(hwnd, IDC_COUNT_DOWN_STATIC, strRes->Load(IDS_EXPIRED).c_str());
+			return;
+		}
+		// Not expired.
+		SetDlgItemTextW(hwnd, IDC_COUNT_DOWN_STATIC, std::vformat(strRes->Load(IDS_EXPIRE_IN_SEC), std::make_wformat_args(remaining)).c_str());
+	});
+	verificationCode = GenerateRandomCode<char>("234567ACDEFGHJKLMNPQRSTUVWXY", CODE_LEN);
+	SetDlgItemTextA(hwnd, IDC_VERIFICATION_CODE_STATIC, GetDisplayString(verificationCode).c_str());
+	SetDlgItemTextW(hwnd, IDC_COUNT_DOWN_STATIC, std::vformat(strRes->Load(IDS_EXPIRE_IN_SEC), std::make_wformat_args(CODE_EXPIRATION_SECONDS)).c_str());
+}
+
+enum {
+	UM_CODE_USED = WM_USER + 1,
 };
 
 static HFONT codeFont = NULL;
@@ -62,15 +89,15 @@ static void ApplyFont(HWND hwnd, UINT dpi) {
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	switch (message) {
 		case WM_INITDIALOG: {
+			std::lock_guard<std::mutex> guard(codeMutex);
+			dialog = hwnd;
+
 			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_VERIFICATION_CODE));
 			SetWindowTextW(hwnd, title.c_str());
 
 			ApplyFont(hwnd, GetDpiForWindow(hwnd));
 
-			std::lock_guard<std::mutex> guard(codeMutex);
-			dialog = hwnd;
-			verificationCode = GenerateRandomCode();
-			SetDlgItemTextA(hwnd, IDC_VERIFICATION_CODE_STATIC, GetDisplayString(verificationCode).c_str());
+			GenerateNewCode(hwnd);
 			return TRUE;
 		}
 		case WM_DPICHANGED: {
@@ -94,23 +121,28 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 					return TRUE;
 				}
 				case IDC_REFRESH_CODE: {
-					PostMessage(hwnd, UM_REFRESH_CODE, 0, 0);
+					std::lock_guard<std::mutex> guard(codeMutex);
+					GenerateNewCode(hwnd);
 					return TRUE;
 				}
 			}
 			return FALSE;
 
-		case UM_REFRESH_CODE: {
+		case UM_CODE_USED: {
 			std::lock_guard<std::mutex> guard(codeMutex);
-			verificationCode = GenerateRandomCode();
+			if (!verificationCode.empty()) {
+				break;
+			}
 			SetDlgItemTextA(hwnd, IDC_VERIFICATION_CODE_STATIC, GetDisplayString(verificationCode).c_str());
+			KillTimer(hwnd, TIMER_COUNTING_DOWN);
+			SetDlgItemTextW(hwnd, IDC_COUNT_DOWN_STATIC, strRes->Load(IDS_EXPIRED).c_str());
 			return TRUE;
 		}
 		case WM_DESTROY: {
 			std::lock_guard<std::mutex> guard(codeMutex);
 			verificationCode.clear();
-			dialog = NULL;
 			DeleteObject(codeFont);
+			dialog = NULL;
 			return TRUE;
 		}
 		case WM_NCDESTROY:
@@ -130,6 +162,8 @@ void DestroyVerificationCodeDialog() {
 	}
 }
 
+// Verify the code. If it's correct, clear the code and return true. Otherwise return false.
+// This function can be called in any thread.
 bool VerifyCode(const std::string& code) {
 	std::lock_guard<std::mutex> guard(codeMutex);
 	if(dialog == NULL || verificationCode.empty()) {
@@ -137,7 +171,7 @@ bool VerifyCode(const std::string& code) {
 	}
 	if(code == verificationCode) {
 		verificationCode.clear();
-		PostMessage(dialog, UM_REFRESH_CODE, 0, 0);
+		PostMessage(dialog, UM_CODE_USED, 0, 0);
 		return true;
 	}
 	return false;
