@@ -20,12 +20,10 @@
 #define IDS_LACK_CONFIG                 110
 #define IDD_LISTEN_ADDR_DIALOG          110
 #define IDS_SHOW_VERIFICATION_CODE      111
-#define IDD_VERIFICATION_CODE_DIALOG1   111
 #define IDS_CONFIG_LISTEN_ADDR          112
 #define IDS_ENABLE                      113
 #define IDS_LISTEN_ADDR_CONFIG_TIP      114
 #define IDS_EXPIRE_IN_SEC               115
-#define IDR_SERVER_INDEX_DATA__zh_CN    116
 #define IDR_SERVER_STRINGS__zh_CN       116
 #define IDS_EXPIRED                     116
 #define IDS_TITLE_VERIFICATION_CODE     117
@@ -35,8 +33,6 @@
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
 #define IDC_LISTEN_ADDR_CONFIG_TIP_STATIC 1006
-#define IDC_EXPIRE_IN_SEC_STATIC        1007
-#define IDC_COUNTING_DOWN_STATIC        1008
 #define IDC_COUNT_DOWN_STATIC           1009
 #define IDC_VERIFICATION_CODE_STATIC    -1
 
