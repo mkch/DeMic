@@ -150,5 +150,5 @@ public:
 	unsigned short GetListenPort() { return listenPort; }
 private:
     net::awaitable<void> do_listen(tcp::acceptor&& acceptor);
-    net::awaitable<void> do_session(tcp::socket socket);
+    net::awaitable<void> do_session(tcp::socket&& socket);
 };

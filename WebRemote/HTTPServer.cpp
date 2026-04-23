@@ -90,7 +90,7 @@ Server::Server(const std::string& listen_host, const std::string& listen_port, H
             ioc.run();
             HOST_LOG(LevelDebug, L"Server exited gracefully");
         } catch (const boost::system::system_error& e) {
-            HOST_LOG(LevelError, std::format(L"Server error: {}", FromACP(e.code().message())).c_str());
+            HOST_LOG(LevelError, std::format(L"Server thread error: {}", FromACP(e.code().message())).c_str());
         }
     }));
 
@@ -105,7 +105,7 @@ net::awaitable<void> Server::do_listen(tcp::acceptor&& acceptor) {
     }
 }
 
-net::awaitable<void> Server::do_session(tcp::socket socket) {
+net::awaitable<void> Server::do_session(tcp::socket&& socket) {
     try {
         beast::flat_buffer buffer;
         beast::tcp_stream stream(std::move(socket));
@@ -129,7 +129,10 @@ net::awaitable<void> Server::do_session(tcp::socket socket) {
         beast::error_code ec;
         stream.socket().shutdown(tcp::socket::shutdown_send, ec); // Ignore shutdown errors.
     } catch (const boost::system::system_error& e) {
-        HOST_LOG(LevelDebug, std::format(L"Server error: {}", FromACP(e.code().message())).c_str());
+        auto code = e.code();
+        if (code != beast::condition::timeout && code != net::error::operation_aborted) {
+            HOST_LOG(LevelError, std::format(L"Server session error: {}", FromACP(e.code().message())).c_str());
+        }
     }
 }
 
