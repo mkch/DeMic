@@ -80,7 +80,13 @@ static net::awaitable<StateType> async_wait_state_change(beast::tcp_stream::exec
     auto ch = std::make_shared<StateChannelType>(executor);
     StateChangeEventListeners.push_back(ch);
     ListenersMutex.unlock();
-    co_return co_await ch->async_receive(net::use_awaitable);
+    try {
+        co_return co_await ch->async_receive(net::use_awaitable);
+    } catch(const boost::system::system_error& e) {
+        if (e.code() != boost::asio::experimental::error::channel_closed) {
+            throw e;
+        }
+	}
 }
 
 template<class Body>

@@ -130,8 +130,11 @@ net::awaitable<void> Server::do_session(tcp::socket&& socket) {
         stream.socket().shutdown(tcp::socket::shutdown_send, ec); // Ignore shutdown errors.
     } catch (const boost::system::system_error& e) {
         auto code = e.code();
-        if (code != beast::condition::timeout && code != net::error::operation_aborted) {
-            HOST_LOG(LevelError, std::format(L"Server session error: {}", FromACP(e.code().message())).c_str());
+        if (code != beast::condition::timeout 
+            && code != net::error::operation_aborted
+            && code != net::error::connection_reset
+            && code != net::error::connection_aborted) {
+            HOST_LOG(LevelError, std::format(L"Server session error: {} {}", e.code().value(), FromACP(e.code().message())).c_str());
         }
     }
 }
