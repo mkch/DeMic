@@ -320,8 +320,10 @@ static net::awaitable<void>HandleVerifyCodeAPI(Server::Conn& conn, urls::url_vie
     
 	const auto sessionId = SessionStoreInstance.CreateSession();
     http::response<http::empty_body>response{ status::ok, version };
+    using namespace std::chrono_literals;
+    const static auto maxAge = std::chrono::duration_cast<std::chrono::seconds>(24h).count(); // 24 hours
     response.set(http::field::set_cookie,
-        std::format("sessionid={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400", sessionId)); // 86400s = 24h
+        std::format("sessionid={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}", sessionId, maxAge));
     co_await conn.WriteResponse(std::move(response));
 }
 
