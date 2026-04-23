@@ -44,14 +44,15 @@ static StateType CurrentState;
 
 void NotifyStateChange(bool muted) {
     std::vector<std::shared_ptr<StateChannelType>> listeners;
+	StateType micState = muted ? Muted : Unmuted;
     {
-        CurrentState = muted ? Muted : Unmuted;
         std::lock_guard<std::mutex> guard(ListenersMutex);
+        CurrentState = micState;
         StateChangeEventListeners.swap(listeners);
     }
     for (auto& listener : listeners) {
         boost::system::error_code ec;
-        auto future = listener->async_send(ec, CurrentState, boost::asio::use_future);
+        auto future = listener->async_send(ec, micState, boost::asio::use_future);
         if (!ec) {
             future.get();
         } else  if (ec != boost::asio::experimental::error::channel_cancelled) {
