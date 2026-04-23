@@ -94,8 +94,11 @@ bool StopHTTPServer() {
     if (!server) {
         return false; // Not running.
     }
+    // Must do this before server.reset().
+	// Channel destructions use the executor of the channel, which is owned by the server.
+    // If the server is destroyed first, the channel destruction will carch.
+    CancelStateChangeNotifications();
     server.reset();
-    StateChangeEventListeners.clear();
     return true;
 }
 
