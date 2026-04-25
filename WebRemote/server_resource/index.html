@@ -7,6 +7,37 @@
 
     <title>{{title}}</title>
     <style>
+        .button-panel {
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .button-panel-top {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 10px 0;
+            box-sizing: border-box;
+        }
+
+        .button-panel-main {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logout-link {
+            color: #4A4A4A;
+            font-size: 14px;
+            text-decoration: none;
+        }
+
+            .logout-link:hover {
+                text-decoration: underline;
+            }
+
         .custom-btn {
             display: inline-block;
             padding: 50px;
@@ -51,8 +82,13 @@
 
 <body>
     <div class='center-div' style='height:30px'>{{title}}</div>
-    <div class='center-div' style='height:180px'>
-        <button id='toggle-btn' class='custom-btn' onclick='handleClick(this)'></button>
+    <div class='center-div button-panel' style='height:180px'>
+        <div class='button-panel-top'>
+            <a class='logout-link' href='/logout'>{{logout}}</a>
+        </div>
+        <div class='button-panel-main'>
+            <button id='toggle-btn' class='custom-btn' onclick='handleClick(this)'></button>
+        </div>
     </div>
     <script>
         function sleep(ms) {

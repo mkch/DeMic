@@ -5,6 +5,7 @@
     "server_error": "Failed to connect to the server!",
     "input_verification_code": "Please enter the verification code:",
     "invalid_verification_code": "Invalid verification code!",
-    "verify": "Verify"
+    "verify": "Verify",
+    "logout": "Logout"
   }
 }

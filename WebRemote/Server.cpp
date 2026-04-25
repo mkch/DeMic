@@ -214,7 +214,7 @@ static net::awaitable<void> HandleModuleResource(Server::Conn& conn,  const std:
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::Template t, const nlohmann::json& data) {
+static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::Template t, const nlohmann::json& data, bool allowCache = true) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -224,11 +224,16 @@ static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::T
         co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
         co_return;
     }
-    if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
-        co_return;
-    }
     http::response<http::string_body> response{ http::status::ok, version };
-    setHttpLastModifiedHeader(response, ResourceLastModified);
+    if (allowCache) {
+        if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
+            co_return;
+        }
+        setHttpLastModifiedHeader(response, ResourceLastModified);
+    } else {
+        // Set "Cache-Control" header to "no-store" to prevent caching.
+        response.set(http::field::cache_control, "no-store");
+	}
 
     std::ostringstream out;
     Inja.render_to(out, t, data);
@@ -304,6 +309,10 @@ public:
         }
         return true;
     }
+    void DeleteSession(const std::string& sessionId) {
+        std::lock_guard<std::mutex> guard(mutex);
+        validSessions.erase(sessionId);
+	}
 };
 
 static SessionStore SessionStoreInstance;
@@ -337,14 +346,7 @@ static net::awaitable<void>HandleVerifyCodeAPI(Server::Conn& conn, urls::url_vie
     co_await conn.WriteResponse(std::move(response));
 }
 
-static bool VerifySession(const beast::http::request_header<>& requestHeader) {
-    auto cookieHeader = requestHeader.find(http::field::cookie);
-    if (cookieHeader == requestHeader.end()) {
-        return false; // No cookie.
-    }
-    std::string cookieString = cookieHeader->value();
-    std::string_view cookies = cookieString;
-    std::string_view sessionId;
+static std::string_view FindSessionId(std::string_view cookies) {
     while (!cookies.empty()) {
         auto pos = cookies.find(';');
         std::string_view cookie = cookies.substr(0, pos);
@@ -353,8 +355,7 @@ static bool VerifySession(const beast::http::request_header<>& requestHeader) {
             std::string_view name = cookie.substr(0, eqPos);
             std::string_view value = cookie.substr(eqPos + 1);
             if (name == "sessionid") {
-                sessionId = value;
-                break;
+                return value;
             }
         }
         if (pos == std::string_view::npos) {
@@ -362,6 +363,39 @@ static bool VerifySession(const beast::http::request_header<>& requestHeader) {
         }
         cookies.remove_prefix(pos + 1);
     }
+    return std::string_view(); // Not found
+}
+
+static net::awaitable<void> HandleLogout(Server::Conn& conn) {
+    using status = http::status;
+    const auto version = conn.RequestHeader().version();
+    const auto method = conn.RequestHeader().method();
+    if (method != http::verb::get) {
+        co_return co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
+    }
+
+	http::response<http::empty_body> okResponse{ status::see_other, version };
+    okResponse.set(http::field::location, "/");
+    okResponse.set(http::field::set_cookie,
+        "sessionid=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
+
+    auto cookieHeader = conn.RequestHeader().find(http::field::cookie);
+    if (cookieHeader == conn.RequestHeader().end()) {
+        co_return co_await conn.WriteResponse(std::move(okResponse));
+    }
+	std::string_view sessionId = FindSessionId(cookieHeader->value());
+    if (!sessionId.empty()) {
+		SessionStoreInstance.DeleteSession(std::string(sessionId));
+    }
+    co_await conn.WriteResponse(std::move(okResponse));
+}
+
+static bool VerifySession(const beast::http::request_header<>& requestHeader) {
+    auto cookieHeader = requestHeader.find(http::field::cookie);
+    if (cookieHeader == requestHeader.end()) {
+        return false; // No cookie.
+    }
+    std::string_view sessionId = FindSessionId(cookieHeader->value());
     return SessionStoreInstance.VerifySession(std::string(sessionId));
 }
 
@@ -391,6 +425,9 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
     if (path == "/verify_code") {
         co_return co_await HandleVerifyCodeAPI(conn, url);
     }
+    if (path == "/logout") {
+        co_return co_await HandleLogout(conn);
+    }
 
     if(!VerifySession(header)) {
         if (path == "/") {
@@ -406,7 +443,9 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
 	}
 
     if (path == "/") {
-        co_return co_await HandleHTMLTemplate(conn, IndexTemplate, GetLocalizedStrings(header[http::field::accept_language]));
+        co_return co_await HandleHTMLTemplate(conn, 
+            IndexTemplate, GetLocalizedStrings(header[http::field::accept_language]),
+            false);
     }
     if (path == "/res/muted.png") {
         co_return co_await HandleModuleResource(conn, "image/png", MutedPngResource);
