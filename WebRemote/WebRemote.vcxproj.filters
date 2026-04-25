@@ -68,9 +68,6 @@
     <ClCompile Include="..\Util.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="HTTPServer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="MessageWindow.cpp">
       <Filter>源文件</Filter>
     </ClCompile>

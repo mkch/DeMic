@@ -1,5 +1,6 @@
 #include "pch.h"
 #include <commctrl.h>
+#include <commdlg.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -31,6 +32,28 @@ static void SetComboHeight(HWND combo, int dpi) {
 		SWP_NOMOVE | SWP_NOZORDER);
 }
 
+static bool SelectPemFile(HWND owner, std::wstring& path) {
+	auto dir = moduleFilePath.parent_path().wstring();
+	wchar_t buf[1024] = { 0 };
+	OPENFILENAMEW ofn = { 0 };
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = owner;
+	ofn.lpstrFilter = L"*.pem\0*.pem\0*.*\0*.*\0";
+	ofn.lpstrFile = buf;
+	ofn.nMaxFile = sizeof(buf) / sizeof(buf[0]);
+	ofn.lpstrInitialDir = dir.c_str();
+	ofn.Flags = OFN_FILEMUSTEXIST;
+	if (!GetOpenFileNameW(&ofn)) {
+		DWORD err = GetLastError();
+		if (err != 0) {
+			LOG_ERROR(host, state, err);
+		}
+		return false;
+	}
+	path = buf;
+	return true;
+}
+
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	switch (message) {
 		case WM_INITDIALOG: {
@@ -59,29 +82,83 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			}
 			// Set current listen port.
 			SetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, config.ServerListenPort.c_str());
-			break;
+			// Config HTTPS settings contorls.
+			CheckDlgButton(hwnd, IDC_ENABLE_HTTPS_CHECK, config.EnableHTTPS ? BST_CHECKED : BST_UNCHECKED);
+			SetDlgItemTextA(hwnd, IDC_CERT_FILE_PATH_TEXT, config.HTTPSConfig.CertPemFilePath.c_str());
+			SetDlgItemTextA(hwnd, IDC_KEY_FILE_PATH_TEXT, config.HTTPSConfig.KeyPemFilePath.c_str());
+			EnableWindow(GetDlgItem(hwnd, IDC_CERT_FILE_PATH_TEXT), config.EnableHTTPS);
+			EnableWindow(GetDlgItem(hwnd, IDC_KEY_FILE_PATH_TEXT), config.EnableHTTPS);
+			EnableWindow(GetDlgItem(hwnd, IDC_SELECT_CERT_FILE_BUTTON), config.EnableHTTPS);
+			EnableWindow(GetDlgItem(hwnd, IDC_SELECT_KEY_FILE_BUTTON), config.EnableHTTPS);
+			return TRUE;
 		}
 		case WM_COMMAND:
-			switch (wParam) {
+			switch (LOWORD(wParam)) {
+				case IDC_CERT_FILE_PATH_TEXT:
+					if (HIWORD(wParam) == STN_DBLCLK) {
+						SetWindowTextW((HWND)lParam, L"");
+					}
+					return TRUE;
+				case IDC_KEY_FILE_PATH_TEXT:
+					if (HIWORD(wParam) == STN_DBLCLK) {
+						SetWindowTextW((HWND)lParam, L"");
+					}
+					return TRUE;
+				case IDC_ENABLE_HTTPS_CHECK: {
+					config.EnableHTTPS = IsDlgButtonChecked(hwnd, IDC_ENABLE_HTTPS_CHECK) == BST_CHECKED;
+					EnableWindow(GetDlgItem(hwnd, IDC_CERT_FILE_PATH_TEXT), config.EnableHTTPS);
+					EnableWindow(GetDlgItem(hwnd, IDC_KEY_FILE_PATH_TEXT), config.EnableHTTPS);
+					EnableWindow(GetDlgItem(hwnd, IDC_SELECT_CERT_FILE_BUTTON), config.EnableHTTPS);
+					EnableWindow(GetDlgItem(hwnd, IDC_SELECT_KEY_FILE_BUTTON), config.EnableHTTPS);
+					return TRUE;
+				}
+				case IDC_SELECT_CERT_FILE_BUTTON: {
+					std::wstring certPath;
+					if (SelectPemFile(hwnd, certPath)) {
+						SetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, certPath.c_str());
+						auto u8path = ToUTF8(certPath);
+						config.HTTPSConfig.CertPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
+					}
+					return TRUE;
+				}
+				case IDC_SELECT_KEY_FILE_BUTTON: {
+					std::wstring keyPath;
+					if (SelectPemFile(hwnd, keyPath)) {
+						SetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, keyPath.c_str());
+						auto u8path = ToUTF8(keyPath);
+						config.HTTPSConfig.KeyPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
+					}
+					return TRUE;
+				}
 				case IDCANCEL: {
 					if (!HTTPServerRunning() && serverRunnintWhenLuanch) {
 						// No configuration saved. Starts server with the old configuration.
-						StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort, hwnd);
+						StartHTTPServerWithPrompt(config, hwnd);
 					}
 					EndDialog(hwnd, 0);
 					return TRUE;
 				}
 				case IDOK: {
-					char hostBuf[256];
-					char portBuf[256];
-					GetDlgItemTextA(hwnd, IDC_LISTEN_HOST_COMBO, hostBuf, sizeof(hostBuf));
-					GetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, portBuf, sizeof(portBuf));
+					auto oldConfig = config;
+					char buf[256] = { 0 };
+					GetDlgItemTextA(hwnd, IDC_LISTEN_HOST_COMBO, buf, sizeof(buf));
+					config.ServerListenHost = boost::trim_copy(std::string(buf));
+					GetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, buf, sizeof(buf));
+					config.ServerListenPort = boost::trim_copy(std::string(buf));
+					config.EnableHTTPS = IsDlgButtonChecked(hwnd, IDC_ENABLE_HTTPS_CHECK) == BST_CHECKED;
+					GetDlgItemTextA(hwnd, IDC_CERT_FILE_PATH_TEXT, buf, sizeof(buf));
+					config.HTTPSConfig.CertPemFilePath = buf;
+					GetDlgItemTextA(hwnd, IDC_KEY_FILE_PATH_TEXT, buf, sizeof(buf));
+					config.HTTPSConfig.KeyPemFilePath = buf;
 					StopHTTPServer();
-					if (!StartHTTPServerWithPrompt(boost::trim_copy(std::string(hostBuf)), boost::trim_copy(std::string(portBuf)), hwnd)) {
+					if (!StartHTTPServerWithPrompt(config, hwnd)) {
+						config = oldConfig; // Restore old config if failed to start server with new config.
 						return TRUE;
 					}
 					// Save config and exit dialog.
-					config.ServerListenHost = GetHTTPServerListenHost();
+					// Retreive the actual listen host and port from running server,
+					// in case the server resolved them to different values (e.g. listen port is "HTTP").
+					config.ServerListenHost = GetHTTPServerListenHost(); 
 					config.ServerListenPort = std::to_string(GetHTTPServerListenPort());
 					if (!config.Enabled) {
 						StopHTTPServer();

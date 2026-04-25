@@ -26,6 +26,10 @@ std::vector<wchar_t> pluginName;
 static const char* const CONFIG_ENABLED = "Enabled";
 static const char* const CONFIG_SERVER_LISTEN_HOST = "ServerListenHost";
 static const char* const CONFIG_SERVER_LISTEN_PORT = "ServerListenPort";
+static const char* const CONFIG_ENABLE_HTTPS = "EnableHTTPS";
+static const char* const CONFIG_HTTPS_CONFIG = "HTTPSConfig";
+static const char* const CONFIG_HTTPS_CERT_PEM_FILE_PATH = "CertPem";
+static const char* const CONFIG_HTTPS_KEY_PEM_FILE_PATH = "KeyPem";
 
 Configuration config;
 
@@ -40,6 +44,12 @@ static void ReadConfig() {
         config.Enabled = configJson[CONFIG_ENABLED].as_bool();
         config.ServerListenHost = configJson[CONFIG_SERVER_LISTEN_HOST].as_string();
         config.ServerListenPort = configJson[CONFIG_SERVER_LISTEN_PORT].as_string();
+		config.EnableHTTPS = configJson[CONFIG_ENABLE_HTTPS].as_bool();
+        if (configJson.contains(CONFIG_HTTPS_CONFIG)) {
+            auto& httpsConfigJson = configJson[CONFIG_HTTPS_CONFIG].as_object();
+            config.HTTPSConfig.CertPemFilePath = httpsConfigJson[CONFIG_HTTPS_CERT_PEM_FILE_PATH].as_string();
+            config.HTTPSConfig.KeyPemFilePath = httpsConfigJson[CONFIG_HTTPS_KEY_PEM_FILE_PATH].as_string();
+        }
     } catch (const std::exception&) {
         ShowError(host, state, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath.c_str()).c_str());
     }
@@ -51,6 +61,11 @@ void WriteConfig() {
 	configJson[CONFIG_ENABLED] = config.Enabled;
     configJson[CONFIG_SERVER_LISTEN_HOST] = config.ServerListenHost;
     configJson[CONFIG_SERVER_LISTEN_PORT] = config.ServerListenPort;
+	configJson[CONFIG_ENABLE_HTTPS] = config.EnableHTTPS;
+    configJson[CONFIG_HTTPS_CONFIG] = json::object{
+        {CONFIG_HTTPS_CERT_PEM_FILE_PATH, config.HTTPSConfig.CertPemFilePath},
+        {CONFIG_HTTPS_KEY_PEM_FILE_PATH, config.HTTPSConfig.KeyPemFilePath}
+	};
     std::ofstream out(configFilePath);
     out << std::setw(2) << json::serialize(configJson);
     if (out.fail()) {
@@ -180,7 +195,7 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
             enableMenuItemId, 
             config.ServerListenPort.empty() 
                 ? strRes->Load(IDS_ENABLE).c_str() 
-                : std::format(L"{} - http://{}", strRes->Load(IDS_ENABLE), hostPort).c_str()
+                : std::format(L"{} - http{}://{}", strRes->Load(IDS_ENABLE), config.EnableHTTPS ? L"s" : L"", hostPort).c_str()
         );
 	});
 
@@ -198,15 +213,15 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
             ShowError(host, state, strRes->Load(IDS_LACK_CONFIG).c_str());
             ShowConfigListenAddrDialog();
         }
-        config.Enabled = StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+        config.Enabled = StartHTTPServerWithPrompt(config);
     }
     
     return TRUE;
 }
 
-bool StartHTTPServerWithPrompt(const std::string& listenHost, const std::string& listenPort, HWND parent) {
+bool StartHTTPServerWithPrompt(const Configuration& config, HWND parent) {
     std::wstring errorMessage;
-    auto status = StartHTTPServer(listenHost, listenPort, errorMessage);
+    auto status = StartHTTPServer(config, errorMessage);
     if (status != SERVER_OK) {
         std::wstring message;
         switch (status) {
@@ -242,7 +257,7 @@ static void OnMenuItemCmd(UINT id) {
             StopHTTPServer();
 			config.Enabled = false;
         } else {
-            config.Enabled = StartHTTPServerWithPrompt(config.ServerListenHost, config.ServerListenPort);
+            config.Enabled = StartHTTPServerWithPrompt(config);
 		}
         WriteConfig();
     } else if(id == showVerificationCodeMenuItemId) {

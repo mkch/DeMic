@@ -1,10 +1,7 @@
 {
   "dependencies": [
-    {
-      "name": "curl",
-      "default-features": false,
-      "features": []
-    },
-    "inja"
+    "curl",
+    "inja",
+    "openssl"
   ]
 }

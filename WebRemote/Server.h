@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include "WebRemote.h"
 
 void InitHTTPServer();
 
@@ -13,7 +14,7 @@ enum HTTPServerResult {
 	SERVER_ERROR,
 };
 
-HTTPServerResult StartHTTPServer(const std::string& host, const std::string& port, std::wstring& errorMessage);
+HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& errorMessage);
 bool StopHTTPServer();
 bool HTTPServerRunning();
 std::string GetHTTPServerListenHost();

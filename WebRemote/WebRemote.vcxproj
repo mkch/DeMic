@@ -217,7 +217,6 @@
     </ClCompile>
     <ClCompile Include="ConfigListenAddr.cpp" />
     <ClCompile Include="CryptoUtil.cpp" />
-    <ClCompile Include="HTTPServer.cpp" />
     <ClCompile Include="MessageWindow.cpp" />
     <ClCompile Include="NetUtil.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>

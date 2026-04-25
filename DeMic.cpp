@@ -782,7 +782,7 @@ bool SelectSoundFile(HWND owner, std::wstring& path) {
     if (!GetOpenFileNameW(&ofn)) {
         DWORD err = GetLastError();
         if (err != 0) {
-            LOG_ERROR(err);
+            LOG_LAST_ERROR(err);
         }
         return false;
     }

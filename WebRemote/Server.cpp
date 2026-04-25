@@ -21,7 +21,6 @@
 #include "NetUtil.h"
 #include "WebRemote.h"
 #include "MessageWindow.h"
-#include "NetUtil.h"
 #include "VerificationCode.h"
 #include "CryptoUtil.h"
 
@@ -94,7 +93,7 @@ static void setHttpLastModifiedHeader(http::response<Body>& response, const time
     response.set(http::field::last_modified, net_util::MakeHttpDate(t));
 }
 
-static std::unique_ptr<Server> server;
+static std::unique_ptr<AbstractServer> server;
 
 bool StopHTTPServer() {
     if (!server) {
@@ -140,7 +139,8 @@ void InitHTTPServer() {
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and
 // writes a 304 Not Modified response if the resource has not been modified since the specified time.
 // It returns true if a response has been written, and false otherwise.
-static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, time_t lastModified) {
+template<ServerPolicy PolicyType>
+static net::awaitable<bool> handleHttpIfModifiedSince(ServerConn<PolicyType>& conn, time_t lastModified) {
     const auto& requestHeader = conn.RequestHeader();
     auto ifModSinceHeader = requestHeader.find(http::field::if_modified_since);
     if (ifModSinceHeader == requestHeader.end()) {
@@ -163,12 +163,14 @@ static net::awaitable<bool> handleHttpIfModifiedSince(Server::Conn& conn, time_t
     co_return true;
 }
 
-static net::awaitable<void> handleNotFound(Server::Conn& conn) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> handleNotFound(ServerConn<PolicyType>& conn) {
     http::response<http::empty_body> response{ http::status::not_found, conn.RequestHeader().version() };
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> handleServerError(Server::Conn& conn, const std::string& reason) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> handleServerError(ServerConn<PolicyType>& conn, const std::string& reason) {
     http::response<http::string_body> response{ http::status::internal_server_error, conn.RequestHeader().version() };
     response.set(http::field::content_type, "text/html");
     response.body() = reason;
@@ -186,8 +188,8 @@ static const std::time_t ResourceLastModified = std::time(nullptr);
 // The contentType parameter can't be of type `const std::string&` because of warnning C26811.
 // But the data referenced by contentType must be valid until the response is written, i.e. passing
 // a string literal.
-template<class SpanElementType>
-static net::awaitable<void> HandleModuleResource(Server::Conn& conn,  const std::string_view contentType, std::span<SpanElementType> res) {
+template<ServerPolicy PolicyType, class SpanElementType>
+static net::awaitable<void> HandleModuleResource(ServerConn<PolicyType>& conn,  const std::string_view contentType, std::span<SpanElementType> res) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -197,7 +199,7 @@ static net::awaitable<void> HandleModuleResource(Server::Conn& conn,  const std:
         co_await conn.WriteResponse(http::response<http::empty_body>{ status::method_not_allowed, version});
         co_return;
     }
-    if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
+    if (co_await handleHttpIfModifiedSince<PolicyType>(conn, ResourceLastModified)) {
         co_return;
     }
     http::response<http::buffer_body> response{ http::status::ok, version };
@@ -214,7 +216,8 @@ static net::awaitable<void> HandleModuleResource(Server::Conn& conn,  const std:
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::Template t, const nlohmann::json& data, bool allowCache = true) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> HandleHTMLTemplate(ServerConn<PolicyType>& conn, const inja::Template t, const nlohmann::json& data, bool allowCache = true) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -226,7 +229,7 @@ static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::T
     }
     http::response<http::string_body> response{ http::status::ok, version };
     if (allowCache) {
-        if (co_await handleHttpIfModifiedSince(conn, ResourceLastModified)) {
+        if (co_await handleHttpIfModifiedSince<PolicyType>(conn, ResourceLastModified)) {
             co_return;
         }
         setHttpLastModifiedHeader(response, ResourceLastModified);
@@ -250,7 +253,8 @@ static net::awaitable<void> HandleHTMLTemplate(Server::Conn& conn, const inja::T
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void> HandleWaitStateChangeAPI(Server::Conn& conn, urls::url_view url) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> HandleWaitStateChangeAPI(ServerConn<PolicyType>& conn, urls::url_view url) {
     conn.SetExpiresNever(); // Long-polling connection. Never expires.
 
     auto params = url.params();
@@ -265,7 +269,8 @@ static net::awaitable<void> HandleWaitStateChangeAPI(Server::Conn& conn, urls::u
     co_await conn.WriteResponse(std::move(response));
 }
 
-static net::awaitable<void>HandleToggleAPI(Server::Conn& conn) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void>HandleToggleAPI(ServerConn<PolicyType>& conn) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -277,7 +282,7 @@ static net::awaitable<void>HandleToggleAPI(Server::Conn& conn) {
 
     auto ok = PostToggle();
     if (!ok) {
-        co_return co_await handleServerError(conn, "Failed to toggle microphone state.");
+        co_return co_await handleServerError<PolicyType>(conn, "Failed to toggle microphone state.");
     }
     co_await conn.WriteResponse(std::move(http::response<http::empty_body>{ http::status::ok, version }));
 }
@@ -317,7 +322,8 @@ public:
 
 static SessionStore SessionStoreInstance;
 
-static net::awaitable<void>HandleVerifyCodeAPI(Server::Conn& conn, urls::url_view target) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void>HandleVerifyCodeAPI(ServerConn<PolicyType>& conn, urls::url_view target) {
     using status = http::status;
 
     const auto version = conn.RequestHeader().version();
@@ -366,7 +372,8 @@ static std::string_view FindSessionId(std::string_view cookies) {
     return std::string_view(); // Not found
 }
 
-static net::awaitable<void> HandleLogout(Server::Conn& conn) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> HandleLogout(ServerConn<PolicyType>& conn) {
     using status = http::status;
     const auto version = conn.RequestHeader().version();
     const auto method = conn.RequestHeader().method();
@@ -406,7 +413,8 @@ static const inja::json& GetLocalizedStrings(const std::string& header) {
     return Strings__en_US; // Default to English if no match found
 }
 
-static net::awaitable<void> Handler(Server::Conn& conn) {
+template<ServerPolicy PolicyType>
+static net::awaitable<void> Handler(ServerConn<PolicyType>& conn) {
     // Read Header
     const auto& header = conn.RequestHeader();
     const auto& headerTarget = header.target();
@@ -418,15 +426,14 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
     }
     auto url = target.value();
     const auto path = url.path();
-
     if (path == "/verify") {
-        co_return co_await HandleHTMLTemplate(conn, VerifyTemplate, GetLocalizedStrings(header[http::field::accept_language]));
+        co_return co_await HandleHTMLTemplate<PolicyType>(conn, VerifyTemplate, GetLocalizedStrings(header[http::field::accept_language]));
     }
     if (path == "/verify_code") {
-        co_return co_await HandleVerifyCodeAPI(conn, url);
+        co_return co_await HandleVerifyCodeAPI<PolicyType>(conn, url);
     }
     if (path == "/logout") {
-        co_return co_await HandleLogout(conn);
+        co_return co_await HandleLogout<PolicyType>(conn);
     }
 
     if(!VerifySession(header)) {
@@ -443,50 +450,55 @@ static net::awaitable<void> Handler(Server::Conn& conn) {
 	}
 
     if (path == "/") {
-        co_return co_await HandleHTMLTemplate(conn, 
+        co_return co_await HandleHTMLTemplate<PolicyType>(conn,
             IndexTemplate, GetLocalizedStrings(header[http::field::accept_language]),
             false);
     }
     if (path == "/res/muted.png") {
-        co_return co_await HandleModuleResource(conn, "image/png", MutedPngResource);
+        co_return co_await HandleModuleResource<PolicyType>(conn, "image/png", MutedPngResource);
     }
     if (path == "/res/unmuted.png") {
-        co_return co_await HandleModuleResource(conn, "image/png", UnmutedPngResource);
+        co_return co_await HandleModuleResource<PolicyType>(conn, "image/png", UnmutedPngResource);
     }
     if (path == "/res/loading.png") {
-        co_return co_await HandleModuleResource(conn, "image/png", LoadingPngResource);
+        co_return co_await HandleModuleResource<PolicyType>(conn, "image/png", LoadingPngResource);
     }
     if (path == "/wait_state_change") {
-        co_return co_await HandleWaitStateChangeAPI(conn, url);
+        co_return co_await HandleWaitStateChangeAPI<PolicyType>(conn, url);
     }
     if (path == "/toggle") {
-        co_return co_await HandleToggleAPI(conn);
+        co_return co_await HandleToggleAPI<PolicyType>(conn);
     }
 
-    co_await handleNotFound(conn);
+    co_await handleNotFound<PolicyType>(conn);
 };
 
 
-HTTPServerResult StartHTTPServer(const std::string& host, const std::string& port, std::wstring& errorMessage) {
+HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& errorMessage) {
     if (server) {
         throw std::logic_error("Server already running");
     }
 
     try {
-        server.reset(new Server(host, port, std::move(Handler)));
-    } catch (const Server::InvalidPortException& e) {
+        if (config.EnableHTTPS) {
+            server.reset(new Server<HTTPSPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPSPolicy>), HTTPSPolicy{ config.HTTPSConfig.CertPemFilePath, config.HTTPSConfig.KeyPemFilePath }));
+        } else {
+            server.reset(new Server<HTTPPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPPolicy>)));
+        }
+    } catch (const Server<HTTPPolicy>::InvalidPortException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_INVALID_PORT;
-    } catch (const Server::ResolveEndpointException& e) {
+    } catch (const Server<HTTPPolicy>::ResolveEndpointException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_RESOLVE_ENDPOINT;
-    } catch (const Server::BindException& e) {
+    } catch (const Server<HTTPPolicy>::BindException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_BIND_ERROR;
-    } catch (const Server::ListenException& e) {
+    } catch (const Server<HTTPPolicy>::ListenException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_LISTEN_ERROR;
     } catch (const boost::system::system_error& e) {
+		HOST_LOG(LogLevel::LevelError, std::format(L"Failed to start HTTP server: {}", FromACP(e.code().message())).c_str());
         errorMessage = FromACP(e.code().message());
         return SERVER_ERROR;
     }
