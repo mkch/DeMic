@@ -71,6 +71,10 @@ std::wstring FromACP(const std::string_view& str);
 std::u8string ToUTF8(const wchar_t* str, size_t len = (size_t)-1);
 std::u8string ToUTF8(const std::wstring& str);
 std::u8string ToUTF8(const std::wstring_view& str);
+// ToACP converts a wide string to a string encoded in ANSI code page for the current thread.
+std::string ToACP(const wchar_t* str, size_t len);
+std::string ToACP(const std::wstring& str);
+std::string ToACP(const std::wstring_view& str);
 
 
 class Win32Error : public std::runtime_error {

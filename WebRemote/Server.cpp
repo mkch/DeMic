@@ -481,7 +481,10 @@ HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& erro
 
     try {
         if (config.EnableHTTPS) {
-            server.reset(new Server<HTTPSPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPSPolicy>), HTTPSPolicy{ config.HTTPSConfig.CertPemFilePath, config.HTTPSConfig.KeyPemFilePath }));
+            // The file pahts of HTTPSPolicy must be ACP encoding.
+			auto permFilePath = ToACP(FromUTF8(std::u8string_view((const char8_t*)config.HTTPSConfig.CertPemFilePath.data(), config.HTTPSConfig.CertPemFilePath.size())));
+            auto keyFilePath = ToACP(FromUTF8(std::u8string_view((const char8_t*)config.HTTPSConfig.KeyPemFilePath.data(), config.HTTPSConfig.KeyPemFilePath.size())));
+            server.reset(new Server<HTTPSPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPSPolicy>), HTTPSPolicy{ permFilePath, keyFilePath }));
         } else {
             server.reset(new Server<HTTPPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPPolicy>)));
         }

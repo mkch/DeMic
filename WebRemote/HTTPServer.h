@@ -59,6 +59,8 @@ class HTTPSPolicy {
 private:
 	ssl::context ctx{ ssl::context::tls_server };
 public:
+	// certPemPath is the path to the certificate file in PEM format, and keyPemPath is the path to the private key file in PEM format.
+	// All paths must be ACP encoding(NOT utf-8). ssl::context::use_xxx_file() has no wstring version.
     HTTPSPolicy(const std::string& certPemPath, const std::string& keyPemPath) {
         ctx.use_certificate_chain_file(certPemPath);
         ctx.use_private_key_file(keyPemPath, ssl::context::pem);

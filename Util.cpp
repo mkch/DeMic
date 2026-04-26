@@ -106,6 +106,32 @@ std::u8string ToUTF8(const std::wstring_view& str) {
     return ToUTF8(str.data(), str.size());
 }
 
+std::string ToACP(const wchar_t* str, size_t len) {
+    if (str == nullptr) {
+        throw std::invalid_argument("str is null");
+    }
+    if (len == (size_t)-1) {
+        len = wcslen(str);
+    }
+    int size_needed = WideCharToMultiByte(CP_ACP, 0, str, (int)len, NULL, 0, NULL, NULL);
+    if (size_needed <= 0) {
+        return "";
+    }
+    std::string result(size_needed, 0);
+    if (WideCharToMultiByte(CP_ACP, 0, str, (int)len, (char*)result.data(), size_needed, NULL, NULL) == 0) {
+        return "";
+    }
+    return result;
+}
+
+std::string ToACP(const std::wstring& str) {
+    return ToACP(str.c_str(), str.size());
+}
+
+std::string ToACP(const std::wstring_view& str) {
+    return ToACP(str.data(), str.size());
+}
+
 std::filesystem::path GetModuleFilePath(HMODULE hModule) {
 	std::wstring path(MAX_PATH, '\0');
 	for (;;) {
