@@ -32,8 +32,13 @@ static void SetComboHeight(HWND combo, int dpi) {
 		SWP_NOMOVE | SWP_NOZORDER);
 }
 
-static bool SelectPemFile(HWND owner, std::wstring& path) {
-	auto dir = moduleFilePath.parent_path().wstring();
+static bool SelectPemFile(HWND owner, const std::wstring& initDir, std::wstring& path) {
+	std::wstring dir;
+	if(initDir.empty()) {
+		 dir = moduleFilePath.parent_path().wstring();
+	} else {
+		dir = initDir;
+	}
 	wchar_t buf[1024] = { 0 };
 	OPENFILENAMEW ofn = { 0 };
 	ofn.lStructSize = sizeof(ofn);
@@ -114,7 +119,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				}
 				case IDC_SELECT_CERT_FILE_BUTTON: {
 					std::wstring certPath;
-					if (SelectPemFile(hwnd, certPath)) {
+					std::wstring initDir = std::filesystem::path(FromUTF8((const char8_t*)config.HTTPSConfig.CertPemFilePath.data(), config.HTTPSConfig.CertPemFilePath.size())).parent_path().wstring();
+					if (SelectPemFile(hwnd, initDir, certPath)) {
 						SetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, certPath.c_str());
 						auto u8path = ToUTF8(certPath);
 						config.HTTPSConfig.CertPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
@@ -123,7 +129,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				}
 				case IDC_SELECT_KEY_FILE_BUTTON: {
 					std::wstring keyPath;
-					if (SelectPemFile(hwnd, keyPath)) {
+					std::wstring initDir = std::filesystem::path(FromUTF8((const char8_t*)config.HTTPSConfig.KeyPemFilePath.data(), config.HTTPSConfig.KeyPemFilePath.size())).parent_path().wstring();
+					if (SelectPemFile(hwnd, initDir, keyPath)) {
 						SetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, keyPath.c_str());
 						auto u8path = ToUTF8(keyPath);
 						config.HTTPSConfig.KeyPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
