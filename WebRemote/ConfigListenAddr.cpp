@@ -84,8 +84,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			SetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, config.ServerListenPort.c_str());
 			// Config HTTPS settings contorls.
 			CheckDlgButton(hwnd, IDC_ENABLE_HTTPS_CHECK, config.EnableHTTPS ? BST_CHECKED : BST_UNCHECKED);
-			SetDlgItemTextA(hwnd, IDC_CERT_FILE_PATH_TEXT, config.HTTPSConfig.CertPemFilePath.c_str());
-			SetDlgItemTextA(hwnd, IDC_KEY_FILE_PATH_TEXT, config.HTTPSConfig.KeyPemFilePath.c_str());
+			SetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, FromUTF8(std::u8string_view((const char8_t*)config.HTTPSConfig.CertPemFilePath.data(), config.HTTPSConfig.CertPemFilePath.size())).c_str());
+			SetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, FromUTF8(std::u8string_view((const char8_t*)config.HTTPSConfig.KeyPemFilePath.data(), config.HTTPSConfig.KeyPemFilePath.size())).c_str());
 			EnableWindow(GetDlgItem(hwnd, IDC_CERT_FILE_PATH_TEXT), config.EnableHTTPS);
 			EnableWindow(GetDlgItem(hwnd, IDC_KEY_FILE_PATH_TEXT), config.EnableHTTPS);
 			EnableWindow(GetDlgItem(hwnd, IDC_SELECT_CERT_FILE_BUTTON), config.EnableHTTPS);
@@ -140,16 +140,20 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				}
 				case IDOK: {
 					auto oldConfig = config;
-					char buf[256] = { 0 };
-					GetDlgItemTextA(hwnd, IDC_LISTEN_HOST_COMBO, buf, sizeof(buf));
-					config.ServerListenHost = boost::trim_copy(std::string(buf));
-					GetDlgItemTextA(hwnd, IDC_LISTEN_PORT_EDIT, buf, sizeof(buf));
-					config.ServerListenPort = boost::trim_copy(std::string(buf));
+					wchar_t buf[1024] = { 0 };
+					GetDlgItemTextW(hwnd, IDC_LISTEN_HOST_COMBO, buf, sizeof(buf)/sizeof(buf[0]));
+					auto u8 = ToUTF8(boost::trim_copy(std::wstring(buf)));
+					config.ServerListenHost = std::string((const char*)u8.data(), u8.size());
+					GetDlgItemTextW(hwnd, IDC_LISTEN_PORT_EDIT, buf, sizeof(buf)/sizeof(buf[0]));
+					u8 = ToUTF8(boost::trim_copy(std::wstring(buf)));
+					config.ServerListenPort = std::string((const char*)u8.data(), u8.size());
 					config.EnableHTTPS = IsDlgButtonChecked(hwnd, IDC_ENABLE_HTTPS_CHECK) == BST_CHECKED;
-					GetDlgItemTextA(hwnd, IDC_CERT_FILE_PATH_TEXT, buf, sizeof(buf));
-					config.HTTPSConfig.CertPemFilePath = buf;
-					GetDlgItemTextA(hwnd, IDC_KEY_FILE_PATH_TEXT, buf, sizeof(buf));
-					config.HTTPSConfig.KeyPemFilePath = buf;
+					GetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, buf, sizeof(buf)/sizeof(buf[0]));
+					u8 = ToUTF8(buf);
+					config.HTTPSConfig.CertPemFilePath = std::string((const char*)u8.data(), u8.size());
+					GetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, buf, sizeof(buf)/sizeof(buf[0]));
+					u8 = ToUTF8(buf);
+					config.HTTPSConfig.KeyPemFilePath = std::string((const char*)u8.data(), u8.size());;
 					StopHTTPServer();
 					if (!StartHTTPServerWithPrompt(config, hwnd)) {
 						config = oldConfig; // Restore old config if failed to start server with new config.
