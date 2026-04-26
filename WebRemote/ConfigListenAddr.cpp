@@ -119,21 +119,19 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				}
 				case IDC_SELECT_CERT_FILE_BUTTON: {
 					std::wstring certPath;
-					std::wstring initDir = std::filesystem::path(FromUTF8((const char8_t*)config.HTTPSConfig.CertPemFilePath.data(), config.HTTPSConfig.CertPemFilePath.size())).parent_path().wstring();
-					if (SelectPemFile(hwnd, initDir, certPath)) {
+					wchar_t buf[1024] = { 0 };
+					GetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, buf, sizeof(buf) / sizeof(buf[0]));
+					if (SelectPemFile(hwnd, std::filesystem::path(buf).parent_path().wstring(), certPath)) {
 						SetDlgItemTextW(hwnd, IDC_CERT_FILE_PATH_TEXT, certPath.c_str());
-						auto u8path = ToUTF8(certPath);
-						config.HTTPSConfig.CertPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
 					}
 					return TRUE;
 				}
 				case IDC_SELECT_KEY_FILE_BUTTON: {
 					std::wstring keyPath;
-					std::wstring initDir = std::filesystem::path(FromUTF8((const char8_t*)config.HTTPSConfig.KeyPemFilePath.data(), config.HTTPSConfig.KeyPemFilePath.size())).parent_path().wstring();
-					if (SelectPemFile(hwnd, initDir, keyPath)) {
+					wchar_t buf[1024] = { 0 };
+					GetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, buf, sizeof(buf) / sizeof(buf[0]));
+					if (SelectPemFile(hwnd, std::filesystem::path(buf).parent_path().wstring(), keyPath)) {
 						SetDlgItemTextW(hwnd, IDC_KEY_FILE_PATH_TEXT, keyPath.c_str());
-						auto u8path = ToUTF8(keyPath);
-						config.HTTPSConfig.KeyPemFilePath = std::string_view((const char*)u8path.data(), u8path.size());
 					}
 					return TRUE;
 				}
