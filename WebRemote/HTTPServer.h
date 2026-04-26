@@ -359,7 +359,10 @@ private:
                 && code != net::error::operation_aborted
                 && code != net::error::connection_reset
                 && code != net::error::connection_aborted) {
-                HOST_LOG(LevelError, std::format(L"Server session error: {} {}", e.code().value(), FromACP(e.code().message())).c_str());
+				// Log SSL error as warning since it may be caused by client disconnecting before SSL handshake completes,
+				// or the certificate is not trusted by the client, which are common and not necessarily server errors.
+				auto logLevel = code.category() == net::error::get_ssl_category() ? LevelWarn : LevelError;
+                HOST_LOG(logLevel, std::format(L"Server session error: {} {}", e.code().value(), FromACP(e.code().message())).c_str());
             }
         }
     }
