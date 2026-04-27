@@ -225,6 +225,9 @@ bool StartHTTPServerWithPrompt(const Configuration& config, HWND parent) {
     if (status != SERVER_OK) {
         std::wstring message;
         switch (status) {
+        case SERVER_EMPTY_CERT_OR_KEY_FILE:
+            message = strRes->Load(IDS_EMPTY_CERT_OR_KEY_FILE);
+			break;
         case SERVER_INVALID_ADDRESS_FORMAT:
             message = formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage);
             break;

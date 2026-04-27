@@ -29,6 +29,7 @@
 #define IDS_TITLE_VERIFICATION_CODE     117
 #define IDR_SERVER_STRINGS__en_US       117
 #define IDS_TITLE_LISTEN_ADDR           118
+#define IDS_EMPTY_CERT_OR_KEY_FILE      119
 #define IDC_REFRESH_CODE                1003
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
