@@ -275,7 +275,6 @@ static void OnUnload() {
     DestroyVerificationCodeDialog();
     DestroyMessageWindow();
     DestroyMenu(subMenu);
-    CancelStateChangeNotifications();
     WriteConfig();
 }
 
