@@ -479,7 +479,8 @@ HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& erro
         throw std::logic_error("Server already running");
     }
 
-    if(config.EnableHTTPS && config.HTTPSConfig.CertPemFilePath.empty() || config.HTTPSConfig.KeyPemFilePath.empty()) {
+    if(config.EnableHTTPS 
+        && (config.HTTPSConfig.CertPemFilePath.empty() || config.HTTPSConfig.KeyPemFilePath.empty())){
         return SERVER_EMPTY_CERT_OR_KEY_FILE;
 	}
 
