@@ -516,9 +516,6 @@ bool HTTPServerRunning() {
     return server != nullptr;
 }
 
-std::string GetHTTPServerListenHost() {
-	return server->GetListenHost();
-}
 unsigned short GetHTTPServerListenPort() {
     return server->GetListenPort();
 }

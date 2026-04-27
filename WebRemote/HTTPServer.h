@@ -28,7 +28,6 @@ class AbstractServer {
 public:
     virtual ~AbstractServer() = default;
 public:
-    virtual std::string GetListenHost() = 0;
     virtual unsigned short GetListenPort() = 0;
 };
 
@@ -203,7 +202,6 @@ private:
     std::string listenHost;
     unsigned short listenPort = 0;
 public:
-    virtual std::string GetListenHost() { return listenHost; }
     virtual unsigned short GetListenPort() { return listenPort; }
 public:
     class InvalidPortException : public std::invalid_argument {

@@ -165,9 +165,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 						return TRUE;
 					}
 					// Save config and exit dialog.
-					// Retreive the actual listen host and port from running server,
-					// in case the server resolved them to different values (e.g. listen port is "HTTP").
-					config.ServerListenHost = GetHTTPServerListenHost(); 
+					// Retreive the actual listen  port from running server,
+					// in case the server resolved it to a different value (e.g. "HTTP" to 80).
 					config.ServerListenPort = std::to_string(GetHTTPServerListenPort());
 					if (!config.Enabled) {
 						StopHTTPServer();
