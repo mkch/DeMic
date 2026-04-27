@@ -238,6 +238,7 @@
     <ResourceCompile Include="WebRemote.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="docs\openssl-unload-note.md" />
     <None Include="server_resource\index.html" />
     <None Include="server_resource\index_en-US.json" />
     <None Include="server_resource\index_zh-CN.json" />

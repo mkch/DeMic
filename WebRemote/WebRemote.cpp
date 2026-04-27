@@ -14,6 +14,8 @@
 #include <boost/json.hpp>
 #include <fstream>
 
+#include <openssl/ssl.h>
+
 HINSTANCE hInstance = NULL;
 std::filesystem::path moduleFilePath;
 std::filesystem::path configFilePath;
@@ -84,6 +86,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         plugin.Name = &pluginName[0];
         break;
     }
+	case DLL_THREAD_ATTACH:
+        OPENSSL_thread_stop();
+        break;
     case DLL_PROCESS_DETACH:
         if (lpReserved != nullptr) {
             break; // do not do cleanup if process termination scenario

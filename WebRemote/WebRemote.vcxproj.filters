@@ -99,6 +99,7 @@
     <None Include="server_resource\verify.html" />
     <None Include="server_resource\index_zh-CN.json" />
     <None Include="server_resource\index_en-US.json" />
+    <None Include="docs\openssl-unload-note.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Microphone.png">
