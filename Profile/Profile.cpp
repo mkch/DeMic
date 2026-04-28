@@ -97,7 +97,6 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     rootMenuItem.hSubMenu = devicesMenu;
     VERIFY(host, state, host->CreateRootMenuItem(state, &rootMenuItem));
     ReadConfig();
-    LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
     return TRUE;
 }
 
@@ -145,7 +144,7 @@ void ReadConfig() {
             selectedDev[FromUTF8(u8Id)] = FromUTF8(u8Name);
         });
     } catch(...) {
-        ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
+        ShowError(host, state, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath).c_str());
     }
 }
 
@@ -161,7 +160,7 @@ void WriteConfig() {
     std::ofstream out(configFilePath);
     out << std::setw(2) << config;
     if (out.fail()) {
-        ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+        ShowError(host, state, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
     }
 }
 
@@ -348,7 +347,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 3},			/*Version*/
+    {1, 4},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };

@@ -54,6 +54,32 @@ std::wstring FromUTF8(const std::u8string_view& str) {
     return FromUTF8(str.data(), str.size());
 }
 
+std::wstring FromACP(const char* str, size_t len) {
+    if (str == nullptr) {
+        throw std::invalid_argument("str is null");
+    }
+    if (len == (size_t)-1) {
+        len = std::char_traits<char>::length(str);
+    }
+    int size_needed = MultiByteToWideChar(CP_THREAD_ACP, 0, reinterpret_cast<const char*>(str), (int)len, NULL, 0);
+    if (size_needed <= 0) {
+        return L"";
+    }
+    std::wstring result(size_needed, 0);
+    if (MultiByteToWideChar(CP_THREAD_ACP, 0, reinterpret_cast<const char*>(str), (int)len, result.data(), size_needed) == 0) {
+        return L"";
+    }
+    return result;
+}
+
+std::wstring FromACP(const std::string& str) {
+    return FromACP(str.c_str(), str.size());
+}
+
+std::wstring FromACP(const std::string_view& str) {
+    return FromACP(str.data(), str.size());
+}
+
 std::u8string ToUTF8(const wchar_t* str, size_t len) {
     if (str == nullptr) {
         throw std::invalid_argument("str is null");
@@ -78,4 +104,50 @@ std::u8string ToUTF8(const std::wstring& str) {
 
 std::u8string ToUTF8(const std::wstring_view& str) {
     return ToUTF8(str.data(), str.size());
+}
+
+std::string ToACP(const wchar_t* str, size_t len) {
+    if (str == nullptr) {
+        throw std::invalid_argument("str is null");
+    }
+    if (len == (size_t)-1) {
+        len = wcslen(str);
+    }
+    int size_needed = WideCharToMultiByte(CP_ACP, 0, str, (int)len, NULL, 0, NULL, NULL);
+    if (size_needed <= 0) {
+        return "";
+    }
+    std::string result(size_needed, 0);
+    if (WideCharToMultiByte(CP_ACP, 0, str, (int)len, (char*)result.data(), size_needed, NULL, NULL) == 0) {
+        return "";
+    }
+    return result;
+}
+
+std::string ToACP(const std::wstring& str) {
+    return ToACP(str.c_str(), str.size());
+}
+
+std::string ToACP(const std::wstring_view& str) {
+    return ToACP(str.data(), str.size());
+}
+
+std::filesystem::path GetModuleFilePath(HMODULE hModule) {
+	std::wstring path(MAX_PATH, '\0');
+	for (;;) {
+		DWORD size = GetModuleFileNameW(hModule, path.data(), (DWORD)path.size());
+		if (size == 0) {
+			throw Win32Error(GetLastError());
+		}
+		if (size < path.size()) {
+			path.resize(size);
+			return path;
+		}
+		// The buffer is too small, increase it and try again.
+		const size_t newSize = path.size() * 2;
+		if (newSize > 32767) {
+			throw Win32Error(ERROR_FILENAME_EXCED_RANGE);
+		}
+		path.resize(newSize);
+	}
 }

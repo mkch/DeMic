@@ -33,23 +33,13 @@ BOOL WINAPI DllMain(
 		strRes = new StringRes(hinstDLL);
 		pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
 		plugin.Name = &pluginName[0];
-
-		wchar_t configFile[1024] = { 0 };
-		const DWORD gmfn = GetModuleFileNameW(hInstance, configFile, sizeof(configFile) / sizeof(configFile[0]));
-		VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
-		configFilePath = configFile;
-		configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
 		break;
 	}
     case DLL_PROCESS_DETACH:
 		// Perform any necessary cleanup.
-		DestroyBillboardWnd(); // We need to trigger WM_DESTROY to save config file.
         if (lpvReserved != nullptr) {
             break; // do not do cleanup if process termination scenario
         }
-		if (host && state) {
-			host->DeleteRootMenuItem(state);
-		}
         break;
     }
     return TRUE;
@@ -77,7 +67,7 @@ void ReadConfig() {
 		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
-		ShowError(plugin.Name, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
+		ShowError(host, state, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
 	}
 }
 
@@ -96,7 +86,7 @@ void WriteConfig() {
 	std::ofstream out(configFilePath);
 	out << std::setw(2) << config;
 	if (out.fail()) {
-		ShowError(plugin.Name, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
+		ShowError(host, state, strRes->Load(IDS_SAVE_CONFIG_FAILED).c_str());
 	}
 }
 
@@ -106,6 +96,12 @@ void* state = NULL;
 static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	host = h;
 	state = args->State;
+
+	wchar_t configFile[1024] = { 0 };
+	const DWORD gmfn = GetModuleFileNameW(hInstance, configFile, sizeof(configFile) / sizeof(configFile[0]));
+	VERIFY_SIMPLE(plugin.Name, gmfn > 0 && gmfn < sizeof(configFile) / sizeof(configFile[0]));
+	configFilePath = configFile;
+	configFilePath = configFilePath.substr(0, configFilePath.rfind(L'\\') + 1) + CONFIG_FILE_NAME;
 
 	MENUITEMINFOW rootMenuItem = {sizeof(rootMenuItem), 0};
 	rootMenuItem.fMask = MIIM_STRING;
@@ -120,9 +116,11 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
 	if (!ok) {
 		host->DeleteRootMenuItem(state);
 	}
-
-	LOG(host, state, LevelDebug, L"plugin loaded."); // Test logger
 	return ok;
+}
+
+static void OnUnload() {
+	DestroyBillboardWnd(); // We need to trigger WM_DESTROY to save config file.
 }
 
 static void OnMenuItemCmd(UINT id) {
@@ -133,12 +131,14 @@ static void OnMenuItemCmd(UINT id) {
 	}
 }
 
+
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
 	NULL,			/*Name*/
-	{1, 3},			/*Version*/
+	{1, 4},			/*Version*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
+	OnUnload,		/*OnUnload*/
 };
 
 extern "C" DeMic_PluginInfo* GetPluginInfo(void) {

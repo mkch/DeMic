@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "resource": {
+    "title": "DeMic - Web 远程控制",
+    "server_error": "无法连接服务器！",
+    "input_verification_code": "请输入验证码：",
+    "invalid_verification_code": "无效的验证码！",
+    "verify": "验证",
+    "logout": "退出登录"
+  }
+}

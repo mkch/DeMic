@@ -1,0 +1,148 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <title>{{title}}</title>
+    <style>
+        .button-panel {
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .button-panel-top {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 10px 0;
+            box-sizing: border-box;
+        }
+
+        .button-panel-main {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logout-link {
+            color: #4A4A4A;
+            font-size: 14px;
+            text-decoration: none;
+        }
+
+            .logout-link:hover {
+                text-decoration: underline;
+            }
+
+        .custom-btn {
+            display: inline-block;
+            padding: 50px;
+            margin: 10px;
+            width: 160px;
+            height: 160px;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background-image: url('/res/loading.png');
+            background-size: 85%;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: #F0F0F0;
+        }
+
+            .custom-btn:not(:disabled):hover {
+                transform: scale(1.01);
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            }
+
+            .custom-btn:not(:disabled):active {
+                transform: scale(0.99);
+            }
+
+            .custom-btn:disabled {
+                cursor: progress;
+                opacity: 0.6;
+            }
+
+        .center-div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class='center-div' style='height:30px'>{{title}}</div>
+    <div class='center-div button-panel' style='height:180px'>
+        <div class='button-panel-top'>
+            <a class='logout-link' href='/logout'>{{logout}}</a>
+        </div>
+        <div class='button-panel-main'>
+            <button id='toggle-btn' class='custom-btn' onclick='handleClick(this)'></button>
+        </div>
+    </div>
+    <script>
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function startStatePolling() {
+            let currentStatus = "";
+            while (true) {
+                try {
+                    const response = await fetch(`/wait_state_change?old=${encodeURIComponent(currentStatus)}`);
+                    if (!response.ok) {
+                        throw new Error('bad status');
+                    }
+                    currentStatus = await response.text()
+                    const btn = document.querySelector('#toggle-btn');
+                    if (currentStatus == 'muted') {
+                        btn.style.backgroundImage = "url('/res/muted.png')";
+                    } else {
+                        btn.style.backgroundImage = "url('/res/unmuted.png')";
+                    }
+                } catch (error) {
+                    await sleep(1000); // Retry 1s later.
+                }
+
+            }
+        }
+
+        async function handleClick(button) {
+            button.disabled = true;
+
+            let ok = false;
+            try {
+                const response = (await fetch('/toggle'));
+                if (response.status == 401) {
+                    window.location.href = '/verify';
+                    ok = true;
+                } else {
+                    ok = response.status == 200;
+                }
+            } catch (error) {
+                console.log(error);
+            }
+            if (!ok) {
+                alert("{{server_error}}")
+            }
+            button.disabled = false;
+        }
+
+        (async function () {
+            await sleep(100); // Avoid flickering caused by the initial loading icon.
+            startStatePolling();
+        })();
+    </script>
+</body>   
+
+</html>

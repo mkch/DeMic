@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "resource": {
+    "title": "DeMic - Web Remote",
+    "server_error": "Failed to connect to the server!",
+    "input_verification_code": "Please enter the verification code:",
+    "invalid_verification_code": "Invalid verification code!",
+    "verify": "Verify",
+    "logout": "Logout"
+  }
+}

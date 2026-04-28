@@ -1,0 +1,62 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <title>{{title}}</title>
+    <style>
+        .center-div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class='center-div' style='height:40px'>
+        {{input_verification_code}}
+    </div>
+    <form onsubmit='doSubmit(); return false;'>
+        <div class='center-div' style='height:40px'>
+            <input id='code'>
+        </div>
+        <div class='center-div' style='height:30px'>
+            <button id='submit-button' type='submit'>{{verify}}</button>
+        </div>
+    </form>
+
+    <script>
+        async function doSubmit() {
+            const button = document.querySelector('#submit-button');
+            button.disabled = true;
+            const code = document.getElementById('code');
+            try {
+                const response = await fetch(`/verify_code?`,{
+                    method: 'POST',
+                    body: new URLSearchParams({code: code.value.trim().toUpperCase()})
+                });
+                button.disable = false;
+                switch(response.status) {
+                    case 200:
+                        window.location.href = '/';
+                        break;
+                    case 400:
+                        alert('{{invalid_verification_code}}');
+                        code.focus();
+                        break;
+                }
+            } catch(e) {
+                alert('{{server_error}}');
+            }
+            code.value = "";
+            button.disabled = false;
+        }
+    </script>
+
+</body>   
+
+</html>

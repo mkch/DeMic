@@ -15,7 +15,7 @@ bool ProcessPluginMenuCmd(UINT id);
 void CallPluginMicStateListeners();
 // Calls all the init menu popup listeners of plugins.
 // NULL menu is the main system tray menu.
-void CallPluginInitMenuPopupListener(HMENU menu);
+void CallPluginInitMenuPopupListeners(HMENU menu);
 // Calls all the default device changed listeners in plugins.
 void CallPluginDefaultDevChangedListeners();
 // Calls the first device filter in plugins.
@@ -26,3 +26,6 @@ void OnPluginMenuItemCmd(UINT cmd);
 std::wstring GetPluginDir();
 // Called when plugin menu is about to popup;
 void OnPluginMenuInitPopup();
+// Calls all the OnPreTranslateMessage of plugins.
+// Returns TRUE if any plugin returns TRUE.
+BOOL OnPluginPreTranslateMessage(MSG* msg);

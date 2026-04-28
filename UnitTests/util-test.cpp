@@ -268,3 +268,39 @@ TEST(UtilTest, LongString_UTF8) {
     EXPECT_EQ(std::string((const char*)input.c_str()), (const char*)back.c_str());
     EXPECT_EQ(2000, wide.size());
 }
+
+#include <wininet.h>
+TEST(UtilTest, Win32Error) {
+    Win32Error error(123);
+    EXPECT_EQ(123, error.Code());
+
+	auto msgA = Win32Error::GetMessageA(ERROR_PATH_NOT_FOUND/*3*/);
+	EXPECT_TRUE(msgA.length() > std::strlen("3: "));
+	auto msgW = Win32Error::GetMessageW(ERROR_PATH_NOT_FOUND);
+    EXPECT_TRUE(msgA.length() > std::strlen("3: "));
+	auto notExistMsgA = Win32Error::GetMessageA(4294967295/*0xFFFFFFFF*/);
+    EXPECT_EQ(notExistMsgA, "4294967295: ");
+
+    Win32Error pathNotFound(ERROR_PATH_NOT_FOUND);
+	EXPECT_EQ(pathNotFound.Code(), ERROR_PATH_NOT_FOUND);
+	EXPECT_EQ(pathNotFound.what(), msgA);
+
+	auto hWininet = LoadLibraryW(L"wininet.dll");
+	EXPECT_NE(hWininet, HMODULE(0));
+    Win32Error internetTimeout(ERROR_INTERNET_TIMEOUT/*12002*/, hWininet);
+    EXPECT_EQ(internetTimeout.Code(), ERROR_INTERNET_TIMEOUT);
+    auto internetTimeoutMsgA = Win32Error::GetMessageA(ERROR_INTERNET_TIMEOUT, hWininet);
+	EXPECT_TRUE(internetTimeoutMsgA.length() > std::strlen("12002: "));
+    EXPECT_EQ(internetTimeout.what(), internetTimeoutMsgA);
+    if (hWininet) {
+        FreeLibrary(hWininet);
+    }
+}
+
+#include "resource.h"
+
+TEST(UtilTest, LoadModuleResource) {
+    auto resource = LoadModuleResource<std::byte>(NULL, L"TEST_RESOURCE", MAKEINTRESOURCEW(IDR_TEST_RESOURCE1));
+	auto data = std::string_view(reinterpret_cast<const char*>(resource.data()), resource.size());
+	EXPECT_EQ("ABCD", data);
+}

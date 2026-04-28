@@ -36,7 +36,6 @@ static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 
-std::wstring GetModuleFilePath();
 const std::wstring moduleFilePath = GetModuleFilePath(); // Full path of this exe.
 
 StringRes* strRes = NULL;
@@ -313,34 +312,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        if (hotKeySettingWindow && IsDialogMessage(hotKeySettingWindow, &msg) ||
-            soundSettingsWindow && IsDialogMessage(soundSettingsWindow, &msg)) {
+        if (OnPluginPreTranslateMessage(&msg)) {
             continue;
         }
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+        if (TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+            continue;
         }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     return (int) msg.wParam;
-}
-
-// GetModuleFilePath returns the file path of this exe module.
-std::wstring GetModuleFilePath() {
-	DWORD size = MAX_PATH;
-	while(1) {
-		std::vector<wchar_t> buffer(size);
-		DWORD ret = GetModuleFileNameW(NULL, buffer.data(), DWORD(buffer.size()));
-		if (ret == 0) {
-			ShowError((std::wstringstream() << L"GetModuleFileNameW: " << GetLastError()).str().c_str());
-			DebugBreak();
-		}
-		if(ret < size) {
-			return std::wstring(buffer.data(), ret);
-		}
-		size *= 2;
-	}
 }
 
 // CommandLine returns the whole command line of this exe
@@ -663,6 +645,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_NOTIFY:
         if (lParam == WM_RBUTTONUP) {
             SetForegroundWindow(hWnd);
+            if (!IsWindowEnabled(mainWindow)) {
+                // Has modal dialog open, do not show menu.
+                return 0;
+            }
             CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
             GetCursorPos(&pt);
@@ -698,7 +684,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
             auto menu = (HMENU)wParam;
             if (menu == popupMenu) {
-                CallPluginInitMenuPopupListener(NULL);
+                CallPluginInitMenuPopupListeners(NULL);
                 break;
             }
             if (menu == pluginMenu) {
@@ -712,7 +698,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     LOG_LAST_ERROR();
                 }
             }
-            CallPluginInitMenuPopupListener(menu);
+            CallPluginInitMenuPopupListeners(menu);
             break;
         }
     }

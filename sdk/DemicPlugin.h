@@ -12,7 +12,7 @@ extern "C" {
 	struct DeMic_Host;
 	struct DeMic_OnLoadedArgs;
 
-	static const DWORD DEMIC_CURRENT_SDK_VERSION = 2;
+	static const DWORD DEMIC_CURRENT_SDK_VERSION = 3;
 	
 	struct DeMic_PluginInfo {
 		// Version of this SDK.
@@ -32,6 +32,16 @@ extern "C" {
 		// Argument id is 0 if the root menu item is selected.
 		// Can be NULL.
 		void (*OnMenuItemCmd)(UINT id);
+		// OnUnload is called before this plugin is unloaded. Can be NULL.
+		// Added in SDK v3.
+		void(*OnUnload)();
+		// OnPreTranslateMessage is called in the main message loop before
+		// TranslateMessage, if not NULL.
+		// It is useful when the plugin needs to call IsDialogMessage for modeless dialogs.
+		// Returning TRUE prevents the call of TranslateMessage.
+		// Can be NULL.
+		// Added in SDK v3.
+		BOOL(*OnPreTranslateMessage)(MSG*);
 	};
 
 	enum LogLevel {
@@ -79,7 +89,7 @@ extern "C" {
 		void(*SetInitMenuPopupListener)(void* state, HMENU menu, void(*listener)(HMENU menu));
 		// Forces DeMic to call micphone state changed handler.
 		void(*NotifyMicStateChanged)();
-		// Get the devault microphone device ID.
+		// Gets the devault microphone device ID.
 		// Empty string if not found.
 		void(*GetDefaultDevID)(void(*callback)(const wchar_t* devID, void* userData), void* userData);
 		// Sets a listener called when default microphone device is changed.
@@ -88,6 +98,14 @@ extern "C" {
 		BOOL(*DeleteRootMenuItem)(void* state);
 		// Writes a log message to the default log file.
 		void (*WriteLog)(void* state, LogLevel level, const wchar_t* file, int line, const wchar_t* message);
+		// Gets the main window handle of DeMic. 
+		// Must be used for parent window when creating windows in plugin. 
+		// It is important for maintaining correct window modeling. 
+		// Added in SDK v3.	
+		HWND(*GetMainWindow)(void* state);
+		// Gets the localized title can be used as dialog caption in plugin.
+		// Added in SDK v3.	
+		const wchar_t* (*GetMessageCaption)(void* state);
 	};
 
 	// Extra arguments of OnLoaded in DeMic_PluginInfo.
