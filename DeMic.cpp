@@ -553,6 +553,7 @@ void TurnOnMic() {
     const auto state = micCtrl->GetMuteState();
     if (state == MicCtrl::MuteState::Unknown) {
         if (showingUnknownMicError) {
+            SetForegroundWindow(mainWindow);
             return;
         }
         showingUnknownMicError = true;
@@ -570,6 +571,7 @@ void TurnOffMic() {
     const auto state = micCtrl->GetMuteState();
     if (state == MicCtrl::MuteState::Unknown) {
         if (showingUnknownMicError) {
+            SetForegroundWindow(mainWindow);
             return;
         }
         showingUnknownMicError = true;
@@ -587,6 +589,7 @@ void ToggleMuted() {
     const auto state = micCtrl->GetMuteState();
     if (state == MicCtrl::MuteState::Unknown) {
         if (showingUnknownMicError) {
+            SetForegroundWindow(mainWindow);
             return;
         }
         showingUnknownMicError = true;
