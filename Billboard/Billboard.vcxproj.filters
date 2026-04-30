@@ -71,6 +71,9 @@
     <Image Include="MicrophoneMuted.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="NoMicrophone.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <Xml Include="manifest.xml" />

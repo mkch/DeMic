@@ -405,8 +405,8 @@ static BOOL HostModifyRootMenuItem(void* st, LPCMENUITEMINFOW lpmi) {
 	return SetMenuItemInfoW(popupMenu, state->RootMenuItemID, FALSE, &mi);
 }
 
-static BOOL HostIsMuted() {
-	return IsMuted();
+static MuteState HostGetMuteState() {
+	return (MuteState)GetMuteState();
 }
 
 static void HostSetMicMuteStateListener(void* st, void(*listener)()) {
@@ -425,22 +425,22 @@ void CallPluginMicStateListeners() {
 }
 
 static void HostGetActiveDevices(void (*callback)(const wchar_t* devID, void* userData), void* userData) {
-	const auto devices = micCtrl.GetActiveDevices();
+	const auto devices = micCtrl->GetActiveDevices();
 	std::for_each(devices.begin(), devices.end(), [callback, userData](const auto id) {
 		callback(id.c_str(), userData);
 	});
 }
 
 static void HostGetDevName(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
-	callback(micCtrl.GetDevName(devID).c_str(), userData);
+	callback(micCtrl->GetDevName(devID).c_str(), userData);
 }
 
 static void HostGetDevIfaceName (const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData) {
-	callback(micCtrl.GetDevIfaceName(devID).c_str(), userData);
+	callback(micCtrl->GetDevIfaceName(devID).c_str(), userData);
 }
 
-static BOOL HostGetDevMuted(const wchar_t* devID) {
-	return micCtrl.GetDevMuted(devID);
+static MuteState HostGetDevMuteState(const wchar_t* devID) {
+	return (MuteState)micCtrl->GetDevMuteState(devID);
 }
 
 static void HostSetDevFilter(void* st, BOOL(*filter)(const wchar_t* devID)) {
@@ -489,7 +489,7 @@ static void HostNotifyMicStateChanged() {
 }
 
 static void HostGetDefaultDevID (void(*callback)(const wchar_t* devID, void* userData), void* userData) {
-	callback(micCtrl.GetDefaultMicphone().c_str(), userData);
+	callback(micCtrl->GetDefaultMicphone().c_str(), userData);
 }
 
 static void HostSetDefaultDevChangedListener(void* st, void(*listener)()) {
@@ -540,13 +540,13 @@ static DeMic_Host host = {
 	HostTurnOnMic,
 	HostTurnOffMic,
 	HostToggleMuted,
-	HostIsMuted,
+	HostGetMuteState,
 	HostSetMicMuteStateListener,
 	HostModifyRootMenuItem,
 	HostGetActiveDevices,
 	HostGetDevName,
 	HostGetDevIfaceName,
-	HostGetDevMuted,
+	HostGetDevMuteState,
 	HostSetDevFilter,
 	HostSetInitMenuPopupListener,
 	HostNotifyMicStateChanged,

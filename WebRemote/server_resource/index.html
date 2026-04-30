@@ -94,23 +94,28 @@
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-
+        var currentState = "unknown";
         async function startStatePolling() {
-            let currentStatus = "";
             while (true) {
                 try {
-                    const response = await fetch(`/wait_state_change?old=${encodeURIComponent(currentStatus)}`);
+                    const response = await fetch(`/wait_state_change?old=${encodeURIComponent(currentState)}`);
                     if (!response.ok) {
                         throw new Error('bad status');
                     }
-                    currentStatus = await response.text()
+                    currentState = await response.text()
                     const btn = document.querySelector('#toggle-btn');
-                    if (currentStatus == 'muted') {
-                        btn.style.backgroundImage = "url('/res/muted.png')";
-                    } else {
-                        btn.style.backgroundImage = "url('/res/unmuted.png')";
+                    switch(currentState) {
+                        case 'muted':
+                            btn.style.backgroundImage = "url('/res/muted.png')";
+                            break;
+                        case 'unmuted':
+                            btn.style.backgroundImage = "url('/res/unmuted.png')";
+                            break;
+                        default:
+                            btn.style.backgroundImage = "url('/res/loading.png')";
                     }
                 } catch (error) {
+                    currentState = "";
                     await sleep(1000); // Retry 1s later.
                 }
 
@@ -119,21 +124,25 @@
 
         async function handleClick(button) {
             button.disabled = true;
-
-            let ok = false;
-            try {
-                const response = (await fetch('/toggle'));
-                if (response.status == 401) {
-                    window.location.href = '/verify';
-                    ok = true;
-                } else {
-                    ok = response.status == 200;
+            
+            if (currentState == "unknown") {
+                alert("{{no_microphone}}");
+            } else {
+                let ok = false;
+                try {
+                    const response = (await fetch('/toggle'));
+                    if (response.status == 401) {
+                        window.location.href = '/verify';
+                        ok = true;
+                    } else {
+                        ok = response.status == 200;
+                    }
+                } catch (error) {
+                    console.log(error);
                 }
-            } catch (error) {
-                console.log(error);
-            }
-            if (!ok) {
-                alert("{{server_error}}")
+                if (!ok) {
+                    alert("{{server_error}}")
+                }
             }
             button.disabled = false;
         }

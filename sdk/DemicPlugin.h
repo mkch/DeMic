@@ -12,7 +12,7 @@ extern "C" {
 	struct DeMic_Host;
 	struct DeMic_OnLoadedArgs;
 
-	static const DWORD DEMIC_CURRENT_SDK_VERSION = 3;
+	static const DWORD DEMIC_CURRENT_SDK_VERSION = 4;
 	
 	struct DeMic_PluginInfo {
 		// Version of this SDK.
@@ -51,6 +51,14 @@ extern "C" {
 		LevelError = 8,
 	};
 
+	enum MuteState {
+		StateUnmuted = 0,
+		StateMuted,
+		// IsMuted(): No microphone installed or all microphone devices are filtered.
+		// GetDevMuted(): devID is invalid. 
+		StateUnknown = -1,
+	};
+
 	// Interface for plugin to call DeMic.
 	struct DeMic_Host {
 		// Creates the root menu item of this plugin.
@@ -63,7 +71,7 @@ extern "C" {
 		// Toggles on off.
 		void(*ToggleMuted)(void* state);
 		// Gets the microphone state.
-		BOOL(*IsMuted)();
+		MuteState(*GetMuteState)();
 		// Sets a listener to be called when micphone mute
 		// state is changed.
 		void(*SetMicMuteStateListener)(void* state, void(*listener)());
@@ -79,7 +87,7 @@ extern "C" {
 		// (for example, "XYZ Audio Adapter")
 		void(*GetDevIfaceName)(const wchar_t* devID, void(*callback)(const wchar_t* name, void* userData), void* userData);
 		// Gets whether a microphone device is muted.
-		BOOL(*GetDevMuted)(const wchar_t* devID);
+		MuteState(*GetDevMuteState)(const wchar_t* devID);
 		// Sets a filter function which defines the set of microphone devices
 		// to operate.
 		void(*SetDevFilter)(void* state, BOOL(*filter)(const wchar_t* devID));

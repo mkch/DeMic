@@ -18,8 +18,7 @@ enum HTTPServerResult {
 HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& errorMessage);
 bool StopHTTPServer();
 bool HTTPServerRunning();
-std::string GetHTTPServerListenHost();
 unsigned short GetHTTPServerListenPort();
 
-void NotifyStateChange(bool newState);
+void NotifyStateChange(MuteState newState);
 void CancelStateChangeNotifications();

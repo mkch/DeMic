@@ -65,7 +65,7 @@ static const IID IID_ISimpleAudioVolume = __uuidof(ISimpleAudioVolume);
 //	hr = volume->SetMute(bMute, NULL);
 //}
 
-MicCtrl::MicCtrl() :notifClient(new MMNotificationClient()) {
+MicCtrl::MicCtrl(bool simulateNoMic) : simulateNoMicrophone(simulateNoMic), notifClient(new MMNotificationClient()) {
 	VERIFY_SUCCEEDED(CoInitialize(NULL));
 	VERIFY_SUCCEEDED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
 		IID_IMMDeviceEnumerator, (void**)&devEnum));
@@ -97,7 +97,9 @@ void MicCtrl::ReloadDevices() {
 	IMMDeviceCollection* devCollection = NULL;
 	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	if (!simulateNoMicrophone) {
+		VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	}
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
 		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
@@ -117,12 +119,14 @@ void MicCtrl::ReloadDevices() {
 	devCollection->Release();
 }
 
-bool MicCtrl::GetMuted() {
+MicCtrl::MuteState MicCtrl::GetMuteState() {
 	IMMDeviceCollection* devCollection = NULL;
 	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
-	BOOL bMute = TRUE;
+	if (!simulateNoMicrophone) {
+		VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	}
+	MuteState state = devCount ? MuteState::Muted : MuteState::Unknown;
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
 		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
@@ -137,21 +141,25 @@ bool MicCtrl::GetMuted() {
 		IAudioEndpointVolume* volume = NULL;
 		VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
 		dev->Release();
+		BOOL bMute = TRUE;
 		VERIFY_SUCCEEDED(volume->GetMute(&bMute));
 		volume->Release();
 		if (!bMute) {
+			state = Unmuted;
 			break;
 		}
 	}
 	devCollection->Release();
-	return bMute;
+	return state;
 }
 
 void MicCtrl::SetMuted(bool mute) {
 	IMMDeviceCollection* devCollection = NULL;
 	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	if (!simulateNoMicrophone) {
+		VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	}
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
 		VERIFY_SUCCEEDED(devCollection->Item(i, &dev));
@@ -176,7 +184,9 @@ std::vector<std::wstring> MicCtrl::GetActiveDevices() {
 	IMMDeviceCollection* devCollection = NULL;
 	VERIFY_SUCCEEDED(devEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devCollection));
 	UINT devCount = 0;
-	VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	if (!simulateNoMicrophone) {
+		VERIFY_SUCCEEDED(devCollection->GetCount(&devCount));
+	}
 	std::vector<std::wstring> ids;
 	for (UINT i = 0; i < devCount; i++) {
 		IMMDevice* dev = NULL;
@@ -221,15 +231,15 @@ std::wstring MicCtrl::GetDevIfaceName(const wchar_t* devID) {
 	return name.pwszVal;
 }
 
-int MicCtrl::GetDevMuted(const wchar_t* devID) {
+MicCtrl::MuteState MicCtrl::GetDevMuteState(const wchar_t* devID) {
 	IMMDevice* dev = NULL;
 	if (devEnum->GetDevice(devID, &dev) != S_OK) {
-		return -1;
+		return MuteState::Unknown;
 	}
 	DWORD state = 0;
 	VERIFY_SUCCEEDED(dev->GetState(&state));
 	if (state != DEVICE_STATE_ACTIVE) {
-		return -1;
+		return MuteState::Unknown;
 	}
 	IAudioEndpointVolume* volume = NULL;
 	VERIFY_SUCCEEDED(dev->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, (void**)&volume));
@@ -237,7 +247,7 @@ int MicCtrl::GetDevMuted(const wchar_t* devID) {
 	BOOL mute = FALSE;
 	VERIFY_SUCCEEDED(volume->GetMute(&mute));
 	volume->Release();
-	return mute ? 1 : 0;
+	return mute ? MuteState::Muted : MuteState::Unmuted;
 }
 
 std::wstring MicCtrl::GetDefaultMicphone() {

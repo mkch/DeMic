@@ -122,9 +122,9 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
     ReadConfig();
 
     host->SetMicMuteStateListener(state, [] {
-        NotifyStateChange(host->IsMuted());
+        NotifyStateChange(host->GetMuteState());
         });
-    NotifyStateChange(host->IsMuted());
+    NotifyStateChange(host->GetMuteState());
 
 	subMenu = CreatePopupMenu();
     if (subMenu == NULL) {
@@ -287,7 +287,7 @@ static void OnUnload() {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     L"Web Remote",	/*Name*/
-    {1, 0},			/*Version*/
+    {1, 1},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 	OnUnload,	    /*OnUnload*/

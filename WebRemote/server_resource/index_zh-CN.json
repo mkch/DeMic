@@ -6,6 +6,7 @@
     "input_verification_code": "请输入验证码：",
     "invalid_verification_code": "无效的验证码！",
     "verify": "验证",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "no_microphone": "未检测到麦克风！"
   }
 }

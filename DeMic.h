@@ -10,16 +10,16 @@ const UINT APS_NextPluginCmdID = _APS_NEXT_COMMAND_VALUE;
 
 // Currrent version of DeMic.
 // Must be a semver!
-static const wchar_t* VERSION = L"1.3.2";
+static const wchar_t* VERSION = L"1.3.3";
 
 extern HMENU popupMenu;
 extern HMENU pluginMenu;
-extern MicCtrl micCtrl;
+extern std::unique_ptr<MicCtrl> micCtrl;;
 extern StringRes* strRes;
 extern std::wstring defaultLogFilePath;
 
 void TurnOnMic();
 void TurnOffMic();
 void ToggleMuted();
-BOOL IsMuted();
+MicCtrl::MuteState GetMuteState();
 void WriteConfig();

@@ -187,6 +187,7 @@ std::wstring cmdLineArgs; // The command line args to use when starting the firs
 std::wstring cmdLineArgs2; // The command line args to use when starting this exe while already running. 
 
 Logger::Level logLevel = Logger::LevelError; // The log level for logging.
+BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -196,7 +197,7 @@ INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
-MicCtrl micCtrl;
+std::unique_ptr<MicCtrl> micCtrl;
 bool micMuted = false;
 std::wstring configFilePath, startOnBootCmd;
 bool silentMode = false;
@@ -246,13 +247,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
     ReadConfig();
 
+	micCtrl = std::move(std::make_unique<MicCtrl>(simulateNoMicphone));
+
     std::ofstream loggerStream(defaultLogFilePath, std::ios::app);
     Logger defaultLogger(&loggerStream, logLevel);
     SetDefaultLogger(&defaultLogger);
 
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
 
-    micCtrl.SetDevFilter(devFilter);
+    micCtrl->SetDevFilter(devFilter);
     
     const bool noArgInCmdLine = cmd == CMD_NONE;
 
@@ -544,32 +547,65 @@ void PlayOffSound() {
     }
 }
 
+static bool showingUnknownMicError = false; // Avoid showing multiple error message boxes when mic state is unknown.
+
 void TurnOnMic() {
-    if (micCtrl.GetMuted()) {
-        micCtrl.SetMuted(false);
+    const auto state = micCtrl->GetMuteState();
+    if (state == MicCtrl::MuteState::Unknown) {
+        if (showingUnknownMicError) {
+            return;
+        }
+        showingUnknownMicError = true;
+		ShowError(strRes->Load(IDS_NO_MICROPHONE).c_str());
+        showingUnknownMicError = false;
+        return;
+    }
+    if (state == MicCtrl::MuteState::Muted) {
+        micCtrl->SetMuted(false);
         PlayOnSound();
     }
 }
 
 void TurnOffMic() {
-    if (!micCtrl.GetMuted()) {
-        micCtrl.SetMuted(true);
+    const auto state = micCtrl->GetMuteState();
+    if (state == MicCtrl::MuteState::Unknown) {
+        if (showingUnknownMicError) {
+            return;
+        }
+        showingUnknownMicError = true;
+        ShowError(strRes->Load(IDS_NO_MICROPHONE).c_str());
+        showingUnknownMicError = false;
+        return;
+    }
+    if (state == MicCtrl::MuteState::Unmuted) {
+        micCtrl->SetMuted(true);
         PlayOffSound();
     }
 }
 
 void ToggleMuted() {
-    const auto muted = micCtrl.GetMuted();
-    if (muted) {
+    const auto state = micCtrl->GetMuteState();
+    if (state == MicCtrl::MuteState::Unknown) {
+        if (showingUnknownMicError) {
+            return;
+        }
+        showingUnknownMicError = true;
+        ShowError(strRes->Load(IDS_NO_MICROPHONE).c_str());
+        showingUnknownMicError = false;
+        return;
+    }
+    if (state == MicCtrl::Muted) {
+        micCtrl->SetMuted(false);
         PlayOnSound();
     } else {
+        micCtrl->SetMuted(true);
         PlayOffSound();
     }
-    micCtrl.SetMuted(!muted);
+    
 }
 
-BOOL IsMuted() {
-    return micCtrl.GetMuted();
+MicCtrl::MuteState GetMuteState() {
+    return micCtrl->GetMuteState();
 }
 
 // Debounce interval for device state change events (ms).
@@ -584,7 +620,7 @@ static void lastErrorLogger() {
 
 static TimeDebouncer<> deviceStateChangedDebouncer(
     DEVICE_CHANGE_DELAY, [] {
-        micCtrl.ReloadDevices();
+        micCtrl->ReloadDevices();
         UpdateNotification(mainWindow);
         CallPluginMicStateListeners();
     }, 
@@ -938,7 +974,10 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
         data.dwInfoFlags = NIIF_INFO;
     }
     data.uCallbackMessage = UM_NOTIFY;
-    data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(micCtrl.GetMuted() ? IDI_MICROPHONE_MUTED : IDI_MICPHONE));
+    const auto state = micCtrl->GetMuteState();
+    data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
+        state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
+        state == MicCtrl::Unmuted ? IDI_MICPHONE : IDI_NO_MICROPHONE));
     if (hotKeyInfo.Empty()) {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
             strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 
@@ -1005,6 +1044,8 @@ static const auto CONFIG_CMD_LINE_ARGS2 = L"CmdLineArgs2";
 // Log level.
 static const auto CONFIG_LOG = L"Log";
 static const auto CONFIG_LOG_LEVEL = L"LogLevel";
+static const auto CONFIG_DEBUG = L"Debug";
+static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1037,6 +1078,8 @@ void ReadConfig() {
     cmdLineArgs2 = buf;
 
     logLevel = (Logger::Level)GetPrivateProfileIntW(CONFIG_LOG, CONFIG_LOG_LEVEL, Logger::LevelError, configFilePath.c_str());
+
+	simulateNoMicphone =  GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_NO_MICROPHONE, 0, configFilePath.c_str()) == 1;
 }
 
 // Write settings to config file.

@@ -207,7 +207,10 @@
   <ItemGroup>
     <Image Include="DeMic.ico" />
     <Image Include="Iconsmind-Outline-Microphone-2.ico" />
+    <Image Include="micphone.ico" />
+    <Image Include="micropho.ico" />
     <Image Include="microphone_muted.ico" />
+    <Image Include="no_microphone.ico" />
     <Image Include="small.ico" />
     <Image Include="microphone.ico" />
   </ItemGroup>

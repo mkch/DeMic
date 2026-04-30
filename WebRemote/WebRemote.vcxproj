@@ -245,7 +245,6 @@
     <None Include="server_resource\verify.html" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Microphone.png" />
     <Image Include="MicrophoneMuted.png" />
     <Image Include="server_resource\res\Microphone-loading.png" />
     <Image Include="server_resource\res\Microphone.png" />

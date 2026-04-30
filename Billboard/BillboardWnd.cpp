@@ -9,6 +9,7 @@ static const COLORREF WND_BK_COLOR = COLOR_WINDOW;
 
 static HBITMAP hBmpMicrophone = NULL;
 static HBITMAP hBmpMuted = NULL;
+static HBITMAP hBmpNoMicrophone = NULL;
 
 static const int IMAGE_SIZE = 512;
 static HBRUSH hWndBkBrush = NULL;
@@ -37,6 +38,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         RestoreLastWindowRect(hWnd);
         hBmpMicrophone = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE));
         hBmpMuted = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_MICROPHONE_MUTED));
+        hBmpNoMicrophone = LoadBitmapW(hInstance, MAKEINTRESOURCEW(IDB_NO_MICROPHONE));
         hWndBkBrush = CreateSolidBrush(GetSysColor(WND_BK_COLOR));
         SyncTopMost(hWnd);
 		SyncHideCaption(hWnd);
@@ -61,6 +63,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         WriteConfig();
         DeleteObject(hBmpMicrophone);
         DeleteObject(hBmpMuted);
+        DeleteObject(hBmpNoMicrophone);
         DeleteObject(hWndBkBrush);
         break;
     case WM_CLOSE:
@@ -213,7 +216,8 @@ static void Paint(HWND hWnd, HDC hDC) {
     const int drawingY = PADDING + (cy - drawingSize) / 2;
 
     HDC hMemDC = CreateCompatibleDC(hDC);
-    HBITMAP hImage = host->IsMuted() ? hBmpMuted : hBmpMicrophone;
+    const auto state = host->GetMuteState();
+    HBITMAP hImage = state == StateMuted ? hBmpMuted : state == StateUnmuted ? hBmpMicrophone : hBmpNoMicrophone;
     HGDIOBJ hOldBmp = SelectObject(hMemDC, hImage);
 
     HBITMAP hBufBmp = CreateCompatibleBitmap(hDC, rect.right - rect.left, rect.bottom - rect.top);
@@ -237,7 +241,7 @@ static void Paint(HWND hWnd, HDC hDC) {
 }
 
 
-ATOM MyRegisterClass() {
+static ATOM MyRegisterClass() {
     WNDCLASSEXW wcex = { 0 };
 
     wcex.cbSize = sizeof(WNDCLASSEX);
@@ -281,7 +285,7 @@ void DestroyBillboardWnd() {
 }
 
 // MakeProminent position BillboardWnd to a prominent position.
-void MakeProminent() {
+static void MakeProminent() {
     if (IsIconic(BillboardWnd)) {
         ShowWindow(BillboardWnd, SW_RESTORE);
     }

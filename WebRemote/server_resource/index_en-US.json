@@ -6,6 +6,7 @@
     "input_verification_code": "Please enter the verification code:",
     "invalid_verification_code": "Invalid verification code!",
     "verify": "Verify",
-    "logout": "Logout"
+    "logout": "Logout",
+    "no_microphone": "No microphone detected!"
   }
 }

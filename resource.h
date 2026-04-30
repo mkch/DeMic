@@ -17,8 +17,14 @@
 #define IDS_HOTKEY_CONFILCT             112
 #define IDS_NOTIFICATION_TIP_HOTKEY     113
 #define IDS_HOTKEY_SETTINGS             114
+#define IDS_NO_MICROPHONE               115
 #define IDI_MICPHONE                    138
+#define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
+#define IDI_MICPHONE1                   142
+#define IDI_NO_MICPHONE                 142
+#define IDI_MICROPHONE1                 142
+#define IDI_NO_MICROPHONE               142
 #define IDD_HOTKEY_SETTINGS             145
 #define IDD_SOUND_SETTINGS              153
 #define IDS_NO_UPDATE                   156

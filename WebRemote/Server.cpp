@@ -37,13 +37,14 @@ static std::mutex ListenersMutex;
 using StateType = std::string;
 static const StateType Muted = "muted";
 static const StateType Unmuted = "unmuted";
+static const StateType Unknown = "unknown";
 using StateChannelType = Channel<StateType>;
 static std::vector<std::shared_ptr<StateChannelType>> StateChangeEventListeners;
 static StateType CurrentState;
 
-void NotifyStateChange(bool muted) {
+void NotifyStateChange(MuteState s) {
     std::vector<std::shared_ptr<StateChannelType>> listeners;
-	StateType micState = muted ? Muted : Unmuted;
+	StateType micState = s == StateMuted ? Muted : s == StateUnmuted ? Unmuted : Unknown;
     {
         std::lock_guard<std::mutex> guard(ListenersMutex);
         CurrentState = micState;

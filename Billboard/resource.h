@@ -15,6 +15,8 @@
 #define IDR_MENU1                       106
 #define IDS_NO_CAPTION_TOOLTIP          106
 #define IDR_RT_MANIFEST2                111
+#define IDB_BITMAP1                     115
+#define IDB_NO_MICROPHONE               115
 #define ID_FILE_40001                   40001
 #define ID_ALWAYS_ON_TOP                40002
 #define ID_FILE_ALWAYSONTOP             40003
@@ -30,7 +32,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        115
+#define _APS_NEXT_RESOURCE_VALUE        116
 #define _APS_NEXT_COMMAND_VALUE         40011
 #define _APS_NEXT_CONTROL_VALUE         1001
 #define _APS_NEXT_SYMED_VALUE           101

@@ -217,6 +217,7 @@
   <ItemGroup>
     <Image Include="Microphone.bmp" />
     <Image Include="MicrophoneMuted.bmp" />
+    <Image Include="NoMicrophone.bmp" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="manifest.xml" />

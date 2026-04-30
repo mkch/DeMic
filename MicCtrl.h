@@ -12,6 +12,8 @@ extern std::wstring appTitle;
 extern HWND mainWindow;
 
 class MicCtrl {
+private:
+    const bool simulateNoMicrophone = false;
 public:
     // The window message sent to mainWindow when micophone muted state is changed.
     static const UINT WM_MUTED_STATE_CHANGED = WM_USER + 100;
@@ -133,18 +135,25 @@ private:
 	typedef std::pair<IAudioEndpointVolume*, AudioEndpointVolumeCallback*> AudioVolumeCallback;
 private:
     IMMDeviceEnumerator* devEnum = NULL;
-    MMNotificationClient* notifClient;
+    MMNotificationClient* notifClient = NULL;
     std::vector<AudioVolumeCallback> audioCallbacks;
     BOOL (*devFilter)(const wchar_t* devName) = NULL;
 private:
     void UnregisterAudioCallbacks();
 public:
-	MicCtrl();
+    MicCtrl(bool simulateNoMic = false);
 	~MicCtrl();
 	// Reload microphone devices. Should be called when device changed.
 	void ReloadDevices();
-	// Returns whether all active microphone devices are muted.
-	bool GetMuted();
+    enum MuteState{
+        Unmuted = 0, 
+        Muted,
+        // GetMuted(): No microphone installed or all microphone devices are filtered.
+        // GetDevMuted(): devID is invalid. 
+		Unknown = -1, 
+    };
+	// Returns the mute state of all active microphone devices.
+    MuteState GetMuteState();
 	// Sets muted state of all active microphone devices.
 	void SetMuted(bool mute);
     // Returns all active microphone device IDs.
@@ -158,9 +167,7 @@ public:
     // Returns empty string if devID is invalid.
     std::wstring GetDevIfaceName(const wchar_t* devID);
     // Returns whether a microphone device is muted.
-    // Returns 1 if the device is muted, 0 if the device is not muted,
-    // -1 if the devID is invalid.
-    int GetDevMuted(const wchar_t* devID);
+    MuteState GetDevMuteState(const wchar_t* devID);
     // Sets a filter function which defines the set of microphone devices
     // to operate.
     void SetDevFilter(BOOL (*f)(const wchar_t*)) { devFilter = f; }
