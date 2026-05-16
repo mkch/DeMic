@@ -36,6 +36,12 @@
     <ClInclude Include="MessageWindow.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="SettingsDialog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="resources.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="HotKeyPlus.cpp">
@@ -48,6 +54,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="MessageWindow.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SettingsDialog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

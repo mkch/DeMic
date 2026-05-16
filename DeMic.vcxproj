@@ -180,6 +180,7 @@
   <ItemGroup>
     <ClInclude Include="DeMic.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="HotKeyControlInfo.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="MicCtrl.h" />

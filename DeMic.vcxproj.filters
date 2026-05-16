@@ -54,6 +54,9 @@
     <ClInclude Include="Semver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HotKeyControlInfo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DeMic.cpp">

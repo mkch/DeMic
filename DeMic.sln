@@ -23,6 +23,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WebRemote", "WebRemote\WebR
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HotKeyPlus", "HotKeyPlus\HotKeyPlus.vcxproj", "{D40D56A3-6B37-42BC-9EEC-4095D26BFB2A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C47EE243-F4CF-4331-9566-A6CDA754BE26} = {C47EE243-F4CF-4331-9566-A6CDA754BE26}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

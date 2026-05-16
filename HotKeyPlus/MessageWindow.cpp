@@ -2,12 +2,14 @@
 #include "MessageWindow.h"
 #include "HotKeyPlus.h"
 #include "../sdk/DemicPluginUtil.h"
+#include "resource.h"
 
 static const wchar_t* wndClassName = L"Hot Key Plus Message Window";
 static HWND messageWindow = NULL;
 
 enum {
-    UM_INITIAL_HOTKEY = WM_USER + 1, // Hotkey to initiate microphone operations.
+   HOTKEY_ID1 = 1,
+   HOTKEY_ID2,
 };
 
 enum {
@@ -28,23 +30,58 @@ void DestroyMessageWindow() {
 }
 
 static void CALLBACK PullAsyncKeyState(HWND hwnd, UINT message, UINT_PTR idEvent, DWORD dwTime) {
-    if (GetAsyncKeyState(VK_F12) >= 0 || GetAsyncKeyState(VK_CONTROL) >= 0) {
+    HotKeyControlInfo info;
+    info.SetValue(config.Hotkey);
+    bool pressed = true;
+    VK_INSERT;
+    for(auto vk : info.GetVirtualKeys()) {
+        if (GetAsyncKeyState(vk) >= 0) {
+            pressed = false;
+            break;
+        }
+	}
+    if (!pressed) {
         KillTimer(messageWindow, idEvent);
-        demicHost->TurnOffMic(demicState);
+        switch (config.Type) {
+        case TYPE_PTT:
+            demicHost->TurnOffMic(demicState);
+            break;
+        case TYPE_PTM:
+            demicHost->TurnOnMic(demicState);
+            break;
+        }
     }
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_HOTKEY:
-        if(wParam != UM_INITIAL_HOTKEY) {
-            break;
-		}
-        auto id = SetTimer(hwnd, TIMER_PULL_ASYNC_KEY_STATE, PULL_ASYNC_KEY_STATE_INTERVAL_MS, PullAsyncKeyState);
-        if(id == 0) {
-			LOG_LAST_ERROR(demicHost, demicState);
-		}
-        demicHost->TurnOnMic(demicState);
+        if (wParam == HOTKEY_ID1) {
+            if (config.Type == TYPE_TOGGLE) {
+                demicHost->ToggleMuted(demicState);
+                break;
+            } else if (config.Type == TYPE_ON_OFF) {
+                demicHost->TurnOnMic(demicState);
+                break;
+            }
+            auto id = SetTimer(hwnd, TIMER_PULL_ASYNC_KEY_STATE, PULL_ASYNC_KEY_STATE_INTERVAL_MS, PullAsyncKeyState);
+            if (id == 0) {
+                LOG_LAST_ERROR(demicHost, demicState);
+            }
+            switch (config.Type) {
+            case TYPE_PTT:
+                demicHost->TurnOnMic(demicState);
+                break;
+            case TYPE_PTM:
+                demicHost->TurnOffMic(demicState);
+                break;
+            }
+        } else if(wParam == HOTKEY_ID2) {
+            demicHost->TurnOffMic(demicState);
+        } else {
+			throw std::logic_error("Unknown hotkey ID");
+        }
+        
         return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -78,16 +115,39 @@ bool CreateMessageWindow() {
     return messageWindow != NULL;
 }
 
-bool RegisterInitialHotKey(UINT vk, UINT modifiers) {
+static bool RegisterHotKeyImpl (HWND parent, int id, const HotKeyControlInfo& info) {
     if (!messageWindow) {
         throw std::logic_error("Message window not created");
     }
-    return RegisterHotKey(messageWindow, UM_INITIAL_HOTKEY, modifiers|MOD_NOREPEAT, vk);
+    if (!info.RegisterHotKey(messageWindow, id, true)) {
+        switch (GetLastError()) {
+        case 0:
+            break;
+        case 1409: // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
+            ShowError(demicHost, demicState, strRes->Load(IDS_HOTKEY_CONFILCT).c_str(), parent);
+            break;
+        default:
+            LOG_LAST_ERROR(demicHost, demicState);
+            break;
+        }
+        return false;
+    }
+    return true;
 }
 
-bool UnregisterInitialHotKey() {
+bool RegisterHotKey1(HWND parent, const HotKeyControlInfo& info) {
+	return RegisterHotKeyImpl(parent, HOTKEY_ID1, info);
+}
+
+bool RegisterHotKey2(HWND parent, const HotKeyControlInfo& info) {
+    return RegisterHotKeyImpl(parent, HOTKEY_ID2, info);
+}
+
+
+void UnregisterHotKeys() {
     if (!messageWindow) {
         throw std::logic_error("Message window not created");
     }
-    return UnregisterHotKey(messageWindow, UM_INITIAL_HOTKEY);
+    UnregisterHotKey(messageWindow, HOTKEY_ID1);
+    UnregisterHotKey(messageWindow, HOTKEY_ID2);
 }
