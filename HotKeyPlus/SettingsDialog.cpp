@@ -171,9 +171,15 @@ static LRESULT CALLBACK PropSheetGetMsgProc(int code, WPARAM wParam, LPARAM lPar
     if ((msg->message == WM_KEYDOWN || msg->message == WM_KEYUP)
         && (msg->wParam == VK_PRIOR/*PageUp*/ || msg->wParam == VK_NEXT/*PageDown*/
             || msg->wParam == VK_CANCEL/*Ctrl+Scroll or Ctrl+Pause*/)) {
-        // Forward the key directly to the fucused control itself.
-        SendMessageW(GetFocus(), msg->message, msg->wParam, msg->lParam);
-        msg->message = WM_NULL;
+        static wchar_t className[_countof(HOTKEY_CLASSW)] = {};
+        int n = GetClassNameW(msg->hwnd, className, _countof(className));
+        if (n > 0 && n < _countof(className) 
+            && wcscmp(className, HOTKEY_CLASSW) == 0) { //hwnd is a HOTKEY control
+            // Skip PropSheet_IsDialogMessage.
+            TranslateMessage(msg);
+            DispatchMessage(msg);
+            msg->message = WM_NULL;
+        }
     }
     return CallNextHookEx(propSheetGetMsgHook, code, wParam, lParam);
 }
