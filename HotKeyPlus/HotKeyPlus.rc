@@ -154,8 +154,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APP_NAME            "热键 Plus"
-    IDS_OPEN_SETTINGS       "热键 Plus 设置"
+    IDS_APP_NAME            "热键+"
+    IDS_OPEN_SETTINGS       "热键+"
     IDS_TYPE_TOGGLE         "切换"
     IDS_TYPE_ON_OFF         "开关"
     IDS_TYPE_PTT            "PTT（按下说话）"
