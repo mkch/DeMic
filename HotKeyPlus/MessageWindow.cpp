@@ -63,10 +63,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             } else if (config.Type == TYPE_ON_OFF) {
                 demicHost->TurnOnMic(demicState);
                 break;
-            }
-            auto id = SetTimer(hwnd, TIMER_PULL_ASYNC_KEY_STATE, PULL_ASYNC_KEY_STATE_INTERVAL_MS, PullAsyncKeyState);
-            if (id == 0) {
+            };
+            if (!SetTimer(hwnd, TIMER_PULL_ASYNC_KEY_STATE, PULL_ASYNC_KEY_STATE_INTERVAL_MS, PullAsyncKeyState)) {
                 LOG_LAST_ERROR(demicHost, demicState);
+                break;
             }
             switch (config.Type) {
             case TYPE_PTT:
@@ -119,20 +119,20 @@ static bool RegisterHotKeyImpl (HWND parent, int id, const HotKeyControlInfo& in
     if (!messageWindow) {
         throw std::logic_error("Message window not created");
     }
-    if (!info.RegisterHotKey(messageWindow, id, true)) {
-        switch (GetLastError()) {
-        case 0:
-            break;
-        case 1409: // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
-            ShowError(demicHost, demicState, strRes->Load(IDS_HOTKEY_CONFILCT).c_str(), parent);
-            break;
-        default:
-            LOG_LAST_ERROR(demicHost, demicState);
-            break;
-        }
-        return false;
+    if (info.RegisterHotKey(messageWindow, id, true)) {
+        return true;
     }
-    return true;
+    switch (GetLastError()) {
+    case 0:
+        break;
+    case 1409: // 1409: ERROR_HOTKEY_ALREADY_REGISTERED
+        ShowError(demicHost, demicState, strRes->Load(IDS_HOTKEY_CONFILCT).c_str(), parent);
+        break;
+    default:
+        LOG_LAST_ERROR(demicHost, demicState);
+        break;
+    }
+    return false;
 }
 
 bool RegisterHotKey1(HWND parent, const HotKeyControlInfo& info) {
