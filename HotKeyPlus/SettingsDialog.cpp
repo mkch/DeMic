@@ -14,16 +14,6 @@ enum ControlID {
 
 static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-    case WM_INITDIALOG: {
-        if (config.Type != type) {
-            break;
-        }
-        HotKeyControlInfo info;
-        info.SetValue(config.Hotkey);
-        HWND ctrl = GetDlgItem(hwnd, IDC_HOTKEY);
-        info.SetToCtrl(ctrl);
-        return TRUE;
-    }
     case WM_NOTIFY: {
             PSHNOTIFY* notify = (PSHNOTIFY*)lParam;
             switch (notify->hdr.code) {
@@ -33,26 +23,31 @@ static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HWND hwnd, UINT msg, WPARA
                 }
 
                 UnregisterHotKeys();
-
                 config.Type = TYPE_NONE;
                 config.Hotkey = config.Hotkey2 = 0;
 
                 HotKeyControlInfo info;
                 info.ReadFromCtrl(GetDlgItem(hwnd, IDC_HOTKEY));
                 if (info.GetValue()) {
-                    config.Type = type;
-                    config.Hotkey = info.GetValue();
                     if (!RegisterHotKey1(hwnd, info)) {
-                        SetFocus(GetDlgItem(hwnd, IDC_HOTKEY));
                         SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_INVALID);
+                        PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_HOTKEY), TRUE);
                         return TRUE;
                     }
+                    config.Type = type;
+                    config.Hotkey = info.GetValue();
                 }
                 WriteConfig();
                 SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
                 return TRUE;
             }
             case PSN_SETACTIVE:
+                // Set config hotkey value to this page.
+                HotKeyControlInfo info;
+                info.SetValue(config.Hotkey);
+                HWND ctrl = GetDlgItem(hwnd, IDC_HOTKEY);
+                info.SetToCtrl(ctrl);
+				// Sync combo box selection with page.
 				ComboBox_SetCurSel(GetDlgItem(GetParent(hwnd), ID_TYPE_COMBO), GetHotKeyTypeIndex(type));
                 break;
             }
@@ -76,18 +71,6 @@ static INT_PTR CALLBACK PTMPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
 static INT_PTR CALLBACK OnOffPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-    case WM_INITDIALOG: {
-            if (config.Type != TYPE_ON_OFF) {
-                break;
-            }
-            HotKeyControlInfo infoOn;
-            infoOn.SetValue(config.Hotkey);
-            infoOn.SetToCtrl(GetDlgItem(hwnd, IDC_HOTKEY_ON));
-			HotKeyControlInfo infoOff;
-            infoOff.SetValue(config.Hotkey2);
-            infoOff.SetToCtrl(GetDlgItem(hwnd, IDC_HOTKEY_OFF));
-            return TRUE;
-        }
     case WM_NOTIFY: {
             PSHNOTIFY* notify = (PSHNOTIFY*)lParam;
             switch (notify->hdr.code) {
@@ -96,46 +79,45 @@ static INT_PTR CALLBACK OnOffPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                         break; // Not for this page.
                     }
 
-                    UnregisterHotKeys();
-
-                    config.Type = TYPE_NONE;
-                    config.Hotkey = config.Hotkey2 = 0;
-
                     HotKeyControlInfo infoOn;
                     infoOn.ReadFromCtrl(GetDlgItem(hwnd, IDC_HOTKEY_ON));
                     HotKeyControlInfo infoOff;
                     infoOff.ReadFromCtrl(GetDlgItem(hwnd, IDC_HOTKEY_OFF));
                     if (infoOn.GetValue() == 0 && infoOff.GetValue() != 0) {
-                        SetFocus(GetDlgItem(hwnd, IDC_HOTKEY_ON));
                         ShowError(demicHost, demicState, strRes->Load(IDS_ON_OFF_HOTKEY_INVALID).c_str(), hwnd);
                         SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_INVALID);
+                        PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_HOTKEY_ON), TRUE);
                         return TRUE;
                     }
 
                     if (infoOn.GetValue() != 0 && infoOff.GetValue() == 0) {
-                        SetFocus(GetDlgItem(hwnd, IDC_HOTKEY_OFF));
                         ShowError(demicHost, demicState, strRes->Load(IDS_ON_OFF_HOTKEY_INVALID).c_str(), hwnd);
                         SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_INVALID);
+                        PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_HOTKEY_OFF), TRUE);
                         return TRUE;
                     }
 
-                    if (infoOn.GetValue() != 0 && infoOff.GetValue() != 0) {
-                        config.Type = TYPE_ON_OFF;
-                        config.Hotkey = infoOn.GetValue();
-                        config.Hotkey2 = infoOff.GetValue();
+                    UnregisterHotKeys();
+                    config.Type = TYPE_NONE;
 
+                    if (infoOn.GetValue() == 0 && infoOff.GetValue() == 0) {
+                        config.Hotkey = config.Hotkey2 = 0;
+                    } else {
                         if (!RegisterHotKey1(hwnd, infoOn)) {
-                            SetFocus(GetDlgItem(hwnd, IDC_HOTKEY_ON));
                             SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_INVALID);
+                            PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_HOTKEY_ON), TRUE);
                             return TRUE;
                         }
+                        config.Hotkey = infoOn.GetValue();
 
                         if (!RegisterHotKey2(hwnd, infoOff)) {
                             UnregisterHotKeys();
-                            SetFocus(GetDlgItem(hwnd, IDC_HOTKEY_OFF));
                             SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_INVALID);
+                            PostMessage(hwnd, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hwnd, IDC_HOTKEY_OFF), TRUE);
                             return TRUE;
                         }
+                        config.Type = TYPE_ON_OFF;
+                        config.Hotkey2 = infoOff.GetValue();
                     }
 
                     WriteConfig();
@@ -143,6 +125,14 @@ static INT_PTR CALLBACK OnOffPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                     return TRUE;
                 }
             case PSN_SETACTIVE:
+                // Set config hotkeys to this page.
+                HotKeyControlInfo infoOn;
+                infoOn.SetValue(config.Hotkey);
+                infoOn.SetToCtrl(GetDlgItem(hwnd, IDC_HOTKEY_ON));
+                HotKeyControlInfo infoOff;
+                infoOff.SetValue(config.Hotkey2);
+                infoOff.SetToCtrl(GetDlgItem(hwnd, IDC_HOTKEY_OFF));
+				// Sync combo box selection with page.
                 ComboBox_SetCurSel(GetDlgItem(GetParent(hwnd), ID_TYPE_COMBO), GetHotKeyTypeIndex(TYPE_ON_OFF));
                 break;
             }
