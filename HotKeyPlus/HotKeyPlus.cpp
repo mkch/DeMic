@@ -166,7 +166,7 @@ static BOOL OnLoaded(DeMic_Host* host, DeMic_OnLoadedArgs* args) {
             HotKeyControlInfo infoOn;
             infoOn.SetValue(config.Hotkey);
             HotKeyControlInfo infoOff;
-            infoOff.SetValue(config.Hotkey);
+            infoOff.SetValue(config.Hotkey2);
             if (!RegisterHotKey1(host->GetMainWindow(demicState), infoOn)) {
                 break;
             }
