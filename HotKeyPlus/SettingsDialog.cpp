@@ -223,6 +223,7 @@ static LRESULT WINAPI PropSheetWndProc(HWND hwnd, UINT message, WPARAM wParam, L
 
 static int CALLBACK PropSheetCallback(HWND hwnd, UINT msg, LPARAM lParam) {
     if (msg == PSCB_INITIALIZED) {
+        SetWindowLongW(hwnd, GWL_EXSTYLE, GetWindowLongW(hwnd, GWL_EXSTYLE) | WS_EX_APPWINDOW);
         propSheetOldWndProc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)PropSheetWndProc);
         if (!propSheetOldWndProc) {
             LOG_LAST_ERROR(demicHost, demicState);
