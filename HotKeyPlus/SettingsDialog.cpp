@@ -12,6 +12,7 @@ enum ControlID {
     ID_TYPE_COMBO = 0x8000,
 };
 
+
 static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_NOTIFY: {
@@ -142,8 +143,6 @@ static INT_PTR CALLBACK OnOffPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     return FALSE;
 }
 
-
-
 static void CenterWindow(HWND hwnd) {
     RECT rcWindow = {};
     GetWindowRect(hwnd, &rcWindow);
@@ -162,13 +161,45 @@ enum {
     UM_COMMAND_CBN_SELCHANGE,
 };
 
-static WNDPROC propertySheetOldWndProc = NULL;
+static HHOOK propSheetGetMsgHook = NULL;
 
-static LRESULT WINAPI PropertySheetWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam){
+static LRESULT CALLBACK PropSheetGetMsgProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code < 0 || wParam == PM_NOREMOVE) {
+        return CallNextHookEx(propSheetGetMsgHook, code, wParam, lParam);
+    }
+    MSG* msg = (MSG*)lParam;
+    if ((msg->message == WM_KEYDOWN || msg->message == WM_KEYUP)
+        && (msg->wParam == VK_PRIOR/*PageUp*/ || msg->wParam == VK_NEXT/*PageDown*/
+            || msg->wParam == VK_CANCEL/*Ctrl+Scroll or Ctrl+Pause*/)) {
+        // Forward the key directly to the fucused control itself.
+        SendMessageW(GetFocus(), msg->message, msg->wParam, msg->lParam);
+        msg->message = WM_NULL;
+    }
+    return CallNextHookEx(propSheetGetMsgHook, code, wParam, lParam);
+}
+
+static WNDPROC propSheetOldWndProc = NULL;
+
+static LRESULT WINAPI PropSheetWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam){
     switch (message) {
     case UM_POST_CREATE:
         CenterWindow(hwnd);
+		// Setup a message hook to capture certain navigation keys(Ctrl+PageUp/PageDown etc.) before PropSheet processes them,
+        // so that we can forward them to the HotKey control.
+        propSheetGetMsgHook = SetWindowsHookExW(WH_GETMESSAGE, PropSheetGetMsgProc, NULL, GetCurrentThreadId());
+        if (!propSheetGetMsgHook) {
+            LOG_LAST_ERROR(demicHost, demicState);
+        }
         return 0;
+    case WM_DESTROY:
+        if (!propSheetGetMsgHook) {
+            break;
+        }
+        if (!UnhookWindowsHookEx(propSheetGetMsgHook)) {
+			LOG_LAST_ERROR(demicHost, demicState);
+        }
+        propSheetGetMsgHook = NULL;
+        break;
     case UM_COMMAND_CBN_SELCHANGE:
     case WM_COMMAND:
         if(LOWORD(wParam) == ID_TYPE_COMBO && HIWORD(wParam) == CBN_SELCHANGE) {
@@ -181,12 +212,16 @@ static LRESULT WINAPI PropertySheetWndProc(HWND hwnd, UINT message, WPARAM wPara
         }
 		break;
     }
-    return CallWindowProcW(propertySheetOldWndProc, hwnd, message, wParam, lParam);
+    return CallWindowProcW(propSheetOldWndProc, hwnd, message, wParam, lParam);
 }
 
 static int CALLBACK PropSheetCallback(HWND hwnd, UINT msg, LPARAM lParam) {
     if (msg == PSCB_INITIALIZED) {
-        propertySheetOldWndProc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)PropertySheetWndProc);
+        propSheetOldWndProc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)PropSheetWndProc);
+        if (!propSheetOldWndProc) {
+            LOG_LAST_ERROR(demicHost, demicState);
+            return 0;
+        }
 		PostMessage(hwnd, UM_POST_CREATE, 0, 0);
 
         const auto dpi = GetDpiForWindow(hwnd);
