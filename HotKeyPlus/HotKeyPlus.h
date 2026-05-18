@@ -3,7 +3,7 @@
 #include "../Util.h"
 
 extern HINSTANCE hInstance;
-extern StringRes* strRes;
+extern std::unique_ptr<StringRes> strRes;
 extern DeMic_Host* demicHost;
 extern void* demicState;
 
