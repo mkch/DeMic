@@ -77,7 +77,7 @@ std::wstring cmdLineArgs2; // The command line args to use when starting this ex
 
 Logger::Level logLevel = Logger::LevelError; // The log level for logging.
 BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
-std::wstring preferedUILanguages; // Comma separated list or empty.
+std::wstring preferredUILanguages; // Comma separated list or empty.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -111,7 +111,7 @@ std::wstring CommandLine(const std::wstring& args);
 
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
-static void SetPreferedUILanguages();
+static void SetPreferredUILanguages();
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -134,7 +134,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     SetDefaultLogger(&defaultLogger);
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
 
-    SetPreferedUILanguages();
+    SetPreferredUILanguages();
 
     // Initialize global strings
     strRes = std::make_unique<StringRes>(hInstance);
@@ -222,12 +222,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     return (int) msg.wParam;
 }
 
-static void SetPreferedUILanguages() {
-    if(preferedUILanguages.empty()) {
+static void SetPreferredUILanguages() {
+    if(preferredUILanguages.empty()) {
         return;
 	}
     std::vector<wchar_t> buf;
-    Split(preferedUILanguages, L",", [&buf](const auto& lang) {
+    Split(preferredUILanguages, L",", [&buf](const auto& lang) {
         buf.insert(buf.end(), lang.begin(), lang.end());
         buf.push_back(L'\0');
     });
@@ -958,7 +958,7 @@ static const auto CONFIG_LOG = L"Log";
 static const auto CONFIG_LOG_LEVEL = L"LogLevel";
 static const auto CONFIG_DEBUG = L"Debug";
 static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
-static const auto CONFIG_PREFERED_UI_LANGUAGES = L"PreferedUILanguages";
+static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -995,8 +995,8 @@ void ReadConfig() {
 	simulateNoMicphone =  GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_NO_MICROPHONE, 0, configFilePath.c_str()) == 1;
 
 	buf[0] = 0;
-	GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_PREFERED_UI_LANGUAGES, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
-	preferedUILanguages = buf;
+	GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_PREFERRED_UI_LANGUAGES, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+	preferredUILanguages = buf;
 
 }
 
