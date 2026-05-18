@@ -19,7 +19,7 @@
 HINSTANCE hInstance = NULL;
 std::filesystem::path moduleFilePath;
 std::filesystem::path configFilePath;
-StringRes* strRes = NULL;
+std::unique_ptr <StringRes> strRes;
 
 extern DeMic_PluginInfo plugin;
 std::vector<wchar_t> pluginName;
@@ -81,7 +81,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         hInstance = hModule;
 		moduleFilePath = GetModuleFilePath(hModule);
 		configFilePath =moduleFilePath.replace_extension(L".json").wstring();
-        strRes = new StringRes(hModule);
+        strRes = std::make_unique<StringRes>(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
         break;

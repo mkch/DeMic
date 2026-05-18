@@ -6,7 +6,7 @@
 extern HINSTANCE hInstance;
 extern DeMic_Host* host;
 extern void* state;
-extern StringRes* strRes;
+extern std::unique_ptr<StringRes> strRes;
 extern std::filesystem::path moduleFilePath;	
 
 

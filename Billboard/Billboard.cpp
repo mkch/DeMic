@@ -10,7 +10,7 @@
 
 HINSTANCE hInstance = NULL;
 
-StringRes* strRes = NULL;
+std::unique_ptr<StringRes> strRes;
 
 extern DeMic_PluginInfo plugin;
 std::vector<wchar_t> pluginName;
@@ -30,7 +30,7 @@ BOOL WINAPI DllMain(
     switch (fdwReason) {
 	case DLL_PROCESS_ATTACH: {
 		hInstance = hinstDLL;
-		strRes = new StringRes(hinstDLL);
+		strRes = std::make_unique<StringRes>(hinstDLL);
 		pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
 		plugin.Name = &pluginName[0];
 		break;

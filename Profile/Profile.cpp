@@ -22,7 +22,7 @@ void* state = NULL;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"Profile.json";
 std::wstring configFilePath;
-StringRes* strRes = NULL;
+std::unique_ptr <StringRes> strRes;
 HMENU devicesMenu = NULL;
 
 void ReadConfig();
@@ -37,7 +37,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH: {
-        strRes = new StringRes(hModule);
+        strRes = std::make_unique<StringRes>(hModule);
         pluginName = DupCStr(strRes->Load(IDS_APP_NAME));
         plugin.Name = &pluginName[0];
         
