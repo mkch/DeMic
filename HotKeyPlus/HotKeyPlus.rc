@@ -175,6 +175,141 @@ END
 /////////////////////////////////////////////////////////////////////////////
 
 
+/////////////////////////////////////////////////////////////////////////////
+// 英语(美国) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_PROPPAGE_ON_OFF DIALOGEX 0, 0, 195, 120
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_CHILD | WS_CAPTION
+CAPTION "On/Off"
+FONT 9, "MS Shell Dlg", 400, 0, 0x0
+BEGIN
+    LTEXT           "Mic On:",IDC_STATIC,19,29,41,8
+    CONTROL         "",IDC_HOTKEY_ON,"msctls_hotkey32",WS_BORDER | WS_TABSTOP,64,26,112,11
+    LTEXT           "Mic Off:",IDC_STATIC,19,51,41,8
+    CONTROL         "",IDC_HOTKEY_OFF,"msctls_hotkey32",WS_BORDER | WS_TABSTOP,64,48,112,11
+    LTEXT           "Use two hotkeys to control mic on and off separately.",IDC_STATIC,19,73,153,25
+END
+
+IDD_PROPPAGE_PTM DIALOGEX 0, 0, 195, 120
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_CHILD | WS_CAPTION
+CAPTION "PTM"
+FONT 9, "MS Shell Dlg", 400, 0, 0x0
+BEGIN
+    LTEXT           "Hotkey:",IDC_STATIC,19,43,41,8
+    CONTROL         "",IDC_HOTKEY,"msctls_hotkey32",WS_BORDER | WS_TABSTOP,58,40,112,11
+    LTEXT           "Press to turn off the microphone, release to turn on.",IDC_STATIC,19,65,153,25
+END
+
+IDD_PROPPAGE_PTT DIALOGEX 0, 0, 195, 120
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_CHILD | WS_CAPTION
+CAPTION "PTT"
+FONT 9, "MS Shell Dlg", 400, 0, 0x0
+BEGIN
+    LTEXT           "Hotkey:",IDC_STATIC,19,43,41,8
+    CONTROL         "",IDC_HOTKEY,"msctls_hotkey32",WS_BORDER | WS_TABSTOP,58,40,112,11
+    LTEXT           "Press to turn on the microphone, release to turn off.",IDC_STATIC,19,65,153,25
+END
+
+IDD_PROPPAGE_TOGGLE DIALOGEX 0, 0, 195, 120
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_CHILD | WS_CAPTION
+CAPTION "Toggle"
+FONT 9, "MS Shell Dlg", 400, 0, 0x0
+BEGIN
+    LTEXT           "Hotkey:",IDC_STATIC,19,43,41,8
+    CONTROL         "",IDC_HOTKEY,"msctls_hotkey32",WS_BORDER | WS_TABSTOP,58,40,112,11
+    LTEXT           "Use the hotkey to toggle the microphone state.",IDC_STATIC,19,65,153,25
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_PROPPAGE_ON_OFF, DIALOG
+    BEGIN
+    END
+
+    IDD_PROPPAGE_PTM, DIALOG
+    BEGIN
+    END
+
+    IDD_PROPPAGE_PTT, DIALOG
+    BEGIN
+    END
+
+    IDD_PROPPAGE_TOGGLE, DIALOG
+    BEGIN
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_PROPPAGE_ON_OFF AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PROPPAGE_PTM AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PROPPAGE_PTT AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PROPPAGE_TOGGLE AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDS_APP_NAME            "HotKey+"
+    IDS_OPEN_SETTINGS       "HotKey+"
+    IDS_TYPE_TOGGLE         "Toggle"
+    IDS_TYPE_ON_OFF         "On/Off"
+    IDS_TYPE_PTT            "PTT (Push to Talk)"
+    IDS_TYPE_PTM            "PTM (Push to Mute)"
+    IDS_HOTKEY_TYPE         "Hotkey Type:"
+    IDS_READ_CONFIG_FAILED  "Failed to read config file!"
+    IDS_ON_OFF_HOTKEY_INVALID "Invalid hotkey!"
+    IDS_HOTKEY_CONFILCT     "Hotkey is already in use by another program!"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_SAVE_CONFIG_FAILED  "Failed to save config file!"
+END
+
+#endif    // 英语(美国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
 
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
