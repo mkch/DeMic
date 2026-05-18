@@ -38,7 +38,7 @@ const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 
 const std::wstring moduleFilePath = GetModuleFilePath(); // Full path of this exe.
 
-StringRes* strRes = NULL;
+std::unique_ptr <StringRes> strRes;
 
 void ShowNotification(HWND hwnd, bool silent);
 void UpdateNotification(HWND hwnd);
@@ -230,7 +230,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     // Initialize global strings
-    strRes = new StringRes(hInstance);
+    strRes = std::make_unique<StringRes>(hInstance);
     appTitle = strRes->Load(IDS_APP_TITLE);
 
     int argc = 0;

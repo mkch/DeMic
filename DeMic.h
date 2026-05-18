@@ -15,7 +15,7 @@ static const wchar_t* VERSION = L"1.3.3";
 extern HMENU popupMenu;
 extern HMENU pluginMenu;
 extern std::unique_ptr<MicCtrl> micCtrl;;
-extern StringRes* strRes;
+extern std::unique_ptr<StringRes> strRes;
 extern std::wstring defaultLogFilePath;
 
 void TurnOnMic();
