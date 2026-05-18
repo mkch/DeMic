@@ -255,10 +255,10 @@ static int CALLBACK PropSheetCallback(HWND hwnd, UINT msg, LPARAM lParam) {
             staticLeft, tabRect.top, labelSize.cx + MulDiv(1, dpi, 72), labelSize.cy + MulDiv(1, dpi, 72),
 			hwnd, NULL, hInstance, NULL);
         SendMessageW(hStatic, WM_SETFONT, (WPARAM)dialogFont, TRUE);
-        // Create a DropDown
+        // Create a COMBOBOX
         HWND hCombo = CreateWindowW(WC_COMBOBOX, L"",
             CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
-            staticLeft + MulDiv(5, dpi, 72) + labelSize.cx, tabRect.top, MulDiv(100, dpi, 72), MulDiv(300, dpi, 72),
+            staticLeft + MulDiv(5, dpi, 72) + labelSize.cx, tabRect.top, MulDiv(110, dpi, 72), MulDiv(300, dpi, 72),
             hwnd, (HMENU)ID_TYPE_COMBO, hInstance, NULL);
         SendMessageW(hCombo, WM_SETFONT, (WPARAM)dialogFont, TRUE);
         // Bottom align the the label and combo box
