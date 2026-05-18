@@ -188,6 +188,7 @@ std::wstring cmdLineArgs2; // The command line args to use when starting this ex
 
 Logger::Level logLevel = Logger::LevelError; // The log level for logging.
 BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
+std::wstring preferedUILanguages; // Comma separated list or empty.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -221,6 +222,7 @@ std::wstring CommandLine(const std::wstring& args);
 
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
+static void SetPreferedUILanguages();
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -228,6 +230,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+
+    // Read config file.
+    configFilePath = moduleFilePath;
+    const auto sep = configFilePath.rfind(L'\\');
+    if (sep != std::wstring::npos) {
+        configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
+    }
+    ReadConfig();
+
+    std::ofstream loggerStream(defaultLogFilePath, std::ios::app);
+    Logger defaultLogger(&loggerStream, logLevel);
+    SetDefaultLogger(&defaultLogger);
+    LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
+
+    SetPreferedUILanguages();
 
     // Initialize global strings
     strRes = std::make_unique<StringRes>(hInstance);
@@ -239,21 +257,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     silentMode = cmd & CMD_SILENT;
     LocalFree(argv);
 
-    // Read config file.
-    configFilePath = moduleFilePath;
-    const auto sep = configFilePath.rfind(L'\\');
-    if (sep != std::wstring::npos) {
-        configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
-    }
-    ReadConfig();
 
-	micCtrl = std::move(std::make_unique<MicCtrl>(simulateNoMicphone));
-
-    std::ofstream loggerStream(defaultLogFilePath, std::ios::app);
-    Logger defaultLogger(&loggerStream, logLevel);
-    SetDefaultLogger(&defaultLogger);
-
-    LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
+    micCtrl = std::make_unique<MicCtrl>(simulateNoMicphone);
 
     micCtrl->SetDevFilter(devFilter);
     
@@ -326,6 +331,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     return (int) msg.wParam;
+}
+
+static void SetPreferedUILanguages() {
+    if(preferedUILanguages.empty()) {
+        return;
+	}
+    std::vector<wchar_t> buf;
+    Split(preferedUILanguages, L",", [&buf](const auto& lang) {
+        buf.insert(buf.end(), lang.begin(), lang.end());
+        buf.push_back(L'\0');
+    });
+    buf.push_back(L'\0');
+    if (!SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, buf.data(), nullptr)) {
+        LOG_LAST_ERROR();
+    }
 }
 
 // CommandLine returns the whole command line of this exe
@@ -1049,6 +1069,7 @@ static const auto CONFIG_LOG = L"Log";
 static const auto CONFIG_LOG_LEVEL = L"LogLevel";
 static const auto CONFIG_DEBUG = L"Debug";
 static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
+static const auto CONFIG_PREFERED_UI_LANGUAGES = L"PreferedUILanguages";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1083,6 +1104,11 @@ void ReadConfig() {
     logLevel = (Logger::Level)GetPrivateProfileIntW(CONFIG_LOG, CONFIG_LOG_LEVEL, Logger::LevelError, configFilePath.c_str());
 
 	simulateNoMicphone =  GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_NO_MICROPHONE, 0, configFilePath.c_str()) == 1;
+
+	buf[0] = 0;
+	GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_PREFERED_UI_LANGUAGES, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+	preferedUILanguages = buf;
+
 }
 
 // Write settings to config file.
