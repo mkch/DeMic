@@ -119,5 +119,6 @@
     <None Include="cli.md" />
     <None Include="config.md" />
     <None Include="Compress.ps1" />
+    <None Include="tools\CheckDependents.ps1" />
   </ItemGroup>
 </Project>

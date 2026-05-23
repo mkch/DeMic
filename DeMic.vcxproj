@@ -222,6 +222,7 @@
     <None Include="cli.md" />
     <None Include="Compress.ps1" />
     <None Include="config.md" />
+    <None Include="tools\CheckDependents.ps1" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
