@@ -189,6 +189,7 @@
     <ClInclude Include="sdk\DemicPlugin.h" />
     <ClInclude Include="Semver.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TaskScheduler.h" />
     <ClInclude Include="TimeDebouncer.h" />
     <ClInclude Include="UpdateChecker.h" />
     <ClInclude Include="Util.h" />
@@ -199,6 +200,7 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MicCtrl.cpp" />
     <ClCompile Include="Plugin.cpp" />
+    <ClCompile Include="TaskScheduler.cpp" />
     <ClCompile Include="UpdateChecker.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>

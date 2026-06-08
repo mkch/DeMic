@@ -66,7 +66,6 @@ static const IID IID_ISimpleAudioVolume = __uuidof(ISimpleAudioVolume);
 //}
 
 MicCtrl::MicCtrl(bool simulateNoMic) : simulateNoMicrophone(simulateNoMic), notifClient(new MMNotificationClient()) {
-	VERIFY_SUCCEEDED(CoInitialize(NULL));
 	VERIFY_SUCCEEDED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
 		IID_IMMDeviceEnumerator, (void**)&devEnum));
 	VERIFY_SUCCEEDED(devEnum->RegisterEndpointNotificationCallback(notifClient));

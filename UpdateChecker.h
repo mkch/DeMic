@@ -10,4 +10,4 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam);
 // It must be called when the target window is closing.
 void CancelUpdateCheck();
 // CheckingUpdate returns whether the update check is still running.
-bool CheckingUpdate();
+bool CheckingForUpdate();

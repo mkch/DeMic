@@ -118,7 +118,7 @@ static BOOL NavigateURL(const wchar_t* url) {
     return ((INT_PTR)h > 32);
 }
 
-bool CheckingUpdate() {
+bool CheckingForUpdate() {
 	return updateCheckThread != NULL;
 }
 

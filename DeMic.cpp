@@ -19,9 +19,9 @@
 #include "Log.h"
 
 #include "UpdateChecker.h"
-
-
 #include "HotKeyControlInfo.h"
+#include "TaskScheduler.h"
+
 
 enum {
     // Notify message used by Shell_NotifyIconW.
@@ -36,10 +36,11 @@ static const int HOTKEY_ID = 1;
 
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
-
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
-
-const std::wstring moduleFilePath = GetModuleFilePath(); // Full path of this exe.
+// Full path of this exe.
+const std::wstring moduleFilePath = GetModuleFilePath(); 
+// User SID of current process.
+const std::wstring processSID = GetCurrentUserSid();
 
 std::unique_ptr <StringRes> strRes;
 
@@ -48,11 +49,16 @@ void UpdateNotification(HWND hwnd);
 void RemoveNotification(HWND hwnd);
 void ReadConfig();
 void WriteConfig();
-bool StartOnBootEnabled();
-void EnableStartOnBoot();
+bool StartOnBootEnabled_Reg();
+LogonTaskStatus StartOnBootStatus();
+void EnableStartOnBoot_Reg();
+void EnableStartOnBoot(bool asAdmin);
+void DisableStartOnBoot_Reg();
 void DisableStartOnBoot();
+void RelaunchAsAdmin();
 bool ResetHotKey(HWND hwnd);
 static bool AlreadyRunning();
+static bool IsAnotherInstanceRunning();
 void PlayOnSound(const std::wstring&);
 void PlayOffSound(const std::wstring&);
 BOOL devFilter(const wchar_t* devID);
@@ -95,6 +101,7 @@ bool silentMode = false;
 HMENU popupMenu = NULL;
 HMENU pluginMenu = NULL;
 HMENU helpMenu = NULL;
+HMENU startOnBootMenu = NULL;
 
 // Command line args of microphone commands.
 enum MIC_CMD {
@@ -102,6 +109,9 @@ enum MIC_CMD {
     CMD_ON,     // Turn on microphone.
     CMD_OFF,    // Turn off microphone.
     CMD_TOGGLE, // Toggle on/off.
+
+    CMD_SCHED_TASK = 0xFF,  // Create a scheduler task to run this app on logon.
+    CMD_RELAUNCH,           // This app is relaunching.
 
     CMD_SILENT = 0x8F000000, //Do not show notification.
 };
@@ -112,6 +122,7 @@ std::wstring CommandLine(const std::wstring& args);
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
 static void SetPreferredUILanguages();
+static int SchedTask(const std::wstring& action, const std::wstring& sid);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -119,7 +130,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
-
 
     // Read config file.
     configFilePath = moduleFilePath;
@@ -134,6 +144,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     SetDefaultLogger(&defaultLogger);
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
 
+    // Initialize COM with apartment model.
+    VERIFY_SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
+    VERIFY_SUCCEEDED(CoInitializeSecurity(nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, 0, nullptr))
+
     SetPreferredUILanguages();
 
     // Initialize global strings
@@ -143,6 +157,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
     DWORD cmd = ParseCmdLine(argc, argv);
+    if (cmd == CMD_SCHED_TASK) {
+        // /sched_task must be executed in an elevated process.
+        if (!IsCurrentProcessElevated()) {
+            return -1;
+        }
+        if (argc < 4) {
+            return -2;
+        }
+        return SchedTask(argv[2], argv[3]);
+    } else if (cmd == CMD_RELAUNCH) {
+        // Relaunching, wait for the previous instance to exit.
+        const auto t = GetTickCount();
+        do {
+            if (!IsAnotherInstanceRunning()) {
+                break;
+            }
+            Sleep(100);
+        } while (GetTickCount() - t < 3000);
+    }
     silentMode = cmd & CMD_SILENT;
     LocalFree(argv);
 
@@ -219,6 +252,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         DispatchMessage(&msg);
     }
 
+    CoUninitialize();
     return (int) msg.wParam;
 }
 
@@ -235,6 +269,15 @@ static void SetPreferredUILanguages() {
     if (!SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, buf.data(), nullptr)) {
         LOG_LAST_ERROR();
     }
+}
+
+static int SchedTask(const std::wstring& action, const std::wstring& sid) {
+    if (action == L"create") {
+        return RegisterLogonTask(sid, true) ? 0 : -4;
+    } else if(action == L"delete") {
+		return UnregisterLogonTask(sid) ? 0 : -5;
+    }
+    return -3;
 }
 
 // CommandLine returns the whole command line of this exe
@@ -257,6 +300,10 @@ DWORD ParseCmdLine(int argc, wchar_t** argv) {
         } else if (argv1 == L"/toggle" || argv1 == L"-toggle") {
             silentMode = true;
             cmd = CMD_TOGGLE | CMD_SILENT;
+        } else if (argv1 == L"/sched_task" || argv1 == L"-sched_task") {
+			cmd = CMD_SCHED_TASK;
+        } else if (argv1 == L"/relaunch" || argv1 == L"-relaunch") {
+            cmd = CMD_RELAUNCH;
         }
     }
     return cmd;
@@ -324,6 +371,14 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_HELP, FALSE, &menuInfo)) {
        LOG_LAST_ERROR();
    }
+
+   startOnBootMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_START_ON_BOOT)), 0);
+   menuInfo.hSubMenu = startOnBootMenu;
+   if (!SetMenuItemInfoW(popupMenu, ID_MENU_START_ON_BOOT_ROOT, FALSE, &menuInfo)) {
+       LOG_LAST_ERROR();
+   }
+
+
    pluginMenu = CreatePopupMenu();
    menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, pluginMenu, 0 };
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_PLUGIN, FALSE, &menuInfo)) {
@@ -396,13 +451,19 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         ShowSoundSettingsWindow();
         break;
     case ID_MENU_START_ON_BOOT:
-        if (StartOnBootEnabled()) {
+        if (StartOnBootStatus() == LTS_REGISTERED) {
             DisableStartOnBoot();
-        }
-        else {
-            EnableStartOnBoot();
+        } else {
+            EnableStartOnBoot(false);
         }
         break;
+    case ID_MENU_START_ON_BOOT_AS_ADMIN:
+        if (StartOnBootStatus() == LTS_REGISTERED_AS_ADMIN) {
+            DisableStartOnBoot();
+        } else {
+            EnableStartOnBoot(true);
+        }
+		break;
     case ID_MENU_EXIT:
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
         break;
@@ -416,6 +477,9 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         break;
     case ID_HELP_CHECK_FOR_UPDATES:
         CheckForUpdate(hInst, mainWindow, UM_UPDATE_CHECK_DONE);
+        break;
+    case ID_HELP_RUN_AS_ADMIN:
+        RelaunchAsAdmin();
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
@@ -597,7 +661,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 // Has modal dialog open, do not show menu.
                 return 0;
             }
-            CheckMenuItem(popupMenu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootEnabled()? MF_CHECKED : MF_UNCHECKED));
             POINT pt = { 0 };
             GetCursorPos(&pt);
             UINT_PTR cmd = TrackPopupMenu(popupMenu,
@@ -632,19 +695,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
             auto menu = (HMENU)wParam;
             if (menu == popupMenu) {
+				CheckMenuItem(menu, ID_MENU_START_ON_BOOT_ROOT, MF_BYCOMMAND | (StartOnBootStatus() > 0 ? MF_CHECKED : MF_UNCHECKED));
                 CallPluginInitMenuPopupListeners(NULL);
                 break;
             }
             if (menu == pluginMenu) {
                 OnPluginMenuInitPopup();
-            } else if (menu == helpMenu) {
+                break;
+            }
+            if (menu == helpMenu) {
                 MENUITEMINFO info = { sizeof(info) };
                 info.fMask = MIIM_STATE | MIIM_STRING;
-                info.fState = CheckingUpdate() ? MFS_DISABLED : MFS_ENABLED;
-                info.dwTypeData = (LPWSTR)strRes->Load(CheckingUpdate() ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+                const bool checkingForUpdate = CheckingForUpdate();
+                info.fState = checkingForUpdate ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(checkingForUpdate ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
                 if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
                     LOG_LAST_ERROR();
                 }
+                const bool elevated = IsCurrentProcessElevated();
+                info.fState = elevated ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(elevated ? IDS_RUNNING_AS_ADMIN : IDS_RUN_AS_ADMIN).c_str();
+                if (!SetMenuItemInfoW(menu, ID_HELP_RUN_AS_ADMIN, FALSE, &info)) {
+                    LOG_LAST_ERROR();
+                }
+                break;
+            }
+            if (menu == startOnBootMenu) {
+                CheckMenuItem(menu, ID_MENU_START_ON_BOOT, MF_BYCOMMAND | (StartOnBootStatus() == LTS_REGISTERED ? MF_CHECKED : MF_UNCHECKED));
+				CheckMenuItem(menu, ID_MENU_START_ON_BOOT_AS_ADMIN, MF_BYCOMMAND | (StartOnBootStatus() == LTS_REGISTERED_AS_ADMIN ? MF_CHECKED : MF_UNCHECKED));
+                break;
             }
             CallPluginInitMenuPopupListeners(menu);
             break;
@@ -890,6 +969,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
         state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
         state == MicCtrl::Unmuted ? IDI_MICPHONE : IDI_NO_MICROPHONE));
+    std::wstring tip;
     if (hotKeyInfo.Empty()) {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
             strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 
@@ -1031,7 +1111,7 @@ void WriteConfig() {
 static const auto START_ON_BOOT_REG_SUB_KEY = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
 static const auto START_ON_BOOT_REG_VALUE_NAME = L"DeMic";
 
-bool StartOnBootEnabled() {
+bool StartOnBootEnabled_Reg() {
     wchar_t value[1024] = { 0 };
     DWORD read = sizeof(value);
     const auto ret = RegGetValueW(HKEY_CURRENT_USER, START_ON_BOOT_REG_SUB_KEY, START_ON_BOOT_REG_VALUE_NAME,
@@ -1049,7 +1129,7 @@ bool StartOnBootEnabled() {
     }
 }
 
-void EnableStartOnBoot() {
+void EnableStartOnBoot_Reg() {
     HKEY key = NULL;
     auto ret = RegOpenKeyExW(HKEY_CURRENT_USER, START_ON_BOOT_REG_SUB_KEY,
         0, KEY_WRITE,
@@ -1069,7 +1149,7 @@ void EnableStartOnBoot() {
     RegCloseKey(key);
 }
 
-void DisableStartOnBoot() {
+void DisableStartOnBoot_Reg() {
     HKEY key = NULL;
     auto ret = RegOpenKeyExW(HKEY_CURRENT_USER, START_ON_BOOT_REG_SUB_KEY,
         0, KEY_WRITE,
@@ -1087,6 +1167,46 @@ void DisableStartOnBoot() {
     RegCloseKey(key);
 }
 
+LogonTaskStatus StartOnBootStatus() {
+    return GetLogonTaskStatus(processSID);
+}
+
+void EnableStartOnBoot(bool asAdmin) {
+    if (!asAdmin) {
+		RegisterLogonTask(processSID, asAdmin);
+        return;
+    }
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";                // Trigger UAC
+    sei.lpFile = moduleFilePath.c_str();
+    const auto params = std::format(L" /sched_task create {}", GetCurrentUserSid());
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+
+    if (ShellExecuteExW(&sei) && sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+        CloseHandle(sei.hProcess);
+    }
+}
+
+void DisableStartOnBoot() {
+    UnregisterLogonTask(processSID);
+}
+
+void RelaunchAsAdmin() {
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.lpVerb = L"runas";                // Trigger UAC
+    sei.lpFile = moduleFilePath.c_str();
+    sei.lpParameters = L" /relaunch";
+    sei.nShow = SW_SHOWNORMAL;
+
+    if (ShellExecuteExW(&sei)) {
+        // Exit ASAP.
+        SendMessage(mainWindow, WM_CLOSE, 0, 0);
+    }
+}
+
 static const auto RUNNING_MUTEX_NAME = L"DeMic is running";
 static bool AlreadyRunning() {
     if (CreateMutexW(NULL, FALSE, RUNNING_MUTEX_NAME) == NULL) {
@@ -1094,6 +1214,16 @@ static bool AlreadyRunning() {
         std::exit(1);
     }
     return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+static bool IsAnotherInstanceRunning() {
+    HANDLE hMutex = CreateMutexW(NULL, FALSE, RUNNING_MUTEX_NAME);
+    if (hMutex == NULL) {
+        LOG_LAST_ERROR();
+        std::exit(1);
+    }
+    bool ret = GetLastError() == ERROR_ALREADY_EXISTS;
+    CloseHandle(hMutex);
+    return ret;
 }
 
 std::wstring GetDefaultLogFilePath() {

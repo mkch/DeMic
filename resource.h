@@ -18,6 +18,8 @@
 #define IDS_NOTIFICATION_TIP_HOTKEY     113
 #define IDS_HOTKEY_SETTINGS             114
 #define IDS_NO_MICROPHONE               115
+#define IDS_RUNNING_AS_ADMIN            116
+#define IDS_RUN_AS_ADMIN                117
 #define IDI_MICPHONE                    138
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
@@ -34,6 +36,7 @@
 #define IDR_NOTIF_MENU                  159
 #define IDS_UPDATE_OR_NOT               160
 #define IDS_CHECK_FOR_UPDATES           161
+#define IDR_START_ON_BOOT               161
 #define IDS_CHECKING_FOR_UPDATES        162
 #define IDC_HOTKEY                      1004
 #define IDC_ENABLE_ON_SOUND             1005
@@ -52,6 +55,16 @@
 #define ID_HELP_CHECK_FOR_UPDATES       32792
 #define ID_MENU_HELP                    32795
 #define ID_MENU_HOTKEY_SETTINGS         32799
+#define ID_32800                        32800
+#define ID_32801                        32801
+#define ID_MENU_START_ON_BOOT_ASADMIN   32802
+#define ID_MENU_START_ON_BOOT_AS_ADMIN  32803
+#define ID_MENU_32804                   32804
+#define ID_MENU_START_ON_BOOT_ROOT      32805
+#define ID__32806                       32806
+#define ID_RUN_AS_ADMIN                 32807
+#define ID__RUNASADMINISTRATOR          32808
+#define ID_HELP_RUN_AS_ADMIN            32809
 #define IDC_HOTKEY_STATIC               -1
 
 // Next default values for new objects
@@ -59,8 +72,8 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        161
-#define _APS_NEXT_COMMAND_VALUE         32800
+#define _APS_NEXT_RESOURCE_VALUE        162
+#define _APS_NEXT_COMMAND_VALUE         32810
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
