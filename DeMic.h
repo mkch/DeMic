@@ -10,7 +10,7 @@ const UINT APS_NextPluginCmdID = _APS_NEXT_COMMAND_VALUE;
 
 // Currrent version of DeMic.
 // Must be a semver!
-static const wchar_t* VERSION = L"1.3.4";
+static const wchar_t* VERSION = L"1.3.4-dev";
 
 extern HMENU popupMenu;
 extern HMENU pluginMenu;
