@@ -30,6 +30,7 @@
 #define IDR_SERVER_STRINGS__en_US       117
 #define IDS_TITLE_LISTEN_ADDR           118
 #define IDS_EMPTY_CERT_OR_KEY_FILE      119
+#define IDS_CHANGE_SETTING_FAILED       120
 #define IDC_REFRESH_CODE                1003
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
@@ -47,7 +48,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        119
+#define _APS_NEXT_RESOURCE_VALUE        121
 #define _APS_NEXT_COMMAND_VALUE         40001
 #define _APS_NEXT_CONTROL_VALUE         1012
 #define _APS_NEXT_SYMED_VALUE           101

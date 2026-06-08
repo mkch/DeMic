@@ -52,9 +52,9 @@ void WriteConfig();
 bool StartOnBootEnabled_Reg();
 LogonTaskStatus StartOnBootStatus();
 void EnableStartOnBoot_Reg();
-void EnableStartOnBoot(bool asAdmin);
+bool EnableStartOnBoot(bool asAdmin);
 void DisableStartOnBoot_Reg();
-void DisableStartOnBoot();
+bool DisableStartOnBoot();
 void RelaunchAsAdmin();
 bool ResetHotKey(HWND hwnd);
 static bool AlreadyRunning();
@@ -443,6 +443,7 @@ static BOOL OpenFolder(LPCWSTR folder) {
 }
 
 void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
+    bool ok = false;
     switch (cmd) {
     case ID_MENU_HOTKEY_SETTINGS:
         ShowHotKeySettingsWindow();
@@ -452,16 +453,22 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         break;
     case ID_MENU_START_ON_BOOT:
         if (StartOnBootStatus() == LTS_REGISTERED) {
-            DisableStartOnBoot();
+            ok = DisableStartOnBoot();
         } else {
-            EnableStartOnBoot(false);
+            ok = EnableStartOnBoot(false);
+        }
+        if (!ok) {
+            ShowError(strRes->Load(IDS_CHANGE_SETTING_FAILED).c_str());
         }
         break;
     case ID_MENU_START_ON_BOOT_AS_ADMIN:
         if (StartOnBootStatus() == LTS_REGISTERED_AS_ADMIN) {
-            DisableStartOnBoot();
+            ok = DisableStartOnBoot();
         } else {
-            EnableStartOnBoot(true);
+            ok = EnableStartOnBoot(true);
+        }
+        if (!ok) {
+            ShowError(strRes->Load(IDS_CHANGE_SETTING_FAILED).c_str());
         }
 		break;
     case ID_MENU_EXIT:
@@ -695,7 +702,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_INITMENUPOPUP: {
             auto menu = (HMENU)wParam;
             if (menu == popupMenu) {
-				CheckMenuItem(menu, ID_MENU_START_ON_BOOT_ROOT, MF_BYCOMMAND | (StartOnBootStatus() > 0 ? MF_CHECKED : MF_UNCHECKED));
+				CheckMenuItem(menu, ID_MENU_START_ON_BOOT_ROOT, MF_BYCOMMAND | (StartOnBootStatus() >= LTS_REGISTERED ? MF_CHECKED : MF_UNCHECKED));
                 CallPluginInitMenuPopupListeners(NULL);
                 break;
             }
@@ -1171,10 +1178,14 @@ LogonTaskStatus StartOnBootStatus() {
     return GetLogonTaskStatus(processSID);
 }
 
-void EnableStartOnBoot(bool asAdmin) {
+bool EnableStartOnBoot(bool asAdmin) {
+    // Maybe registered with different privileges, try to unregister first.
+	// DisableStartOnBoot will handle ULA and non-ULA accounts correctly.
+    if (!DisableStartOnBoot()) {
+        return false;
+    }
     if (!asAdmin) {
-		RegisterLogonTask(processSID, asAdmin);
-        return;
+		return RegisterLogonTask(processSID, false);
     }
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -1186,12 +1197,43 @@ void EnableStartOnBoot(bool asAdmin) {
 
     if (ShellExecuteExW(&sei) && sei.hProcess) {
         WaitForSingleObject(sei.hProcess, INFINITE);
-        CloseHandle(sei.hProcess);
+        if (!CloseHandle(sei.hProcess)) {
+            LOG_LAST_ERROR();
+            return false;
+        }
+        return true;
     }
+    return false;
 }
 
-void DisableStartOnBoot() {
-    UnregisterLogonTask(processSID);
+bool DisableStartOnBoot() {
+    const auto status = StartOnBootStatus();
+    if (status == LTS_UNREGISTERED) {
+         return true;
+	}
+    if (StartOnBootStatus() == LTS_REGISTERED) {
+        if (UnregisterLogonTask(processSID)) {
+			return true;
+        }
+		// Maybe the task is registered with admin privileges, try to unregister with admin privileges.
+    }
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";                // Trigger UAC
+    sei.lpFile = moduleFilePath.c_str();
+    const auto params = std::format(L" /sched_task delete {}", GetCurrentUserSid());
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+
+    if (ShellExecuteExW(&sei) && sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+        if (!CloseHandle(sei.hProcess)) {
+            LOG_LAST_ERROR();
+			return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 void RelaunchAsAdmin() {

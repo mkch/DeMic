@@ -14,7 +14,11 @@
 #pragma comment(lib, "comsuppw.lib")
 
 #define FAILED_ERROR_LOG(msg, hr) \
-    LOG(Logger::LevelError, (std::wstringstream() <<(msg) << L" failed. HRESULT: 0x" << std::hex << (hr)).str().c_str());
+do { \
+    auto _hr = (DWORD)(hr); \
+    _com_error err(_hr); \
+    LOG(Logger::LevelError, std::format(L"{} failed. HRESULT: 0x{:x} {}", (msg), _hr, err.ErrorMessage()).c_str()); \
+} while(0);
 
 #include <windows.h>
 #include <sddl.h>
@@ -74,26 +78,26 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("CoCreateInstance", hr);
+        FAILED_ERROR_LOG(L"CoCreateInstance", hr);
         return false;
     }
 
     hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskService::Connect", hr);
+		FAILED_ERROR_LOG(L"ITaskService::Connect", hr);
         return false;
     }
     CComPtr<ITaskFolder> pRootFolder;
     hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskService::GetFolder", hr)
+		FAILED_ERROR_LOG(L"ITaskService::GetFolder", hr)
         return false;
     }
 
     CComPtr<ITaskDefinition> pTask;
     hr = pService->NewTask(0, &pTask);
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskService::NewTask", hr);
+		FAILED_ERROR_LOG(L"ITaskService::NewTask", hr);
         return false;
     }
 
@@ -102,12 +106,12 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     if (SUCCEEDED(hr)) {
         hr = pPrincipal->put_RunLevel(asAdmin ? TASK_RUNLEVEL_HIGHEST : TASK_RUNLEVEL_LUA); // !!!
         if (FAILED(hr)) {
-            FAILED_ERROR_LOG("IPrincipal::put_RunLevel", hr);
+            FAILED_ERROR_LOG(L"IPrincipal::put_RunLevel", hr);
             return false;
         }
         hr = pPrincipal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
         if (FAILED(hr)) {
-			FAILED_ERROR_LOG("IPrincipal::put_LogonType", hr);
+			FAILED_ERROR_LOG(L"IPrincipal::put_LogonType", hr);
             return false;
         }
 		pPrincipal->put_UserId(_bstr_t(sid.c_str()));
@@ -126,14 +130,14 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     CComPtr<ITriggerCollection> pTriggerCollection;
     hr = pTask->get_Triggers(&pTriggerCollection);
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskDefinition::get_Triggers", hr);
+		FAILED_ERROR_LOG(L"ITaskDefinition::get_Triggers", hr);
         return false;
     }
 
     CComPtr<ITrigger> pTrigger;
     hr = pTriggerCollection->Create(TASK_TRIGGER_LOGON, &pTrigger);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("ITriggerCollection::Create", hr);
+        FAILED_ERROR_LOG(L"ITriggerCollection::Create", hr);
         return false;
     }
 
@@ -143,7 +147,7 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
         IID_ILogonTrigger,
         (void**)&pLogonTrigger);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("QueryInterface for ILogonTrigger", hr);
+        FAILED_ERROR_LOG(L"QueryInterface for ILogonTrigger", hr);
         return false;
     }
     pLogonTrigger->put_UserId(_bstr_t(sid.c_str()));
@@ -152,14 +156,14 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     CComPtr<IActionCollection> pActionCollection;
     hr = pTask->get_Actions(&pActionCollection);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("ITaskDefinition::get_Actions", hr);
+        FAILED_ERROR_LOG(L"ITaskDefinition::get_Actions", hr);
         return false;
     }
 
     CComPtr<IAction> pAction;
     hr = pActionCollection->Create(TASK_ACTION_EXEC, &pAction);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("IActionCollection::Create", hr);
+        FAILED_ERROR_LOG(L"IActionCollection::Create", hr);
         return false;
     }
 
@@ -168,7 +172,7 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     if (SUCCEEDED(hr)) {
         hr = pExecAction->put_Path(_bstr_t(moduleFilePath.c_str()));
         if (FAILED(hr)) {
-            FAILED_ERROR_LOG("IExecAction::put_Path", hr);
+            FAILED_ERROR_LOG(L"IExecAction::put_Path", hr);
             return false;
         }
 		pExecAction->put_Arguments(_bstr_t(L"/silent"));
@@ -188,7 +192,7 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     );
 
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskFolder::RegisterTaskDefinition", hr);
+		FAILED_ERROR_LOG(L"ITaskFolder::RegisterTaskDefinition", hr);
         return false;
     }
 
@@ -200,57 +204,95 @@ LogonTaskStatus GetLogonTaskStatus(const std::wstring& sid) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("CoCreateInstance", hr);
-        return LTS_UNREGISTERED;
+        FAILED_ERROR_LOG(L"CoCreateInstance", hr);
+        return LTS_ERROR;
     }
 
     hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskService::Connect", hr);
-        return LTS_UNREGISTERED;
+		FAILED_ERROR_LOG(L"ITaskService::Connect", hr);
+        return LTS_ERROR;
     }
 
     CComPtr<ITaskFolder> pRootFolder;
     hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("ITaskService::GetFolder", hr);
-        return LTS_UNREGISTERED;
+        FAILED_ERROR_LOG(L"ITaskService::GetFolder", hr);
+        return LTS_ERROR;
     }
 
     CComPtr<IRegisteredTask> pRegisteredTask;
     hr = pRootFolder->GetTask(_bstr_t(taskName(sid).c_str()), &pRegisteredTask);
-    if (!SUCCEEDED(hr)) {
-        FAILED_ERROR_LOG("ITaskFolder::GetTask", hr);
-        return LTS_UNREGISTERED;
+    if (FAILED(hr)) {
+        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+            return LTS_UNREGISTERED;
+        }
+        FAILED_ERROR_LOG(L"ITaskFolder::GetTask", hr);
+        return LTS_ERROR;
     }
 
     TASK_STATE taskState = TASK_STATE_UNKNOWN;
     hr = pRegisteredTask->get_State(&taskState);
-
-    if (SUCCEEDED(hr)) {
-            switch (taskState) {
-            case TASK_STATE_UNKNOWN:
-            case TASK_STATE_DISABLED:
-                return LTS_UNREGISTERED;
-            default: {
-                CComPtr<ITaskDefinition> pDefinition;
-                hr = pRegisteredTask->get_Definition(&pDefinition);
-                if (FAILED(hr)) {
-                    FAILED_ERROR_LOG("IRegisteredTask::get_Definition", hr);
-                    return LTS_REGISTERED; // Can't determine, but the task exists.
-                }
-                CComPtr<IPrincipal> pPrincipal;
-                hr = pDefinition->get_Principal(&pPrincipal);
-                if (FAILED(hr)) {
-                    FAILED_ERROR_LOG("ITaskDefinition::get_Principal", hr);
-                    return LTS_REGISTERED; // Can't determine, but the task exists.
-                }
-                TASK_RUNLEVEL_TYPE level = TASK_RUNLEVEL_LUA;
-                pPrincipal->get_RunLevel(&level);
-                return level == TASK_RUNLEVEL_HIGHEST ? LTS_REGISTERED_AS_ADMIN : LTS_REGISTERED;
-            }
-        }
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IRegisteredTask::get_State", hr);
+        return LTS_ERROR;
     }
+
+    if (taskState == TASK_STATE_UNKNOWN || taskState == TASK_STATE_DISABLED) {
+        return LTS_ERROR;
+    }
+
+    CComPtr<ITaskDefinition> pDefinition;
+    hr = pRegisteredTask->get_Definition(&pDefinition);
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IRegisteredTask::get_Definition", hr);
+        return LTS_ERROR;
+    }
+
+    CComPtr<IActionCollection> pActionCollection;
+    hr = pDefinition->get_Actions(&pActionCollection);
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"ITaskDefinition::get_Actions", hr);
+        return LTS_ERROR;
+    }
+    long count = 0;
+    hr = pActionCollection->get_Count(&count);
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IActionCollection::get_Count", hr);
+        return LTS_ERROR;
+    }
+    if (count < 1) {
+        return LTS_ERROR;
+    }
+    CComPtr<IAction> pAction;
+    hr = pActionCollection->get_Item(1, &pAction); // Collections are 1-based.
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IActionCollection::get_Item", hr);
+        return LTS_ERROR;
+    }
+
+    CComPtr<IExecAction> pExecAction;
+    hr = pAction->QueryInterface(IID_IExecAction, (void**)&pExecAction);
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"QueryInterface for IExecAction", hr);
+        return LTS_ERROR;
+    }
+    CComBSTR path;
+    pExecAction->get_Path(&path);
+    if (path.Length() == 0 || _wcsicmp(path.m_str, moduleFilePath.c_str()) != 0) {
+        return LTS_ERROR;
+    }
+
+    CComPtr<IPrincipal> pPrincipal;
+    hr = pDefinition->get_Principal(&pPrincipal);
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"ITaskDefinition::get_Principal", hr);
+        return LTS_ERROR;
+    }
+    TASK_RUNLEVEL_TYPE level = TASK_RUNLEVEL_LUA;
+    pPrincipal->get_RunLevel(&level);
+    return level == TASK_RUNLEVEL_HIGHEST ? LTS_REGISTERED_AS_ADMIN : LTS_REGISTERED;
+
     return LTS_UNREGISTERED;
 }
 
@@ -277,20 +319,20 @@ bool UnregisterLogonTask(const std::wstring& sid) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("CoCreateInstance", hr);
+        FAILED_ERROR_LOG(L"CoCreateInstance", hr);
         return false;
     }
 
     hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
     if (FAILED(hr)) {
-        FAILED_ERROR_LOG("ITaskService::Connect", hr);
+        FAILED_ERROR_LOG(L"ITaskService::Connect", hr);
         return false;
     }
 
     CComPtr<ITaskFolder> pRootFolder;
     hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
     if (FAILED(hr)) {
-		FAILED_ERROR_LOG("ITaskService::GetFolder", hr);
+		FAILED_ERROR_LOG(L"ITaskService::GetFolder", hr);
         return false;
     }
 
@@ -301,5 +343,9 @@ bool UnregisterLogonTask(const std::wstring& sid) {
     }
 
     // No such task.
-    return hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+    if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+        return true;
+    }
+    FAILED_ERROR_LOG(L"ITaskFolder::DeleteTask", hr);
+    return false;
 }

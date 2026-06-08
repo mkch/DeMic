@@ -8,8 +8,9 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin);
 // UnregisterLogonTask unregisters the logon task for the user.
 bool UnregisterLogonTask(const std::wstring& sid);
 enum LogonTaskStatus{
+	LTS_ERROR,					// Error occured when checking the task status.
 	LTS_UNREGISTERED,			// No task registered.
-	LTS_REGISTERED,				// A task is registered to start on logon.
+	LTS_REGISTERED,				// A task is registered to start on logon with least privileges.
 	LTS_REGISTERED_AS_ADMIN,	// A task is registered to start on logon with highest privileges.
 };
 // GetLogonTaskStatus returns the logon task registration status for the user with the specified sid.

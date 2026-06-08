@@ -20,6 +20,7 @@
 #define IDS_NO_MICROPHONE               115
 #define IDS_RUNNING_AS_ADMIN            116
 #define IDS_RUN_AS_ADMIN                117
+#define IDS_CHANGE_SETTING_FAILED       120
 #define IDI_MICPHONE                    138
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
