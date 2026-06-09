@@ -300,6 +300,19 @@ static void UnloadPlugin(const std::wstring& path) {
 }
 
 void OnPluginMenuInitPopup() {
+	class WaitCursor {
+	public:
+		WaitCursor() {
+			old_ = SetCursor(LoadCursorW(nullptr, IDC_APPSTARTING));
+		}
+
+		~WaitCursor() {
+			SetCursor(old_);
+		}
+
+	private:
+		HCURSOR old_;
+	} wait;
 	while (GetMenuItemCount(pluginMenu)) {
 		RemoveMenu(pluginMenu, 0, MF_BYPOSITION);
 	}
