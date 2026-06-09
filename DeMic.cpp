@@ -21,7 +21,10 @@
 #include "UpdateChecker.h"
 #include "HotKeyControlInfo.h"
 #include "TaskScheduler.h"
+#include "InstanceLock.h"
 
+
+std::unique_ptr<InstanceLock> instanceLock;
 
 enum {
     // Notify message used by Shell_NotifyIconW.
@@ -149,6 +152,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     SetDefaultLogger(&defaultLogger);
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
 
+	instanceLock = std::make_unique<InstanceLock>();
+
     // Initialize COM with apartment model.
     VERIFY_SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
     VERIFY_SUCCEEDED(CoInitializeSecurity(nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, 0, nullptr))
@@ -173,13 +178,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return SchedTask(argv[2]);
     } else if (cmd == CMD_RELAUNCH) {
         // Relaunching, wait for the previous instance to exit.
-        const auto t = GetTickCount();
-        do {
-            if (!IsAnotherInstanceRunning()) {
-                break;
-            }
-            Sleep(100);
-        } while (GetTickCount() - t < 3000);
+		instanceLock->Acquire(INFINITE);
     }
     silentMode = cmd & CMD_SILENT;
     LocalFree(argv);
@@ -201,7 +200,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
 
-    if (AlreadyRunning()) {
+    if (!instanceLock->TryAcquire()) {
         if (noArgInCmdLine) {
             // If no arg in command line, try to parse the args in ini file.
             int cmdLine2Argc = 0;

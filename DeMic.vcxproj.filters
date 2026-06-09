@@ -60,6 +60,9 @@
     <ClInclude Include="TaskScheduler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InstanceLock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DeMic.cpp">
