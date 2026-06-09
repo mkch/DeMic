@@ -28,36 +28,27 @@ std::wstring GetCurrentUserSid() {
     HANDLE hToken = nullptr;
 
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-        LOG_LAST_ERROR();
-        return L""; 
+        ShowError(L"GetCurrentUserSid failed");
+        std::exit(1);
     }
 
     DWORD size = 0;
-
-    GetTokenInformation(hToken, TokenUser, nullptr, 0, &size);
-
-    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-        LOG_LAST_ERROR();
-        CloseHandle(hToken);
-        return L"";
+    if (!GetTokenInformation(hToken, TokenUser, nullptr, 0, &size) && GetLastError() != ERROR_INSUFFICIENT_BUFFER || size == 0) {
+        ShowError(L"GetCurrentUserSid failed");
+        std::exit(1);
     }
 
     BYTE* buffer = new BYTE[size];
 
     if (!GetTokenInformation(hToken, TokenUser, buffer, size, &size)) {
-        LOG_LAST_ERROR();
-        delete[] buffer;
-        CloseHandle(hToken);
-        return L"";
+        ShowError(L"GetCurrentUserSid failed");
     }
 
     PTOKEN_USER pUser = reinterpret_cast<PTOKEN_USER>(buffer);
     LPWSTR sidString = nullptr;
     if (!ConvertSidToStringSidW(pUser->User.Sid, &sidString)) {
-		LOG_LAST_ERROR();
-        delete[] buffer;
-        CloseHandle(hToken);
-        return L"";
+        ShowError(L"GetCurrentUserSid failed");
+        std::exit(1);
     }
 
     std::wstring sid = sidString;
@@ -305,16 +296,18 @@ bool IsCurrentProcessElevated() {
     HANDLE hToken = NULL;
 
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-        return false;
+        ShowError(L"IsCurrentProcessElevated failed");
+        std::exit(1);
     }
     TOKEN_ELEVATION elevation;
     DWORD cbSize = sizeof(TOKEN_ELEVATION);
-    if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
-        isElevated = (elevation.TokenIsElevated != 0);
+    if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+        ShowError(L"IsCurrentProcessElevated failed");
+        std::exit(1);
     }
     CloseHandle(hToken);
 
-    return isElevated;
+    return isElevated = (elevation.TokenIsElevated != 0);;
 }
 
 bool UnregisterLogonTask(const std::wstring& sid) {

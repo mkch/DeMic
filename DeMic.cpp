@@ -44,6 +44,8 @@ const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
 const std::wstring moduleFilePath = GetModuleFilePath(); 
 // User SID of current process.
 const std::wstring processSID = GetCurrentUserSid();
+// Whether the current process is elevated.
+const bool processElevated = IsCurrentProcessElevated();
 
 std::unique_ptr <StringRes> strRes;
 
@@ -169,7 +171,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     DWORD cmd = ParseCmdLine(argc, argv);
     if (cmd == CMD_SCHED_TASK) {
         // /sched_task must be executed in an elevated process.
-        if (!IsCurrentProcessElevated()) {
+        if (!processElevated) {
             return -1;
         }
         if (argc < 3) {
@@ -494,7 +496,7 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
             ok = DisableStartOnBoot();
         } else {
             ok = EnableStartOnBoot(true);
-            if (ok && !IsCurrentProcessElevated()) {
+            if (ok && !processElevated) {
                 if(MessageBoxW(mainWindow, strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                     if (!RelaunchAsAdmin()) {
                         ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
@@ -756,9 +758,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
                     LOG_LAST_ERROR();
                 }
-                const bool elevated = IsCurrentProcessElevated();
-                info.fState = elevated ? MFS_DISABLED : MFS_ENABLED;
-                info.dwTypeData = (LPWSTR)strRes->Load(elevated ? IDS_RUNNING_AS_ADMIN : IDS_RUN_AS_ADMIN).c_str();
+                info.fState = processElevated ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(processElevated ? IDS_RUNNING_AS_ADMIN : IDS_RUN_AS_ADMIN).c_str();
                 if (!SetMenuItemInfoW(menu, ID_HELP_RUN_AS_ADMIN, FALSE, &info)) {
                     LOG_LAST_ERROR();
                 }
@@ -1013,7 +1014,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
         state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
         state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
-    std::wstring tip;
+    std::wstring tipFmt = strRes->Load(IDS_NOTIFICATION_TIP);
     if (hotKeyInfo.Empty()) {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
             strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 

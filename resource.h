@@ -23,6 +23,7 @@
 #define IDS_RELAUNCH_FAILED             118
 #define IDS_RUN_AS_ADMIN_OR_NOT         119
 #define IDS_CHANGE_SETTING_FAILED       120
+#define IDS_ADMIN                       121
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
 #define IDI_NO_MICROPHONE               142
