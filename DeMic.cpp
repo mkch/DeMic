@@ -55,7 +55,7 @@ void EnableStartOnBoot_Reg();
 bool EnableStartOnBoot(bool asAdmin);
 void DisableStartOnBoot_Reg();
 bool DisableStartOnBoot();
-void RelaunchAsAdmin();
+bool RelaunchAsAdmin();
 bool ResetHotKey(HWND hwnd);
 static bool AlreadyRunning();
 static bool IsAnotherInstanceRunning();
@@ -491,7 +491,9 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         CheckForUpdate(hInst, mainWindow, UM_UPDATE_CHECK_DONE);
         break;
     case ID_HELP_RUN_AS_ADMIN:
-        RelaunchAsAdmin();
+        if (!RelaunchAsAdmin()) {
+			ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
+        }
         break;
     default:
         if (cmd >= APS_NextPluginCmdID) {
@@ -980,7 +982,7 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     const auto state = micCtrl->GetMuteState();
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
         state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
-        state == MicCtrl::Unmuted ? IDI_MICPHONE : IDI_NO_MICROPHONE));
+        state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
     std::wstring tip;
     if (hotKeyInfo.Empty()) {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
@@ -1187,13 +1189,16 @@ LogonTaskStatus StartOnBootStatus() {
 }
 
 bool EnableStartOnBoot(bool asAdmin) {
-    // Maybe registered with different privileges, try to unregister first.
-	// DisableStartOnBoot will handle ULA and non-ULA accounts correctly.
-    if (!DisableStartOnBoot()) {
-        return false;
-    }
     if (!asAdmin) {
-		return RegisterLogonTask(processSID, false);
+        if (RegisterLogonTask(processSID, false)) {
+            return true;
+        }
+        // Maybe registered with different privileges, try to unregister first.
+        // DisableStartOnBoot will handle ULA and non-ULA accounts correctly.
+        if (!DisableStartOnBoot()) {
+            return false;
+        }
+        return RegisterLogonTask(processSID, false);
     }
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -1242,7 +1247,7 @@ bool DisableStartOnBoot() {
     return false;
 }
 
-void RelaunchAsAdmin() {
+bool RelaunchAsAdmin() {
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.lpVerb = L"runas";                // Trigger UAC
     sei.lpFile = moduleFilePath.c_str();
@@ -1252,7 +1257,9 @@ void RelaunchAsAdmin() {
     if (ShellExecuteExW(&sei)) {
         // Exit ASAP.
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
+        return true;
     }
+    return false;
 }
 
 static const auto RUNNING_MUTEX_NAME = L"DeMic is running";

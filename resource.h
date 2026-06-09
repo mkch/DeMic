@@ -21,11 +21,9 @@
 #define IDS_RUNNING_AS_ADMIN            116
 #define IDS_RUN_AS_ADMIN                117
 #define IDS_CHANGE_SETTING_FAILED       120
-#define IDI_MICPHONE                    138
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
 #define IDI_MICPHONE1                   142
-#define IDI_NO_MICPHONE                 142
 #define IDI_MICROPHONE1                 142
 #define IDI_NO_MICROPHONE               142
 #define IDD_HOTKEY_SETTINGS             145
@@ -56,15 +54,8 @@
 #define ID_HELP_CHECK_FOR_UPDATES       32792
 #define ID_MENU_HELP                    32795
 #define ID_MENU_HOTKEY_SETTINGS         32799
-#define ID_32800                        32800
-#define ID_32801                        32801
-#define ID_MENU_START_ON_BOOT_ASADMIN   32802
 #define ID_MENU_START_ON_BOOT_AS_ADMIN  32803
-#define ID_MENU_32804                   32804
 #define ID_MENU_START_ON_BOOT_ROOT      32805
-#define ID__32806                       32806
-#define ID_RUN_AS_ADMIN                 32807
-#define ID__RUNASADMINISTRATOR          32808
 #define ID_HELP_RUN_AS_ADMIN            32809
 #define IDC_HOTKEY_STATIC               -1
 
