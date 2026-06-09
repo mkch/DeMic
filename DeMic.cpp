@@ -395,12 +395,36 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
    return TRUE;
 }
 
+static HHOOK HotkeySettingsHook = nullptr;
+
+static LRESULT CALLBACK HotKeySettingsMsgFilterHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code != 0) {
+		return CallNextHookEx(HotkeySettingsHook, code, wParam, lParam);
+    }
+	MSG* msg = (MSG*)lParam;
+    if(msg->message == WM_KEYDOWN && msg->wParam == VK_CANCEL) {
+		// Intercept Ctrl+Break to prevent it from closing the hotkey settings dialog.
+        TranslateMessage(msg);
+        DispatchMessageW(msg);
+        return 1;
+	}
+    return CallNextHookEx(HotkeySettingsHook, code, wParam, lParam);
+}
+
 void ShowHotKeySettingsWindow() {
     if (hotKeySettingWindow) {
 		SetForegroundWindow(hotKeySettingWindow);
         return;
     }
+    HotkeySettingsHook = SetWindowsHookExW(WH_MSGFILTER, HotKeySettingsMsgFilterHookProc, nullptr, GetCurrentThreadId());
+    if (!HotkeySettingsHook) {
+		LOG_LAST_ERROR();
+    }
 	DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_HOTKEY_SETTINGS), mainWindow, HotKeySettings);
+    if(HotkeySettingsHook) {
+        UnhookWindowsHookEx(HotkeySettingsHook);
+        HotkeySettingsHook = nullptr;
+	}
 }
 
 void ShowSoundSettingsWindow() {
