@@ -102,29 +102,33 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
 
     CComPtr<IPrincipal> pPrincipal;
     hr = pTask->get_Principal(&pPrincipal);
-    if (SUCCEEDED(hr)) {
-        hr = pPrincipal->put_RunLevel(asAdmin ? TASK_RUNLEVEL_HIGHEST : TASK_RUNLEVEL_LUA); // !!!
-        if (FAILED(hr)) {
-            FAILED_ERROR_LOG(L"IPrincipal::put_RunLevel", hr);
-            return false;
-        }
-        hr = pPrincipal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
-        if (FAILED(hr)) {
-			FAILED_ERROR_LOG(L"IPrincipal::put_LogonType", hr);
-            return false;
-        }
-		pPrincipal->put_UserId(_bstr_t(sid.c_str()));
-
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"ITaskDefinition::get_Principal", hr);
+        return false;
     }
+    hr = pPrincipal->put_RunLevel(asAdmin ? TASK_RUNLEVEL_HIGHEST : TASK_RUNLEVEL_LUA); // !!!
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IPrincipal::put_RunLevel", hr);
+        return false;
+    }
+    hr = pPrincipal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
+    if (FAILED(hr)) {
+		FAILED_ERROR_LOG(L"IPrincipal::put_LogonType", hr);
+        return false;
+    }
+	pPrincipal->put_UserId(_bstr_t(sid.c_str()));
+
 
     CComPtr<ITaskSettings> pSettings;
     hr = pTask->get_Settings(&pSettings);
-    if (SUCCEEDED(hr)) {
-        pSettings->put_StartWhenAvailable(VARIANT_TRUE);
-		pSettings->put_DisallowStartIfOnBatteries(VARIANT_FALSE);   // Allow start on battery power
-        pSettings->put_StopIfGoingOnBatteries(VARIANT_FALSE);       // Do not stop if going on battery
-        pSettings->put_ExecutionTimeLimit(_bstr_t(L"PT0S"));        // No limit
+    if (FAILED(hr)) {
+		FAILED_ERROR_LOG(L"ITaskDefinition::get_Settings", hr);
+        return false;
     }
+    pSettings->put_StartWhenAvailable(VARIANT_TRUE);
+	pSettings->put_DisallowStartIfOnBatteries(VARIANT_FALSE);   // Allow start on battery power
+    pSettings->put_StopIfGoingOnBatteries(VARIANT_FALSE);       // Do not stop if going on battery
+    pSettings->put_ExecutionTimeLimit(_bstr_t(L"PT0S"));        // No limit
 
     CComPtr<ITriggerCollection> pTriggerCollection;
     hr = pTask->get_Triggers(&pTriggerCollection);
@@ -168,14 +172,16 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
 
     CComPtr<IExecAction> pExecAction;
     hr = pAction->QueryInterface(IID_IExecAction, (void**)&pExecAction);
-    if (SUCCEEDED(hr)) {
-        hr = pExecAction->put_Path(_bstr_t(moduleFilePath.c_str()));
-        if (FAILED(hr)) {
-            FAILED_ERROR_LOG(L"IExecAction::put_Path", hr);
-            return false;
-        }
-		pExecAction->put_Arguments(_bstr_t(L"/silent"));
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"QueryInterface for IExecAction", hr);
+        return false;
     }
+    hr = pExecAction->put_Path(_bstr_t(moduleFilePath.c_str()));
+    if (FAILED(hr)) {
+        FAILED_ERROR_LOG(L"IExecAction::put_Path", hr);
+        return false;
+    }
+	pExecAction->put_Arguments(_bstr_t(L"/silent"));
 
 
     CComPtr<IRegisteredTask> pRegisteredTask;
