@@ -20,11 +20,11 @@
 #define IDS_NO_MICROPHONE               115
 #define IDS_RUNNING_AS_ADMIN            116
 #define IDS_RUN_AS_ADMIN                117
+#define IDS_RELAUNCH_FAILED             118
+#define IDS_RUN_AS_ADMIN_OR_NOT         119
 #define IDS_CHANGE_SETTING_FAILED       120
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
-#define IDI_MICPHONE1                   142
-#define IDI_MICROPHONE1                 142
 #define IDI_NO_MICROPHONE               142
 #define IDD_HOTKEY_SETTINGS             145
 #define IDD_SOUND_SETTINGS              153

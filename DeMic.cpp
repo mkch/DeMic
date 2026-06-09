@@ -471,6 +471,13 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
             ok = DisableStartOnBoot();
         } else {
             ok = EnableStartOnBoot(true);
+            if (ok && !IsCurrentProcessElevated()) {
+                if(MessageBoxW(mainWindow, strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                    if (!RelaunchAsAdmin()) {
+                        ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
+                    }
+				}
+            }
         }
         if (!ok) {
             ShowError(strRes->Load(IDS_CHANGE_SETTING_FAILED).c_str());
