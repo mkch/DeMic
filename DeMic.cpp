@@ -1014,15 +1014,18 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
     data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
         state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
         state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
-    std::wstring tipFmt = strRes->Load(IDS_NOTIFICATION_TIP);
+    std::wstring version = VERSION;
+    if (processElevated) {
+		version += L" *"; // Indicates running with elevated privilege.
+    }
     if (hotKeyInfo.Empty()) {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
             strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 
-            VERSION);
+            version.c_str());
     } else {
         wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
             strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(), 
-            VERSION, hotKeyInfo.GetStr().c_str());
+            version.c_str(), hotKeyInfo.GetStr().c_str());
     }
     
 	const DWORD message = modify ? NIM_MODIFY : NIM_ADD;
