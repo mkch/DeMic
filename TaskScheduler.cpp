@@ -73,7 +73,6 @@ static const std::wstring taskName(const std::wstring& sid) {
     return std::format(L"DeMic-{}", sid);
 }
 
-// RegisterHighestLogonTask registers a task to start this exe on logon with highest privileges.
 bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
@@ -199,7 +198,6 @@ bool RegisterLogonTask(const std::wstring& sid, bool asAdmin) {
     return true;
 }
 
-// IsTaskRegistered checks if a task with the specified exe path is registered in the root folder.
 LogonTaskStatus GetLogonTaskStatus(const std::wstring& sid) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);
@@ -296,7 +294,6 @@ LogonTaskStatus GetLogonTaskStatus(const std::wstring& sid) {
     return LTS_UNREGISTERED;
 }
 
-// IsCurrentProcessElevated checks if the current process is running with elevated privileges (as administrator).
 bool IsCurrentProcessElevated() {
     bool isElevated = false;
     HANDLE hToken = NULL;
@@ -314,7 +311,6 @@ bool IsCurrentProcessElevated() {
     return isElevated;
 }
 
-// UnregisterTask unregisters the task with the specified exe path.
 bool UnregisterLogonTask(const std::wstring& sid) {
     CComPtr<ITaskService> pService;
     HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&pService);

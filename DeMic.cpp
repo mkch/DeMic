@@ -123,7 +123,7 @@ std::wstring CommandLine(const std::wstring& args);
 std::wstring GetDefaultLogFilePath();
 std::wstring defaultLogFilePath = GetDefaultLogFilePath();
 static void SetPreferredUILanguages();
-static int SchedTask(const std::wstring& action, const std::wstring& sid);
+static int SchedTask(const std::wstring& action);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -167,10 +167,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         if (!IsCurrentProcessElevated()) {
             return -1;
         }
-        if (argc < 4) {
+        if (argc < 3) {
             return -2;
         }
-        return SchedTask(argv[2], argv[3]);
+        return SchedTask(argv[2]);
     } else if (cmd == CMD_RELAUNCH) {
         // Relaunching, wait for the previous instance to exit.
         const auto t = GetTickCount();
@@ -276,11 +276,11 @@ static void SetPreferredUILanguages() {
     }
 }
 
-static int SchedTask(const std::wstring& action, const std::wstring& sid) {
+static int SchedTask(const std::wstring& action) {
     if (action == L"create") {
-        return RegisterLogonTask(sid, true) ? 0 : -4;
+        return RegisterLogonTask(processSID, true) ? 0 : -4;
     } else if(action == L"delete") {
-		return UnregisterLogonTask(sid) ? 0 : -5;
+		return UnregisterLogonTask(processSID) ? 0 : -5;
     }
     return -3;
 }
@@ -1199,8 +1199,7 @@ bool EnableStartOnBoot(bool asAdmin) {
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
     sei.lpVerb = L"runas";                // Trigger UAC
     sei.lpFile = moduleFilePath.c_str();
-    const auto params = std::format(L" /sched_task create {}", GetCurrentUserSid());
-    sei.lpParameters = params.c_str();
+    sei.lpParameters = L" /sched_task create";
     sei.nShow = SW_SHOWNORMAL;
 
     if (ShellExecuteExW(&sei) && sei.hProcess) {
@@ -1229,8 +1228,7 @@ bool DisableStartOnBoot() {
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
     sei.lpVerb = L"runas";                // Trigger UAC
     sei.lpFile = moduleFilePath.c_str();
-    const auto params = std::format(L" /sched_task delete {}", GetCurrentUserSid());
-    sei.lpParameters = params.c_str();
+    sei.lpParameters = L" /sched_task delete";
     sei.nShow = SW_SHOWNORMAL;
 
     if (ShellExecuteExW(&sei) && sei.hProcess) {
