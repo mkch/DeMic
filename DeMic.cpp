@@ -84,6 +84,7 @@ std::wstring cmdLineArgs2; // The command line args to use when starting this ex
 Logger::Level logLevel = Logger::LevelError; // The log level for logging.
 BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
 std::wstring preferredUILanguages; // Comma separated list or empty.
+bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -138,6 +139,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         configFilePath = configFilePath.substr(0, sep + 1) + CONFIG_FILE_NAME;
     }
     ReadConfig();
+
+    if(waitForDebugger) {
+        MessageBoxW(NULL, L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
+	}
 
     std::ofstream loggerStream(defaultLogFilePath, std::ios::app);
     Logger defaultLogger(&loggerStream, logLevel);
@@ -1046,6 +1051,7 @@ static const auto CONFIG_LOG_LEVEL = L"LogLevel";
 static const auto CONFIG_DEBUG = L"Debug";
 static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
 static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
+static const auto CONFIG_WAIT_FOR_DEBUGGER = L"WaitForDebugger";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1084,6 +1090,8 @@ void ReadConfig() {
 	buf[0] = 0;
 	GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_PREFERRED_UI_LANGUAGES, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
 	preferredUILanguages = buf;
+    
+    waitForDebugger = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_WAIT_FOR_DEBUGGER, 0, configFilePath.c_str()) != 0;
 
 }
 
