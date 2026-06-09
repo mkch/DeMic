@@ -718,6 +718,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 ProcessNotifyMenuCmd(hWnd, cmd);
             }
         } else if (lParam == WM_LBUTTONUP) {
+            SetForegroundWindow(hWnd);
             ToggleMuted();
         }
         return 0;
