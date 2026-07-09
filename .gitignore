@@ -41,4 +41,4 @@ x64/
 /WebRemote/vcpkg_installed
 .vscode/
 *.pem
-
+*.vcxproj.user
