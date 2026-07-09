@@ -680,6 +680,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_CREATE:
+        if (processElevated) {
+			// Allow UM_MIC_CMD message to be sent from non-elevated process.
+            if (!ChangeWindowMessageFilterEx(hWnd, UM_MIC_CMD, MSGFLT_ALLOW, NULL)) {
+                LOG_LAST_ERROR();
+            }
+        }
         if (!ResetHotKey(hWnd)) {
             // Clear hot key values if unable to register the hot key.
             hotKeyInfo.SetValue(0);
