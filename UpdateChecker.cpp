@@ -150,7 +150,14 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         return;
     }
 
-    auto currentVer = parseSemVer(VERSION);
+    const auto ver = simulateVersionForUpdateCheck.empty() ? VERSION : simulateVersionForUpdateCheck;
+    auto currentVer = parseSemVer(ver);
+    if (!currentVer) {
+        LOG_ERROR(std::format(L"Failed to parse current version: {}", ver).c_str());
+        MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        return;
+    }
+
     std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     try {
         const auto response = nlohmann::json::parse(*body);
@@ -160,10 +167,16 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         if(v.length() > 1 && v[0] == L'v') {
             v = v.substr(1);
 		}
-        if (*parseSemVer(v, false) > *currentVer) {
+        auto remoteVer = parseSemVer(v, false);
+        if (!remoteVer) {
+			LOG_ERROR(std::format(L"Failed to parse remote version: {}", v).c_str());
+            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            return;
+        }
+        if (*remoteVer > *currentVer) {
 			// New version available.
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + tag + strRes->Load(IDS_UPDATE_OR_NOT);
-            if (MessageBoxW(hwnd, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION | MB_YESNO) == IDYES) {
+            if (MessageBoxW(hwnd, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                 std::string htmlUrl = response["html_url"];
                 if (!NavigateURL(FromUTF8(std::u8string_view((const char8_t*)htmlUrl.data(), htmlUrl.length())).c_str())) {
                     LOG_LAST_ERROR();

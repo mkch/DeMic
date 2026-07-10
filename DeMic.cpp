@@ -91,6 +91,7 @@ BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
 std::wstring preferredUILanguages; // Comma separated list or empty.
 bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
 bool simulateAddNotifIconFailure = false; // Simulate failure of adding notification icon for testing.
+std::wstring simulateVersionForUpdateCheck; // Simulate a version for update check, for testing.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -1119,6 +1120,7 @@ static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
 static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
 static const auto CONFIG_WAIT_FOR_DEBUGGER = L"WaitForDebugger";
 static const auto CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE = L"SimulateAddNotificationFailure";
+static const auto CONFIG_SIMULATE_VERSION_FOR_UPDATE = L"SimulateVersionForUpdate";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1162,6 +1164,9 @@ void ReadConfig() {
 
 	simulateAddNotifIconFailure = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE, 0, configFilePath.c_str()) != 0;
 
+    buf[0] = 0;
+    GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_SIMULATE_VERSION_FOR_UPDATE, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
+    simulateVersionForUpdateCheck = buf;
 }
 
 // Write settings to config file.

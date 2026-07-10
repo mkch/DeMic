@@ -10,7 +10,7 @@ const UINT APS_NextPluginCmdID = _APS_NEXT_COMMAND_VALUE;
 
 // Currrent version of DeMic.
 // Must be a semver!
-static const wchar_t* VERSION = L"v1.3.5-dev.1";
+static const wchar_t* VERSION = L"1.3.5-dev.1";
 
 extern HMENU popupMenu;
 extern HMENU pluginMenu;
@@ -18,6 +18,7 @@ extern std::unique_ptr<MicCtrl> micCtrl;;
 extern std::unique_ptr<StringRes> strRes;
 extern std::wstring defaultLogFilePath;
 extern const std::wstring moduleFilePath;
+extern std::wstring simulateVersionForUpdateCheck;
 
 void TurnOnMic();
 void TurnOffMic();
