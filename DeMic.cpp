@@ -49,9 +49,9 @@ const bool processElevated = IsCurrentProcessElevated();
 
 std::unique_ptr <StringRes> strRes;
 
-void ShowNotification(HWND hwnd, bool silent);
-void UpdateNotification(HWND hwnd);
-void RemoveNotification(HWND hwnd);
+void ShowNotification(bool silent);
+void UpdateNotification();
+void RemoveNotification();
 void ReadConfig();
 void WriteConfig();
 bool StartOnBootEnabled_Reg();
@@ -90,6 +90,7 @@ Logger::Level logLevel = Logger::LevelError; // The log level for logging.
 BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
 std::wstring preferredUILanguages; // Comma separated list or empty.
 bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
+bool simulateAddNotifIconFailure = false; // Simulate failure of adding notification icon for testing.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -360,10 +361,8 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
    hInst = hInstance; // Store instance handle in our global variable
 
-   mainWindow = CreateWindowW(szWindowClass, appTitle.c_str(), WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
-
-   if (!mainWindow) {
+   if (!CreateWindowW(szWindowClass, appTitle.c_str(), WS_OVERLAPPEDWINDOW,
+       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr)) {
       return FALSE;
    }
 
@@ -643,7 +642,7 @@ static void lastErrorLogger() {
 static TimeDebouncer<> deviceStateChangedDebouncer(
     DEVICE_CHANGE_DELAY, [] {
         micCtrl->ReloadDevices();
-        UpdateNotification(mainWindow);
+        UpdateNotification();
         CallPluginMicStateListeners();
     }, 
 lastErrorLogger);
@@ -658,10 +657,12 @@ static const UINT MUTED_STATE_CHANGE_DELAY = 20;
 
 static TimeDebouncer<> mutedStatedChangedDebouncer(
     MUTED_STATE_CHANGE_DELAY, [] {
-        UpdateNotification(mainWindow);
+        UpdateNotification();
         CallPluginMicStateListeners();
     },
 lastErrorLogger);
+
+extern TimeDebouncer<>shellNotifyIconRetryDebouncer;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -680,6 +681,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_CREATE:
+        mainWindow = hWnd;
         if (processElevated) {
 			// Allow UM_MIC_CMD message to be sent from non-elevated process.
             if (!ChangeWindowMessageFilterEx(hWnd, UM_MIC_CMD, MSGFLT_ALLOW, NULL)) {
@@ -690,7 +692,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             // Clear hot key values if unable to register the hot key.
             hotKeyInfo.SetValue(0);
         }
-        ShowNotification(hWnd, silentMode);
+        ShowNotification(silentMode);
         break;
     case WM_HOTKEY:
         if (wParam == HOTKEY_ID) {
@@ -741,7 +743,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
         CancelUpdateCheck();
         WriteConfig();
-        RemoveNotification(hWnd);
+        deviceStateChangedDebouncer.Cancel();
+        defaultDeviceChangedDebouncer.Cancel();
+        mutedStatedChangedDebouncer.Cancel();
+        shellNotifyIconRetryDebouncer.Cancel();
+        RemoveNotification();
         UnregisterHotKey(hWnd, HOTKEY_ID);
         PostQuitMessage(0);
         break;
@@ -827,7 +833,7 @@ INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                     SetFocus(hotKeyCtrl);
                     break;
                 }
-				UpdateNotification(mainWindow);
+				UpdateNotification();
                 WriteConfig();
             }
             // fallthrough
@@ -956,7 +962,7 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 
             WriteConfig();
             // fallthorugh
-        }
+        } 
         case IDCANCEL:
             EndDialog(hDlg, 0);
 			soundSettingsWindow = NULL;
@@ -970,44 +976,41 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 // ID of Shell_NotifyIconW.
 static const UINT NOTIFY_ID = 1;
 
-struct ShellNotifyIconRetryData {
-    DWORD message;
-    NOTIFYICONDATAW data;
-	DWORD retriedCount;
-};
+// Whether the notification is successfully added in system tray.
+static bool notificationShown = false;
 
-// static member of template class must be defined for each instantiation.
-std::map<UINT_PTR, TimeDebouncer<ShellNotifyIconRetryData>*> TimeDebouncer<ShellNotifyIconRetryData>::sInstances;
+// Whether the last notification is shown in silent mode.
+// Used for retrying.
+static bool lastShowNotificationSilent = false;
 
+void ShowNotificationImpl(bool silent);
 
 // Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
-static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
+static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 5000;
 
-static TimeDebouncer<ShellNotifyIconRetryData>shellNotifyIconRetryDebouncer(
-    SHELL_NOTIFY_ICON_RETRY_INTERVAL, 
-    [](auto data) {
-	    LOG(Logger::LevelDebug,
-            (std::wstringstream() << L"Retrying Shell_NotifyIconW " << data.retriedCount+1 << L" ...").str().c_str());
-        if (Shell_NotifyIconW(data.message, &data.data)) {
-            LOG(Logger::LevelDebug, L"Shell_NotifyIconW succeeded on retry.");
-            return;
+static TimeDebouncer<>shellNotifyIconRetryDebouncer(
+	SHELL_NOTIFY_ICON_RETRY_INTERVAL, 
+	[]() {
+		LOG(Logger::LevelDebug, L"Retry showing notification icon");
+		const bool simulatedFailure = simulateAddNotifIconFailure;
+        if (simulateAddNotifIconFailure) {
+            simulateAddNotifIconFailure = false; // Let the retry succeed.
         }
-        DWORD err = GetLastError();
-        if (err == ERROR_TIMEOUT) {
-		    if (++data.retriedCount < 3) { // Retry up to 3 times.
-                shellNotifyIconRetryDebouncer.Emit(data);
-                return;
-            }
-        } else {
-            LOG_ERROR(err);
+		ShowNotificationImpl(lastShowNotificationSilent);
+        if (simulatedFailure) {
+			simulateAddNotifIconFailure = true; // Restore the simulated failure.
         }
-    },
-    lastErrorLogger);
+	},
+	lastErrorLogger);
 
-void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
+// ShowNotificationImpl adds or modifies the notification icon and tooltip based on the current microphone state in system tray.
+// If silent is false, a balloon notification is shown displaying the usage message.
+void ShowNotificationImpl(bool silent) {
+    shellNotifyIconRetryDebouncer.Cancel();
+
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
-    data.hWnd = hwnd;
+    data.hWnd = mainWindow;
     data.uID = NOTIFY_ID;
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
     if (!silent) {
@@ -1035,37 +1038,53 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
             version.c_str(), hotKeyInfo.GetStr().c_str());
     }
     
-	const DWORD message = modify ? NIM_MODIFY : NIM_ADD;
-    if (!Shell_NotifyIconW(message, &data)) {
-        DWORD err = GetLastError();
-        if (err != ERROR_TIMEOUT) {
-            LOG_ERROR(err);
-            return;
+	const DWORD message = notificationShown ? NIM_MODIFY : NIM_ADD;
+    BOOL succeeded = false;
+
+    if (simulateAddNotifIconFailure) {
+        LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
+        RemoveNotification();
+    } else {
+        if (!(succeeded = Shell_NotifyIconW(message, &data))) {
+            LOG_LAST_ERROR();
         }
-		LOG(Logger::LevelDebug, L"Shell_NotifyIconW failed with ERROR_TIMEOUT, will retry.");
-		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy.
-		// Prepare for retrying.
-        shellNotifyIconRetryDebouncer.Emit(ShellNotifyIconRetryData{message, data, 0});
+        if (succeeded && message == NIM_ADD) {
+            // Check whether the notification is shown successfully.
+            // Notification icon will not be added due to QUNS_QUIET_TIME.
+            // If Shell_NotifyIconW is discarded, the following NOP NIM_MODIFY will fail.
+            data.uFlags = NIF_MESSAGE;
+            if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
+                LOG_LAST_ERROR();
+                succeeded = FALSE;
+            }
+        }
     }
+    if(!succeeded) {
+        shellNotifyIconRetryDebouncer.Emit();
+    }
+    notificationShown = succeeded;
+
+	lastShowNotificationSilent = silent;
 }
 
-void ShowNotification(HWND hwnd, bool silent) {
-    ShowNotificationImpl(hwnd, false, silent);
+void ShowNotification(bool silent) {
+    ShowNotificationImpl(silent);
 }
 
-void UpdateNotification(HWND hwnd) {
-    ShowNotificationImpl(hwnd, true, true);
+void UpdateNotification() {
+    ShowNotificationImpl(true);
 }
 
-void RemoveNotification(HWND hwnd) {
+void RemoveNotification() {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
-    data.hWnd = hwnd;
+    data.hWnd = mainWindow;
     data.uID = NOTIFY_ID;
     if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
         LOG_LAST_ERROR();
         return;
     }
+	notificationShown = false;
 }
 
 // ini section name.
@@ -1095,6 +1114,7 @@ static const auto CONFIG_DEBUG = L"Debug";
 static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
 static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
 static const auto CONFIG_WAIT_FOR_DEBUGGER = L"WaitForDebugger";
+static const auto CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE = L"SimulateAddNotificationFailure";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1135,6 +1155,8 @@ void ReadConfig() {
 	preferredUILanguages = buf;
     
     waitForDebugger = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_WAIT_FOR_DEBUGGER, 0, configFilePath.c_str()) != 0;
+
+	simulateAddNotifIconFailure = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE, 0, configFilePath.c_str()) != 0;
 
 }
 
