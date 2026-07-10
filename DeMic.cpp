@@ -329,7 +329,7 @@ BOOL devFilter(const wchar_t* devID) {
 //
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
-    WNDCLASSEXW wcex;
+    WNDCLASSEXW wcex = {};
 
     wcex.cbSize = sizeof(WNDCLASSEX);
 
@@ -411,7 +411,7 @@ static LRESULT CALLBACK HotKeySettingsMsgFilterHookProc(int code, WPARAM wParam,
     return CallNextHookEx(HotkeySettingsHook, code, wParam, lParam);
 }
 
-void ShowHotKeySettingsWindow() {
+static void ShowHotKeySettingsWindow() {
     if (hotKeySettingWindow) {
 		SetForegroundWindow(hotKeySettingWindow);
         return;
@@ -427,7 +427,7 @@ void ShowHotKeySettingsWindow() {
 	}
 }
 
-void ShowSoundSettingsWindow() {
+static void ShowSoundSettingsWindow() {
     if (soundSettingsWindow) {
 		SetForegroundWindow(soundSettingsWindow);
         return;
@@ -471,7 +471,7 @@ static BOOL OpenFolder(LPCWSTR folder) {
     return ((INT_PTR)h > 32);
 }
 
-void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
+static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
     bool ok = false;
     switch (cmd) {
     case ID_MENU_HOTKEY_SETTINGS:
@@ -537,7 +537,7 @@ void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
 }
 
 // NULL path to stop sound.
-void PlaySoundFile(LPCWSTR path) {
+static void PlaySoundFile(LPCWSTR path) {
     if (path) {
         DWORD dwAttrib = GetFileAttributes(path);
         if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -549,17 +549,17 @@ void PlaySoundFile(LPCWSTR path) {
         SND_FILENAME | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
 
-void PlaySystemSound(DWORD sndID) {
+static void PlaySystemSound(DWORD sndID) {
     PlaySound((LPCTSTR)(size_t)sndID, NULL, SND_ALIAS_ID | SND_NODEFAULT | SND_ASYNC | SND_SENTRY | SND_SYSTEM);
 }
 
-void PlayOnSound() {
+static void PlayOnSound() {
     if (enableOnSound) {
         PlayOnSound(onSoundPath);
     }
 }
 
-void PlayOffSound() {
+static void PlayOffSound() {
     if (enableOffSound) {
         PlayOffSound(offSoundPath);
     }
@@ -836,7 +836,9 @@ INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 				UpdateNotification();
                 WriteConfig();
             }
-            // fallthrough
+            EndDialog(hDlg, 0);
+            hotKeySettingWindow = NULL;
+            return (INT_PTR)TRUE;
         case IDCANCEL:
             EndDialog(hDlg, 0);
             hotKeySettingWindow = NULL;
@@ -847,7 +849,7 @@ INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     return (INT_PTR)FALSE;
 }
 
-bool SelectSoundFile(HWND owner, std::wstring& path) {
+static bool SelectSoundFile(HWND owner, std::wstring& path) {
     std::wstring winMediaDir;
     wchar_t winDir[MAX_PATH] = { 0 };
     const UINT r = GetWindowsDirectoryW(winDir, MAX_PATH);
@@ -961,7 +963,9 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
             offSoundPath = strRes->Load(IDS_NAN) == buf ? L"" : buf;
 
             WriteConfig();
-            // fallthorugh
+            EndDialog(hDlg, 0);
+            soundSettingsWindow = NULL;
+            return (INT_PTR)TRUE;
         } 
         case IDCANCEL:
             EndDialog(hDlg, 0);
@@ -981,7 +985,7 @@ static bool notificationShown = false;
 
 // Whether the last notification is shown in silent mode.
 // Used for retrying.
-static bool lastShowNotificationSilent = false;
+static bool lastShowNotificationSilent = false; 
 
 void ShowNotificationImpl(bool silent);
 
@@ -993,13 +997,13 @@ static TimeDebouncer<>shellNotifyIconRetryDebouncer(
 	[]() {
 		LOG(Logger::LevelDebug, L"Retry showing notification icon");
 		const bool simulatedFailure = simulateAddNotifIconFailure;
-        if (simulateAddNotifIconFailure) {
-            simulateAddNotifIconFailure = false; // Let the retry succeed.
-        }
-ShowNotificationImpl(lastShowNotificationSilent);
-if (simulatedFailure) {
-	simulateAddNotifIconFailure = true; // Restore the simulated failure.
-}
+		if (simulateAddNotifIconFailure) {
+			simulateAddNotifIconFailure = false; // Let the retry succeed.
+		}
+		ShowNotificationImpl(lastShowNotificationSilent);
+		if (simulatedFailure) {
+			simulateAddNotifIconFailure = true; // Restore the simulated failure.
+		}
 	},
 	lastErrorLogger);
 
@@ -1037,7 +1041,7 @@ void ShowNotificationImpl(bool silent) {
             strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(), 
             version.c_str(), hotKeyInfo.GetStr().c_str());
     }
-    
+
 const DWORD message = notificationShown ? NIM_MODIFY : NIM_ADD;
 BOOL succeeded = false;
 
