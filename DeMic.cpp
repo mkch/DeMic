@@ -982,6 +982,8 @@ std::map<UINT_PTR, TimeDebouncer<ShellNotifyIconRetryData>*> TimeDebouncer<Shell
 
 // Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
 static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 1000;
+// Max retry count for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
+static const DWORD SHELL_NOTIFY_ICON_RETRY_MAX_COUNT = 5;
 
 static TimeDebouncer<ShellNotifyIconRetryData>shellNotifyIconRetryDebouncer(
     SHELL_NOTIFY_ICON_RETRY_INTERVAL, 
@@ -993,8 +995,8 @@ static TimeDebouncer<ShellNotifyIconRetryData>shellNotifyIconRetryDebouncer(
             return;
         }
         DWORD err = GetLastError();
-        if (err == ERROR_TIMEOUT) {
-		    if (++data.retriedCount < 3) { // Retry up to 3 times.
+        if (err == ERROR_TIMEOUT || err == E_FAIL) {
+		    if (++data.retriedCount < SHELL_NOTIFY_ICON_RETRY_MAX_COUNT) {
                 shellNotifyIconRetryDebouncer.Emit(data);
                 return;
             }
@@ -1005,6 +1007,7 @@ static TimeDebouncer<ShellNotifyIconRetryData>shellNotifyIconRetryDebouncer(
     lastErrorLogger);
 
 void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
+    shellNotifyIconRetryDebouncer.Cancel();
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.hWnd = hwnd;
@@ -1038,12 +1041,12 @@ void ShowNotificationImpl(HWND hwnd, bool modify, bool silent) {
 	const DWORD message = modify ? NIM_MODIFY : NIM_ADD;
     if (!Shell_NotifyIconW(message, &data)) {
         DWORD err = GetLastError();
-        if (err != ERROR_TIMEOUT) {
+        if (err != ERROR_TIMEOUT && err != E_FAIL) {
             LOG_ERROR(err);
             return;
         }
-		LOG(Logger::LevelDebug, L"Shell_NotifyIconW failed with ERROR_TIMEOUT, will retry.");
-		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy.
+		LOG(Logger::LevelDebug, std::format(L"Shell_NotifyIconW failed with {}, will retry.", err == ERROR_TIMEOUT ? L"ERROR_TIMEOUT" : L"E_FAIL").c_str());
+		// Shell_NotifyIconW may fail with ERROR_TIMEOUT if Explorer is busy or E_FAIL for unspecified reason.
 		// Prepare for retrying.
         shellNotifyIconRetryDebouncer.Emit(ShellNotifyIconRetryData{message, data, 0});
     }
