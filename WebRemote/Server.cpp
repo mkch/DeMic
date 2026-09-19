@@ -399,6 +399,9 @@ static net::awaitable<void> HandleLogout(ServerConn<PolicyType>& conn) {
 }
 
 static bool VerifySession(const beast::http::request_header<>& requestHeader) {
+    if(config.NoVerificationCode) {
+        return true; // No verification code required.
+	}
     auto cookieHeader = requestHeader.find(http::field::cookie);
     if (cookieHeader == requestHeader.end()) {
         return false; // No cookie.
@@ -451,9 +454,10 @@ static net::awaitable<void> Handler(ServerConn<PolicyType>& conn) {
 	}
 
     if (path == "/") {
-        co_return co_await HandleHTMLTemplate<PolicyType>(conn,
-            IndexTemplate, GetLocalizedStrings(header[http::field::accept_language]),
-            false);
+        inja::json strings = GetLocalizedStrings(header[http::field::accept_language]);
+        strings["longout_display"] = config.NoVerificationCode ? "none" : "inline";
+
+        co_return co_await HandleHTMLTemplate<PolicyType>(conn, IndexTemplate, strings, false);
     }
     if (path == "/res/muted.png") {
         co_return co_await HandleModuleResource<PolicyType>(conn, "image/png", MutedPngResource);

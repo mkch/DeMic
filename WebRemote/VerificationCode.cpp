@@ -26,7 +26,7 @@ static std::string GetDisplayString(const std::string& code) {
 }
 
 // Generates a new verification code.
-// Must be alled when codeMutex is locked.
+// Must be called when codeMutex is locked.
 static void GenerateNewCode(HWND hwnd) {
 	static int elapsedSeconds = 0;
 	elapsedSeconds = 0;

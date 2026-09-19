@@ -32,6 +32,7 @@ static const char* const CONFIG_ENABLE_HTTPS = "EnableHTTPS";
 static const char* const CONFIG_HTTPS_CONFIG = "HTTPSConfig";
 static const char* const CONFIG_HTTPS_CERT_PEM_FILE_PATH = "CertPem";
 static const char* const CONFIG_HTTPS_KEY_PEM_FILE_PATH = "KeyPem";
+static const char* const CONFIG_NO_VERIFICATION_CODE = "!NoVerificationCode!";
 
 Configuration config;
 
@@ -52,6 +53,7 @@ static void ReadConfig() {
             config.HTTPSConfig.CertPemFilePath = httpsConfigJson[CONFIG_HTTPS_CERT_PEM_FILE_PATH].as_string();
             config.HTTPSConfig.KeyPemFilePath = httpsConfigJson[CONFIG_HTTPS_KEY_PEM_FILE_PATH].as_string();
         }
+		config.NoVerificationCode = configJson.contains(CONFIG_NO_VERIFICATION_CODE) && configJson[CONFIG_NO_VERIFICATION_CODE].as_bool();
     } catch (const std::exception&) {
         ShowError(host, state, (strRes->Load(IDS_READ_CONFIG_FAILED) + configFilePath.c_str()).c_str());
     }
@@ -68,6 +70,9 @@ void WriteConfig() {
         {CONFIG_HTTPS_CERT_PEM_FILE_PATH, config.HTTPSConfig.CertPemFilePath},
         {CONFIG_HTTPS_KEY_PEM_FILE_PATH, config.HTTPSConfig.KeyPemFilePath}
 	};
+    if (config.NoVerificationCode) {
+		configJson[CONFIG_NO_VERIFICATION_CODE] = true;
+    }
     std::ofstream out(configFilePath);
     out << std::setw(2) << json::serialize(configJson);
     if (out.fail()) {
@@ -287,7 +292,7 @@ static void OnUnload() {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     L"Web Remote",	/*Name*/
-    {1, 2},			/*Version*/
+    {1, 3},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 	OnUnload,	    /*OnUnload*/

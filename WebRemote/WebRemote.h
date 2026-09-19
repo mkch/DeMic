@@ -22,6 +22,9 @@ struct Configuration {
 	std::string ServerListenPort;
 	bool EnableHTTPS = false;
 	HTTPSCert HTTPSConfig;
+	// Do not use verification code. For advanced users who know the risk.
+	// This configuration is not displayed in the configuration dialog, and can only be set by editing the configuration file.
+	bool NoVerificationCode = false; 
 };
 
 // Current configuration.
