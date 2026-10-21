@@ -9,12 +9,15 @@
 #include "MessageWindow.h"
 #include "VerificationCode.h"
 #include "ConfigListenAddr.h"
+#include "../TimeDebouncer.h"
 
 #include <format>
 #include <boost/json.hpp>
 #include <fstream>
 
 #include <openssl/ssl.h>
+
+#include <shellapi.h>
 
 HINSTANCE hInstance = NULL;
 std::filesystem::path moduleFilePath;
@@ -112,6 +115,91 @@ static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
         return reason;
     }
     return reason + L" " + message;
+}
+
+// static member of template class must be defined for each instantiation.
+std::map<UINT_PTR, TimeDebouncer<>*> TimeDebouncer<>::sInstances;
+
+static const UINT SILENT_STARTING_RETRY_INTERVAL = 3000;
+static const int SILENT_STARTING_MAX_RETRY = 4;
+
+static bool TrySilentStarting();
+
+static TimeDebouncer<> retrySilentStartingDebouncer(
+    SILENT_STARTING_RETRY_INTERVAL, [] {
+        static int retryCount = 0;
+        if (retryCount >= SILENT_STARTING_MAX_RETRY) {
+			// Last retry, show prompt to user if failed.
+            config.Enabled = StartHTTPServerWithPrompt(config);
+            return;
+        }
+        retryCount++;
+
+        if (TrySilentStarting()) {
+			retrySilentStartingDebouncer.Cancel();
+			return; // No need to retry.
+		}
+        retrySilentStartingDebouncer.Emit(); // Retry.
+    },
+    []() {LOG_LAST_ERROR(host, state); }
+);
+
+// Returns true if the HTTP server is started successfully or an error occured that should stop retrying.
+static bool TrySilentStarting() {
+    std::wstring errorMessage;
+    const auto status = StartHTTPServer(config, errorMessage);
+    if (status == SERVER_OK) {
+        config.Enabled = true;
+        return true; // Succeed.
+    }
+    std::wstring message;
+    switch (status) {
+    case SERVER_EMPTY_CERT_OR_KEY_FILE:
+        message = strRes->Load(IDS_EMPTY_CERT_OR_KEY_FILE);
+        break;
+    case SERVER_INVALID_ADDRESS_FORMAT:
+        message = formatErrorMessage(IDS_INVALID_ADDRESS_FORMAT, errorMessage);
+        break;
+    case SERVER_INVALID_PORT:
+        message = formatErrorMessage(IDS_INVALID_PORT, errorMessage).c_str();
+        break;
+    case SERVER_ERROR:
+        message = formatErrorMessage(IDS_SERVER_START_ERROR, errorMessage);
+        break;
+    }
+    if (message.empty()) {
+		return false; // Temporary network error, retry.
+    }
+    // Failed due to an error other than temporary network errors,
+    // stop retrying and show error message to user.
+    config.Enabled = false;
+    ShowError(host, state, message.c_str());
+    return true;
+}
+
+// Initiates the HTTP server starting in silent mode, with retrying on temporary network errors.
+static void InitiateHTTPServerSilentStarting() {
+    if(TrySilentStarting()) {
+        return; // Succeed, no need to retry.
+	}
+    retrySilentStartingDebouncer.Emit();
+}
+
+// Cancels the HTTP server silent starting, if any.
+static void CancelHTTPServerSilentStarting() {
+    retrySilentStartingDebouncer.Cancel();
+}
+
+static bool SilentMode() {
+    bool ret = false;
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (argc > 1) {
+        const auto argv1 = std::wstring(argv[1]);
+        ret = (argv1 == L"/silent" || argv1 == L"-silent");
+    }
+    LocalFree(argv);
+    return ret;
 }
 
 static HMENU subMenu = NULL;
@@ -223,7 +311,12 @@ static BOOL OnLoaded(DeMic_Host* h, DeMic_OnLoadedArgs* args) {
             ShowError(host, state, strRes->Load(IDS_LACK_CONFIG).c_str());
             ShowConfigListenAddrDialog();
         }
-        config.Enabled = StartHTTPServerWithPrompt(config);
+
+        if (SilentMode()) {
+            InitiateHTTPServerSilentStarting();
+        } else {
+            config.Enabled = StartHTTPServerWithPrompt(config);
+        }
     }
     
     return TRUE;
@@ -265,6 +358,8 @@ bool StartHTTPServerWithPrompt(const Configuration& config, HWND parent) {
 }
 
 static void OnMenuItemCmd(UINT id) {
+	CancelHTTPServerSilentStarting(); // User interaction, cancel silent starting if any.
+
     if (id == enableMenuItemId) {
         if(HTTPServerRunning()) {
             StopHTTPServer();
@@ -281,6 +376,7 @@ static void OnMenuItemCmd(UINT id) {
 }
 
 static void OnUnload() {
+    CancelHTTPServerSilentStarting();
     StopHTTPServer();
     DestroyVerificationCodeDialog();
     DestroyMessageWindow();
