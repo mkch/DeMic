@@ -34,6 +34,13 @@ enum {
     // Done message used by UpdateChecker.
     UM_UPDATE_CHECK_DONE,
 };
+// Message used by Shell to notify the app that the taskbar is created.
+// Registered with RegisterWindowMessageW("TaskbarCreated").
+static UINT wmTaskbarCreated = 0;
+
+// Whether the notification is successfully added in system tray.
+static bool notificationShown = false;
+
 static const int HOTKEY_ID = 1;
 
 
@@ -665,6 +672,21 @@ lastErrorLogger);
 
 extern TimeDebouncer<>shellNotifyIconRetryDebouncer;
 
+static void prepareTaskbarCreatedNotification() {
+    // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
+    wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if(!wmTaskbarCreated) {
+        LOG_LAST_ERROR();
+       return;
+	}
+    // Passthrough UIPI:
+	// Allow the message to be sent to this window, even if the process is elevated.
+    if (!ChangeWindowMessageFilterEx(mainWindow, wmTaskbarCreated, MSGFLT_ALLOW, NULL)) {
+        LOG_LAST_ERROR();
+        return;
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
@@ -683,6 +705,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
     case WM_CREATE:
         mainWindow = hWnd;
+        prepareTaskbarCreatedNotification();
         if (processElevated) {
 			// Allow UM_MIC_CMD message to be sent from non-elevated process.
             if (!ChangeWindowMessageFilterEx(hWnd, UM_MIC_CMD, MSGFLT_ALLOW, NULL)) {
@@ -788,7 +811,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
         }
     }
-   return DefWindowProc(hWnd, message, wParam, lParam);
+
+    if (message == wmTaskbarCreated) {
+		// Taskbar created/recreated, add the notification icon again.
+        //
+        // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
+        // When your taskbar application receives this message, it should assume that 
+        // any taskbar icons it added have been removed and add them again. 
+        notificationShown = false;
+        ShowNotification(true); // silently add the notification icon.
+        LOG(Logger::LevelDebug, L"Add notification icon after the taskbar is created");
+        return 0;
+    }
+    return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
 // ResetHotKey resets the hot key.
@@ -980,9 +1015,6 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 
 // ID of Shell_NotifyIconW.
 static const UINT NOTIFY_ID = 1;
-
-// Whether the notification is successfully added in system tray.
-static bool notificationShown = false;
 
 // Whether the last notification is shown in silent mode.
 // Used for retrying.
