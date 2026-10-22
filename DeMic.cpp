@@ -38,9 +38,6 @@ enum {
 // Registered with RegisterWindowMessageW("TaskbarCreated").
 static UINT wmTaskbarCreated = 0;
 
-// Whether the notification is successfully added in system tray.
-static bool notificationShown = false;
-
 static const int HOTKEY_ID = 1;
 
 
@@ -716,6 +713,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             // Clear hot key values if unable to register the hot key.
             hotKeyInfo.SetValue(0);
         }
+        LOG(Logger::Level::LevelDebug, L"Show notification from WM_CREATE");
         ShowNotification(silentMode);
         break;
     case WM_HOTKEY:
@@ -818,7 +816,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
         // When your taskbar application receives this message, it should assume that 
         // any taskbar icons it added have been removed and add them again. 
-        notificationShown = false;
+
         ShowNotification(true); // silently add the notification icon.
         LOG(Logger::LevelDebug, L"Add notification icon after the taskbar is created");
         return 0;
@@ -1045,6 +1043,8 @@ static TimeDebouncer<>shellNotifyIconRetryDebouncer(
 void ShowNotificationImpl(bool silent) {
     shellNotifyIconRetryDebouncer.Cancel();
 
+    lastShowNotificationSilent = silent;
+
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.hWnd = mainWindow;
@@ -1075,33 +1075,31 @@ void ShowNotificationImpl(bool silent) {
             version.c_str(), hotKeyInfo.GetStr().c_str());
     }
 
-const DWORD message = notificationShown ? NIM_MODIFY : NIM_ADD;
-BOOL succeeded = false;
+    // Try to modify.
+    bool succeeded = false;
+    if (!(succeeded = Shell_NotifyIconW(NIM_MODIFY, &data))) {
+        // Not shown yet, try to add it.
+        if (succeeded = Shell_NotifyIconW(NIM_ADD, &data)) {
+            // Check whether the notification is shown successfully.
+            // Notification icon will not be added due to QUNS_QUIET_TIME.
+            // If Shell_NotifyIconW is discarded, the following NOP NIM_MODIFY will fail.
+            data.uFlags = NIF_MESSAGE;
+            succeeded = Shell_NotifyIconW(NIM_MODIFY, &data);
+        }
+    }
 
-if (simulateAddNotifIconFailure) {
-	LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
-	RemoveNotification();
-} else {
-	if (!(succeeded = Shell_NotifyIconW(message, &data))) {
-		LOG_LAST_ERROR();
-	}
-	if (succeeded && message == NIM_ADD) {
-		// Check whether the notification is shown successfully.
-		// Notification icon will not be added due to QUNS_QUIET_TIME.
-		// If Shell_NotifyIconW is discarded, the following NOP NIM_MODIFY will fail.
-		data.uFlags = NIF_MESSAGE;
-		if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
-			LOG_LAST_ERROR();
-			succeeded = FALSE;
-		}
-	}
-}
-    if(!succeeded) {
+    if (!succeeded) {
+        LOG_LAST_ERROR();
+    } else if (simulateAddNotifIconFailure) {
+        LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
+        RemoveNotification();
+        succeeded = false;
+    }
+
+    if (!succeeded) {
+        // Retry.
         shellNotifyIconRetryDebouncer.Emit();
     }
-    notificationShown = succeeded;
-
-	lastShowNotificationSilent = silent;
 }
 
 void ShowNotification(bool silent) {
@@ -1121,7 +1119,6 @@ void RemoveNotification() {
         LOG_LAST_ERROR();
         return;
     }
-	notificationShown = false;
 }
 
 // ini section name.
