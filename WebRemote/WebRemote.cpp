@@ -393,7 +393,7 @@ static void OnUnload() {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     L"Web Remote",	/*Name*/
-    {1, 3},			/*Version*/
+    {1, 4},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 	OnUnload,	    /*OnUnload*/
