@@ -149,6 +149,7 @@ static bool TrySilentStarting() {
     std::wstring errorMessage;
     const auto status = StartHTTPServer(config, errorMessage);
     if (status == SERVER_OK) {
+        HOST_LOG(LevelDebug, L"HTTP server silent starting OK");
         config.Enabled = true;
         return true; // Succeed.
     }
@@ -168,17 +169,20 @@ static bool TrySilentStarting() {
         break;
     }
     if (message.empty()) {
+        HOST_LOG(LevelDebug, L"HTTP server silent starting error, retry");
 		return false; // Temporary network error, retry.
     }
     // Failed due to an error other than temporary network errors,
     // stop retrying and show error message to user.
     config.Enabled = false;
     ShowError(host, state, message.c_str());
+    HOST_LOG(LevelDebug, L"HTTP server silent starting failed");
     return true;
 }
 
 // Initiates the HTTP server starting in silent mode, with retrying on temporary network errors.
 static void InitiateHTTPServerSilentStarting() {
+    HOST_LOG(LevelDebug, L"Initiate HTTP server silent starting");
     if(TrySilentStarting()) {
         return; // Succeed, no need to retry.
 	}
@@ -187,6 +191,7 @@ static void InitiateHTTPServerSilentStarting() {
 
 // Cancels the HTTP server silent starting, if any.
 static void CancelHTTPServerSilentStarting() {
+    HOST_LOG(LevelDebug, L"Cancel HTTP server silent starting");
     retrySilentStartingDebouncer.Cancel();
 }
 
