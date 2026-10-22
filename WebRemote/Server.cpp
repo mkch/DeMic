@@ -498,16 +498,16 @@ HTTPServerResult StartHTTPServer(const Configuration& config, std::wstring& erro
         } else {
             server.reset(new Server<HTTPPolicy>(config.ServerListenHost, config.ServerListenPort, std::move(Handler<HTTPPolicy>)));
         }
-    } catch (const Server<HTTPPolicy>::InvalidPortException& e) {
+    } catch (const AbstractServer::InvalidPortException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_INVALID_PORT;
-    } catch (const Server<HTTPPolicy>::ResolveEndpointException& e) {
+    } catch (const AbstractServer::ResolveEndpointException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_RESOLVE_ENDPOINT;
-    } catch (const Server<HTTPPolicy>::BindException& e) {
+    } catch (const AbstractServer::BindException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_BIND_ERROR;
-    } catch (const Server<HTTPPolicy>::ListenException& e) {
+    } catch (const AbstractServer::ListenException& e) {
         errorMessage = FromACP(e.what());
         return SERVER_LISTEN_ERROR;
     } catch (const boost::system::system_error& e) {

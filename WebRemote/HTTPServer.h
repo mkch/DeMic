@@ -29,6 +29,25 @@ public:
     virtual ~AbstractServer() = default;
 public:
     virtual unsigned short GetListenPort() = 0;
+public:
+    class InvalidPortException : public std::invalid_argument {
+    public:
+        InvalidPortException() : std::invalid_argument("") {}
+        InvalidPortException(const std::string& message) : std::invalid_argument(message) {}
+    };
+    class ResolveEndpointException : public std::invalid_argument {
+    public:
+        ResolveEndpointException() : std::invalid_argument("") {}
+        ResolveEndpointException(const std::string& message) : std::invalid_argument(message) {}
+    };
+    class ListenException : public std::invalid_argument {
+    public:
+        ListenException(const std::string& message) : std::invalid_argument(message) {}
+    };
+    class BindException : public std::invalid_argument {
+    public:
+        BindException(const std::string& message) : std::invalid_argument(message) {}
+    };
 };
 
 template<typename T>
@@ -204,27 +223,8 @@ private:
 public:
     virtual unsigned short GetListenPort() { return listenPort; }
 public:
-    class InvalidPortException : public std::invalid_argument {
-    public:
-        InvalidPortException() : std::invalid_argument("") {}
-        InvalidPortException(const std::string& message) : std::invalid_argument(message) {}
-    };
-    class ResolveEndpointException : public std::invalid_argument {
-    public:
-        ResolveEndpointException() : std::invalid_argument("") {}
-        ResolveEndpointException(const std::string& message) : std::invalid_argument(message) {}
-    };
-    class ListenException : public std::invalid_argument {
-    public:
-        ListenException(const std::string& message) : std::invalid_argument(message) {}
-    };
-    class BindException : public std::invalid_argument {
-    public:
-        BindException(const std::string& message) : std::invalid_argument(message) {}
-    };
-public:
     // Throws
-    // InvalidPortException, NoEndpointException,
+    // InvalidPortException, ResolveEndpointException,
     // or boost::system::system_error.
     Server(const std::string& listen_host, const std::string& listen_port, HTTPHandler&& h, PolicyType&& serverPolicy = HTTPPolicy{}) 
         : handler(std::move(h)), policy(std::move(serverPolicy)) {
