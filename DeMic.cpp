@@ -155,7 +155,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         MessageBoxW(NULL, L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
 	}
 
-    std::ofstream loggerStream = OpenRotatingLogFile(defaultLogFilePath, 50 * 1024, 2); // 50KB per file, 2 backups
+    std::ofstream loggerStream = OpenRotatingLogFile(defaultLogFilePath, 100 * 1024, 1); // 100KB per file, 1 backup
     Logger defaultLogger(&loggerStream, logLevel);
     SetDefaultLogger(&defaultLogger);
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
