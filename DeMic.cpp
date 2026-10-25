@@ -13,6 +13,8 @@
 #include <strsafe.h>
 #include <windowsx.h>
 #include <shlobj.h>
+#include <filesystem>
+#include <chrono>
 
 #include "Plugin.h"
 #include "TimeDebouncer.h"
@@ -22,7 +24,13 @@
 #include "HotKeyControlInfo.h"
 #include "TaskScheduler.h"
 #include "InstanceLock.h"
+#include "JSONState.h"
 
+
+static const auto STATE_LAST_UPDATE_CHECK_TIME = "LastUpdateCheckTime";
+constexpr auto AUTO_UPDATE_CHECK_INTERVAL = std::chrono::hours(2 * 24); // 2 days interval for automatic update check.
+
+JSONState* appState = NULL;
 
 std::unique_ptr<InstanceLock> instanceLock;
 
@@ -33,6 +41,8 @@ enum {
     UM_MIC_CMD,
     // Done message used by UpdateChecker.
     UM_UPDATE_CHECK_DONE,
+    // Done message used by UpdateChecker for automatic checking.
+    UM_AUTO_UPDATE_CHECK_DONE,
 };
 // Message used by Shell to notify the app that the taskbar is created.
 // Registered with RegisterWindowMessageW("TaskbarCreated").
@@ -96,6 +106,7 @@ std::wstring preferredUILanguages; // Comma separated list or empty.
 bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
 bool simulateAddNotifIconFailure = false; // Simulate failure of adding notification icon for testing.
 std::wstring simulateVersionForUpdateCheck; // Simulate a version for update check, for testing.
+bool autoCheckForUpdates = false; // Automatically check for updates on startup.
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -114,6 +125,7 @@ HMENU popupMenu = NULL;
 HMENU pluginMenu = NULL;
 HMENU helpMenu = NULL;
 HMENU startOnBootMenu = NULL;
+HMENU updateMenu = NULL;
 
 // Command line args of microphone commands.
 enum MIC_CMD {
@@ -159,6 +171,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     Logger defaultLogger(&loggerStream, logLevel);
     SetDefaultLogger(&defaultLogger);
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
+
+    const std::wstring stateFilePath = std::filesystem::path(moduleFilePath).parent_path() / L"state.json";
+    JSONState state(stateFilePath);
+    appState = &state;
 
 	instanceLock = std::make_unique<InstanceLock>();
 
@@ -382,6 +398,12 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
        LOG_LAST_ERROR();
    }
 
+   updateMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_UPDATE_MENU)), 0);
+   menuInfo = { sizeof(menuInfo), MIIM_SUBMENU, 0, 0, 0, updateMenu, 0 };
+   if (!SetMenuItemInfoW(popupMenu, ID_HELP_UPDATE, FALSE, &menuInfo)) {
+       LOG_LAST_ERROR();
+   }
+
    startOnBootMenu = GetSubMenu(LoadMenu(hInst, MAKEINTRESOURCEW(IDR_START_ON_BOOT)), 0);
    menuInfo.hSubMenu = startOnBootMenu;
    if (!SetMenuItemInfoW(popupMenu, ID_MENU_START_ON_BOOT_ROOT, FALSE, &menuInfo)) {
@@ -523,9 +545,13 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
 			OpenFolder(defaultLogFilePath.substr(0, defaultLogFilePath.rfind(LOG_FILE_NAME)).c_str());
         }
         break;
-    case ID_HELP_CHECK_FOR_UPDATES:
+    case ID_MENU_CHECK_FOR_UPDATES:
         CheckForUpdate(hInst, mainWindow, UM_UPDATE_CHECK_DONE);
         break;
+    case ID_MENU_AUTO_CHECK_FOR_UPDATES:
+        autoCheckForUpdates = !autoCheckForUpdates;
+        WriteConfig();
+		break;
     case ID_HELP_RUN_AS_ADMIN:
         if (!RelaunchAsAdmin()) {
 			ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
@@ -684,6 +710,11 @@ static void prepareTaskbarCreatedNotification() {
     }
 }
 
+static std::chrono::hours NowSinceEpoch() {
+    const auto now = std::chrono::system_clock::now();
+    return std::chrono::floor<std::chrono::hours>(now.time_since_epoch());
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
@@ -715,6 +746,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         LOG(Logger::Level::LevelDebug, L"Show notification from WM_CREATE");
         ShowNotification(silentMode);
+
+        if(autoCheckForUpdates) {
+            const auto now = NowSinceEpoch();
+            std::chrono::hours lastCheck{ 0 };
+            const auto& state = appState->GetState();
+            if (state.find(STATE_LAST_UPDATE_CHECK_TIME) != state.end()) {
+                try {
+                    lastCheck = std::chrono::hours(state[STATE_LAST_UPDATE_CHECK_TIME].get<long long>());
+                } catch (...) {}
+            }
+
+            if (now - lastCheck >= AUTO_UPDATE_CHECK_INTERVAL) {
+                LOG(Logger::LevelDebug, std::format(L"Auto check for updates. Last check: {}h, now: {}h", lastCheck.count(), now.count()).c_str());
+                CheckForUpdate(hInst, mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
+            }
+        }
         break;
     case WM_HOTKEY:
         if (wParam == HOTKEY_ID) {
@@ -753,8 +800,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case UM_UPDATE_CHECK_DONE:
-        OnUpdateCheckDone(hWnd, wParam, lParam);
+        if (OnUpdateCheckDone(hWnd, wParam, lParam, false)) {
+            appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
+            appState->Commit();
+        }
         return 0;
+    case UM_AUTO_UPDATE_CHECK_DONE:
+        if (OnUpdateCheckDone(hWnd, wParam, lParam, true)) {
+            appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
+            appState->Commit();
+        }
+		return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -787,17 +843,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (menu == helpMenu) {
                 MENUITEMINFO info = { sizeof(info) };
                 info.fMask = MIIM_STATE | MIIM_STRING;
-                const bool checkingForUpdate = CheckingForUpdate();
-                info.fState = checkingForUpdate ? MFS_DISABLED : MFS_ENABLED;
-                info.dwTypeData = (LPWSTR)strRes->Load(checkingForUpdate ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
-                if (!SetMenuItemInfoW(menu, ID_HELP_CHECK_FOR_UPDATES, FALSE, &info)) {
-                    LOG_LAST_ERROR();
-                }
                 info.fState = processElevated ? MFS_DISABLED : MFS_ENABLED;
                 info.dwTypeData = (LPWSTR)strRes->Load(processElevated ? IDS_RUNNING_AS_ADMIN : IDS_RUN_AS_ADMIN).c_str();
                 if (!SetMenuItemInfoW(menu, ID_HELP_RUN_AS_ADMIN, FALSE, &info)) {
                     LOG_LAST_ERROR();
                 }
+                break;
+            }
+            if (menu == updateMenu) {
+                MENUITEMINFO info = { sizeof(info) };
+                info.fMask = MIIM_STATE | MIIM_STRING;
+                const bool checkingForUpdate = CheckingForUpdate();
+                info.fState = checkingForUpdate ? MFS_DISABLED : MFS_ENABLED;
+                info.dwTypeData = (LPWSTR)strRes->Load(checkingForUpdate ? IDS_CHECKING_FOR_UPDATES : IDS_CHECK_FOR_UPDATES).c_str();
+                if (!SetMenuItemInfoW(menu, ID_MENU_CHECK_FOR_UPDATES, FALSE, &info)) {
+                    LOG_LAST_ERROR();
+                }
+                CheckMenuItem(menu, ID_MENU_AUTO_CHECK_FOR_UPDATES, MF_BYCOMMAND | (autoCheckForUpdates ? MF_CHECKED : MF_UNCHECKED));
                 break;
             }
             if (menu == startOnBootMenu) {
@@ -1150,6 +1212,8 @@ static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
 static const auto CONFIG_WAIT_FOR_DEBUGGER = L"WaitForDebugger";
 static const auto CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE = L"SimulateAddNotificationFailure";
 static const auto CONFIG_SIMULATE_VERSION_FOR_UPDATE = L"SimulateVersionForUpdate";
+static const auto CONFIG_UPDATES = L"Updates";
+static const auto CONFIG_AUTO_CHECK_FOR_UPDATES = L"AutoCheckForUpdates";
 
 // Read settings from config file.
 void ReadConfig() {
@@ -1196,6 +1260,8 @@ void ReadConfig() {
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_SIMULATE_VERSION_FOR_UPDATE, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
     simulateVersionForUpdateCheck = buf;
+
+    autoCheckForUpdates = GetPrivateProfileIntW(CONFIG_UPDATES, CONFIG_AUTO_CHECK_FOR_UPDATES, 0, configFilePath.c_str()) != 0;
 }
 
 // Write settings to config file.
@@ -1223,6 +1289,9 @@ void WriteConfig() {
         configFilePath.c_str());
     WritePrivateProfileStringW(CONFIG_CMD_LINE_ARGS, CONFIG_CMD_LINE_ARGS2,
         cmdLineArgs2.c_str(),
+        configFilePath.c_str());
+    WritePrivateProfileStringW(CONFIG_UPDATES, CONFIG_AUTO_CHECK_FOR_UPDATES,
+        std::to_wstring(autoCheckForUpdates).c_str(),
         configFilePath.c_str());
 }
 

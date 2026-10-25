@@ -233,6 +233,29 @@ LogLevel=-4
 
 ---
 
+### 6. [Updates] - 更新检查配置
+
+配置是否定期在启动时自动检查新版本。
+
+#### 键值
+
+| 键名 | 说明 | 类型 | 默认值 |
+|------|------|------|--------|
+| `AutoCheckForUpdates` | 定期自动检查新版本 | 整数（0/1） | 0（关闭） |
+
+#### 配置示例
+
+```ini
+[Updates]
+AutoCheckForUpdates=1
+```
+
+#### 配置方式
+
+**推荐方式：** 系统托盘菜单 → `帮助` → `检查更新` → `自动检查`。
+
+---
+
 ## 完整配置示例
 
 ```ini
@@ -254,6 +277,9 @@ CmdLineArgs2=/toggle
 
 [Log]
 LogLevel=8
+
+[Updates]
+AutoCheckForUpdates=1
 ```
 
 ## 配置文件管理

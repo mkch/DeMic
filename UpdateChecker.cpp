@@ -79,7 +79,8 @@ static bool HTTP_GET(const wchar_t* url, const wchar_t* headers, std::ostream& b
         return false;
     }
 
-    return InternetCloseHandle(hUrl) && InternetCloseHandle(hInternet);
+    const auto okCloseUrl = InternetCloseHandle(hUrl);
+    return InternetCloseHandle(hInternet) && okCloseUrl;
 }
 
 std::atomic<bool> cancelUpdateCheck = false;
@@ -135,30 +136,34 @@ void CancelUpdateCheck() {
     StopUpdateCheckThread();
 }
 
-void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
+bool OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam, bool promptUpdateOnly) {
     struct defer {
         ~defer() {
             StopUpdateCheckThread();
         }
     } _defer;
     // No need to join, PostMessageW syncronizes.
+    std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     bool httpGetOk = wParam;
     if (!httpGetOk) {
         if (!cancelUpdateCheck) {
-            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            if (!promptUpdateOnly) {
+                MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            }
         }
-        return;
+        return false;
     }
 
     const auto ver = simulateVersionForUpdateCheck.empty() ? VERSION : simulateVersionForUpdateCheck;
     auto currentVer = parseSemVer(ver);
     if (!currentVer) {
         LOG_ERROR(std::format(L"Failed to parse current version: {}", ver).c_str());
-        MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-        return;
+        if (!promptUpdateOnly) {
+            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        }
+        return false;
     }
 
-    std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     try {
         const auto response = nlohmann::json::parse(*body);
         std::string tagName = response["tag_name"];
@@ -170,8 +175,10 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         auto remoteVer = parseSemVer(v, false);
         if (!remoteVer) {
 			LOG_ERROR(std::format(L"Failed to parse remote version: {}", v).c_str());
-            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-            return;
+            if (!promptUpdateOnly) {
+                MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            }
+            return false;
         }
         if (*remoteVer > *currentVer) {
 			// New version available.
@@ -182,13 +189,19 @@ void OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam) {
                     LOG_LAST_ERROR();
                 }
             }
-            return;
+            return true;
         }
         // No update.
-        MessageBoxW(hwnd, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+        if (!promptUpdateOnly) {
+            MessageBoxW(hwnd, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+        }
+        return true;
     } catch (...) {
         // Failed.
-        MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        if (!promptUpdateOnly) {
+            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        }
+        return false;
     }
 }
 

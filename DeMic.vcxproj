@@ -178,6 +178,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="JSONState.h" />
     <ClInclude Include="DeMic.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="HotKeyControlInfo.h" />
@@ -197,6 +198,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DeMic.cpp" />
+    <ClCompile Include="JSONState.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MicCtrl.cpp" />

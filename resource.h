@@ -38,6 +38,7 @@
 #define IDS_CHECK_FOR_UPDATES           161
 #define IDR_START_ON_BOOT               161
 #define IDS_CHECKING_FOR_UPDATES        162
+#define IDR_UPDATE_MENU                 162
 #define IDC_HOTKEY                      1004
 #define IDC_ENABLE_ON_SOUND             1005
 #define IDC_ON_SOUND_PLAY               1006
@@ -52,12 +53,14 @@
 #define ID_MENU_SOUND_SETTINGS          32778
 #define ID_MENU_PLUGIN                  32781
 #define ID_HELP_SHOW_LOG                32789
-#define ID_HELP_CHECK_FOR_UPDATES       32792
 #define ID_MENU_HELP                    32795
 #define ID_MENU_HOTKEY_SETTINGS         32799
 #define ID_MENU_START_ON_BOOT_AS_ADMIN  32803
 #define ID_MENU_START_ON_BOOT_ROOT      32805
 #define ID_HELP_RUN_AS_ADMIN            32809
+#define ID_HELP_UPDATE                  32819
+#define ID_MENU_CHECK_FOR_UPDATES       32820
+#define ID_MENU_AUTO_CHECK_FOR_UPDATES  32821
 #define IDC_HOTKEY_STATIC               -1
 
 // Next default values for new objects
@@ -65,8 +68,8 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        162
-#define _APS_NEXT_COMMAND_VALUE         32810
+#define _APS_NEXT_RESOURCE_VALUE        163
+#define _APS_NEXT_COMMAND_VALUE         32822
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
