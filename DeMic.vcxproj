@@ -204,6 +204,7 @@
     <ClCompile Include="MicCtrl.cpp" />
     <ClCompile Include="Plugin.cpp" />
     <ClCompile Include="TaskScheduler.cpp" />
+    <ClCompile Include="TimeDebouncer.cpp" />
     <ClCompile Include="UpdateChecker.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>

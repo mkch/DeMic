@@ -50,6 +50,16 @@ std::function<void()> NoLog() {
 	return [] {};
 }
 
+// The message-only window of TimeDebouncer is created as a child of HWND_MESSAGE.
+int CountMessageOnlyButtonWindows() {
+	int count = 0;
+	for (HWND h = FindWindowExW(HWND_MESSAGE, nullptr, L"Button", nullptr); h;
+		h = FindWindowExW(HWND_MESSAGE, h, L"Button", nullptr)) {
+		++count;
+	}
+	return count;
+}
+
 } // namespace
 
 TEST(TimeDebouncerTest, CallsOnCompleteWithEmittedArgumentsAfterInterval) {
@@ -267,4 +277,50 @@ TEST(TimeDebouncerTest, InstancesAreIndependent) {
 
 	std::sort(received.begin(), received.end());
 	EXPECT_EQ((std::vector<std::string>{"first:c", "second:b"}), received);
+}
+
+TEST(TimeDebouncerTest, ReleasesSharedWindowWhenLastInstanceIsDestroyed) {
+	const int baseline = CountMessageOnlyButtonWindows();
+	{
+		TimeDebouncer<> debouncer(kLongInterval, [] {}, NoLog());
+		// Coalesced Emits must not inflate the instance count of the shared window.
+		for (int i = 0; i < 5; ++i) {
+			debouncer.Emit();
+		}
+		EXPECT_EQ(baseline + 1, CountMessageOnlyButtonWindows());
+	}
+	EXPECT_EQ(baseline, CountMessageOnlyButtonWindows())
+		<< "the shared window must be destroyed together with the last instance";
+}
+
+TEST(TimeDebouncerTest, RecreatesSharedWindowForLaterInstances) {
+	std::vector<int> received;
+	{
+		TimeDebouncer<int> first(kInterval,
+			[&received](int value) { received.push_back(value); },
+			NoLog());
+		first.Emit(1);
+		ASSERT_TRUE(PumpUntil([&received] { return received.size() == 1; }));
+	} // The last instance is destroyed, which destroys the shared window.
+	{
+		TimeDebouncer<int> second(kInterval,
+			[&received](int value) { received.push_back(value); },
+			NoLog());
+		second.Emit(2);
+		ASSERT_TRUE(PumpUntil([&received] { return received.size() == 2; }));
+	}
+	EXPECT_EQ((std::vector<int>{1, 2}), received);
+}
+
+TEST(TimeDebouncerTest, DestroyingOneInstanceKeepsOthersWorking) {
+	std::vector<std::string> received;
+	TimeDebouncer<> keep(kInterval, [&received] { received.push_back("keep"); }, NoLog());
+	{
+		TimeDebouncer<> temp(kInterval, [&received] { received.push_back("temp"); }, NoLog());
+		keep.Emit();
+		temp.Emit();
+	} // temp is gone, but the shared window must stay alive for keep.
+
+	ASSERT_TRUE(PumpUntil([&received] { return !received.empty(); }));
+	EXPECT_EQ((std::vector<std::string>{"keep"}), received);
 }
