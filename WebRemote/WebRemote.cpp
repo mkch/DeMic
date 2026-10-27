@@ -117,9 +117,6 @@ static std::wstring formatErrorMessage(UINT resId, std::wstring& message) {
     return reason + L" " + message;
 }
 
-// static member of template class must be defined for each instantiation.
-std::map<UINT_PTR, TimeDebouncer<>*> TimeDebouncer<>::sInstances;
-
 static const UINT SILENT_STARTING_RETRY_INTERVAL = 3000;
 static const int SILENT_STARTING_MAX_RETRY = 4;
 

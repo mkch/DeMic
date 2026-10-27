@@ -663,9 +663,6 @@ MicCtrl::MuteState GetMuteState() {
 // Debounce interval for device state change events (ms).
 static const UINT DEVICE_CHANGE_DELAY = 1000;
 
-// static member of template class must be defined for each instantiation.
-std::map<UINT_PTR, TimeDebouncer<>*> TimeDebouncer<>::sInstances;
-
 static void lastErrorLogger() {
     LOG_LAST_ERROR();
 };

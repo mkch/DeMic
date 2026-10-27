@@ -184,7 +184,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\sdk\DemicPluginUtil.h" />
-    <ClInclude Include="..\TimeDebouncer.h" />
     <ClInclude Include="Billboard.h" />
     <ClInclude Include="BillboardWnd.h" />
     <ClInclude Include="framework.h" />
