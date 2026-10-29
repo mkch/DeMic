@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <format>
 #include <vector>
 #include <sstream>
 #include <algorithm>
@@ -15,6 +16,27 @@ struct SemVerT {
 	int patch = 0;
 	std::vector<string_t> preRelease;
 	string_t buildMetadata;
+
+	// Returns the string representation of the SemVer.
+	// The string is built as-is without any validation.
+	string_t str() const {
+		std::basic_ostringstream<CharT> buf;
+
+		buf << major << static_cast<CharT>('.')
+			<< minor << static_cast<CharT>('.')
+			<< patch;
+
+		for (size_t i = 0; i < preRelease.size(); ++i) {
+			buf << (i == 0 ? static_cast<CharT>('-') : static_cast<CharT>('.'));
+			buf << preRelease[i];
+		}
+
+		if (!buildMetadata.empty()) {
+			buf << static_cast<CharT>('+') << buildMetadata;
+		}
+
+		return buf.str();
+	}
 
 	// compare compares two SemVerT objects according to the SemVerT specification.
 	// -1: this < other

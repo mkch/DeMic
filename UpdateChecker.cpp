@@ -6,7 +6,6 @@
 #include "DeMic.h"
 #include "Log.h"
 #include "nlohmann/json.hpp"
-#include "Semver.h"
 
 #include <string>
 #include <thread>
@@ -114,19 +113,17 @@ static void StartUpdateCheckThread(HWND hwnd, UINT doneMessage) {
     });
 }
 
-static BOOL NavigateURL(const wchar_t* url) {
-    HINSTANCE h = ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
-    return ((INT_PTR)h > 32);
-}
-
 bool CheckingForUpdate() {
 	return updateCheckThread != NULL;
 }
 
-void CheckForUpdate(HINSTANCE instance, HWND hwnd, UINT doneMessage) {
+void CheckForUpdate(HWND hwnd, UINT doneMessage) {
     if (updateCheckThread) {
         // Already checking
-		LOG(Logger::LevelError, L"Update check already in progress.");
+		LOG(Logger::LevelInfo, L"Update check already in progress.");
+        // WPARAM: 0
+        // LPARAM: 0
+        PostMessageW(hwnd, doneMessage, 0, 0);
         return;
     }
 	StartUpdateCheckThread(hwnd, doneMessage);
@@ -136,72 +133,64 @@ void CancelUpdateCheck() {
     StopUpdateCheckThread();
 }
 
-bool OnUpdateCheckDone(HWND hwnd, WPARAM wParam, LPARAM lParam, bool promptUpdateOnly) {
+// No pending checking: wParam is the HTTPGet result(bool), lParam is the response (std::stringstream*).
+// Has pending checking: both wParam and lParam are 0.
+void OnUpdateCheckDone(WPARAM wParam, LPARAM lParam, 
+    std::function<void(const WSemVer& current, const WSemVer& remote, const std::wstring& url)>onDone,
+    std::function<void()>onPending, 
+    std::function<void()>onError) {
+
+    if (!wParam && !lParam) {
+        onPending();
+        return;
+    }
+
     struct defer {
         ~defer() {
             StopUpdateCheckThread();
         }
     } _defer;
-    // No need to join, PostMessageW syncronizes.
+    // No need to join, PostMessageW synchronizes.
     std::unique_ptr<std::stringstream> body((std::stringstream*)(lParam));
     bool httpGetOk = wParam;
     if (!httpGetOk) {
-        if (!cancelUpdateCheck) {
-            if (!promptUpdateOnly) {
-                MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-            }
+        if (cancelUpdateCheck) {
+            return;
         }
-        return false;
+        onError();
+        return;
     }
 
     const auto ver = simulateVersionForUpdateCheck.empty() ? VERSION : simulateVersionForUpdateCheck;
     auto currentVer = parseSemVer(ver);
     if (!currentVer) {
         LOG_ERROR(std::format(L"Failed to parse current version: {}", ver).c_str());
-        if (!promptUpdateOnly) {
-            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-        }
-        return false;
+        onError();
+        return;
     }
 
+    std::wstring tag, url;
     try {
         const auto response = nlohmann::json::parse(*body);
-        std::string tagName = response["tag_name"];
-        auto tag = FromUTF8(std::u8string_view((const char8_t*)tagName.data(), tagName.length()));
-        auto v = tag;
-        if(v.length() > 1 && v[0] == L'v') {
-            v = v.substr(1);
-		}
-        auto remoteVer = parseSemVer(v, false);
-        if (!remoteVer) {
-			LOG_ERROR(std::format(L"Failed to parse remote version: {}", v).c_str());
-            if (!promptUpdateOnly) {
-                MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-            }
-            return false;
+        const std::string tagName = response.at("tag_name");
+        tag = FromUTF8(std::u8string_view((const char8_t*)tagName.data(), tagName.length()));
+        if (tag.length() > 0 && tag[0] == L'v') {
+            tag = tag.substr(1);
         }
-        if (*remoteVer > *currentVer) {
-			// New version available.
-            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + tag + strRes->Load(IDS_UPDATE_OR_NOT);
-            if (MessageBoxW(hwnd, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                std::string htmlUrl = response["html_url"];
-                if (!NavigateURL(FromUTF8(std::u8string_view((const char8_t*)htmlUrl.data(), htmlUrl.length())).c_str())) {
-                    LOG_LAST_ERROR();
-                }
-            }
-            return true;
-        }
-        // No update.
-        if (!promptUpdateOnly) {
-            MessageBoxW(hwnd, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
-        }
-        return true;
+        const std::string htmlURL = response.at("html_url");
+        url = FromUTF8(std::u8string_view((const char8_t*)htmlURL.data(), htmlURL.length()));
     } catch (...) {
-        // Failed.
-        if (!promptUpdateOnly) {
-            MessageBoxW(hwnd, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-        }
-        return false;
+        onError();
+        return;
     }
+
+    auto const remoteVer = parseSemVer(tag, false);
+    if (!remoteVer) {
+        LOG_ERROR(std::format(L"Failed to parse remote version: {}", tag).c_str());
+        onError();
+        return;
+    }
+    onDone(*currentVer, *remoteVer, url);
+    return;
 }
 

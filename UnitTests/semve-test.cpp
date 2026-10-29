@@ -506,3 +506,106 @@ TYPED_TEST(SemVerTypedTest, ExampleVersionPrecedence) {
     EXPECT_LT(*v6, *v7);
     EXPECT_LT(*v7, *v8);
 }
+
+// ============================================================================
+// String Representation Tests
+// ============================================================================
+
+TYPED_TEST(SemVerTypedTest, StrBasicVersion) {
+    auto v = this->parse("1.2.3");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.2.3"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrZeroVersion) {
+    auto v = this->parse("0.0.0");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("0.0.0"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrLargeNumbers) {
+    auto v = this->parse("123.456.789");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("123.456.789"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrWithSinglePreReleaseIdentifier) {
+    // The pre-release part must not end with a trailing dot.
+    auto v = this->parse("1.2.3-alpha");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.2.3-alpha"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrWithMultiplePreReleaseIdentifiers) {
+    auto v = this->parse("1.0.0-alpha.1.beta.2");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.0.0-alpha.1.beta.2"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrPreReleaseWithHyphens) {
+    auto v = this->parse("1.0.0-x-y-z.--");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.0.0-x-y-z.--"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrWithBuildMetadata) {
+    auto v = this->parse("1.2.3+build");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.2.3+build"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrWithMultiPartBuildMetadata) {
+    auto v = this->parse("1.0.0+20130313144700.exp.sha.5114f85");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.0.0+20130313144700.exp.sha.5114f85"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrWithPreReleaseAndBuildMetadata) {
+    auto v = this->parse("1.2.3-rc.1+build.123");
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.2.3-rc.1+build.123"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrNonStrictTwoPartVersion) {
+    auto v = this->parse("1.2", false);
+    ASSERT_NE(nullptr, v);
+    EXPECT_EQ(this->str("1.2.0"), v->str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrOfManuallyBuiltVersion) {
+    // str() must render the fields as-is, without validating them.
+    SemVerT<typename TestFixture::CharType> sv;
+    sv.major = 2;
+    sv.preRelease.push_back(this->str("beta"));
+    sv.preRelease.push_back(this->str("2"));
+    sv.buildMetadata = this->str("exp.sha");
+    EXPECT_EQ(this->str("2.0.0-beta.2+exp.sha"), sv.str());
+}
+
+TYPED_TEST(SemVerTypedTest, StrRoundTrip) {
+    const std::vector<const char*> versions = {
+        "0.0.0",
+        "1.2.3",
+        "1.0.0-alpha",
+        "1.0.0-alpha.1",
+        "1.0.0-0.3.7",
+        "1.0.0-x.7.z.92",
+        "1.0.0-x-y-z.--",
+        "1.0.0-beta.11",
+        "1.0.0+20130313144700",
+        "1.0.0-beta+exp.sha.5114f85",
+        "1.2.3-rc.1+build.123",
+    };
+
+    for (const char* version : versions) {
+        auto v = this->parse(version);
+        ASSERT_NE(nullptr, v) << "Failed to parse " << version;
+        EXPECT_EQ(this->str(version), v->str()) << "str() mismatch for " << version;
+
+        // The rendered string must parse back into an equal version.
+        auto reparsed = parseSemVer(v->str());
+        ASSERT_NE(nullptr, reparsed) << "Failed to reparse " << version;
+        EXPECT_TRUE(*v == *reparsed) << "Round trip mismatch for " << version;
+        EXPECT_EQ(v->str(), reparsed->str()) << "Round trip mismatch for " << version;
+    }
+}

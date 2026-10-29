@@ -546,7 +546,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         }
         break;
     case ID_MENU_CHECK_FOR_UPDATES:
-        CheckForUpdate(hInst, mainWindow, UM_UPDATE_CHECK_DONE);
+        CheckForUpdate(mainWindow, UM_UPDATE_CHECK_DONE);
         break;
     case ID_MENU_AUTO_CHECK_FOR_UPDATES:
         autoCheckForUpdates = !autoCheckForUpdates;
@@ -712,6 +712,11 @@ static std::chrono::hours NowSinceEpoch() {
     return std::chrono::floor<std::chrono::hours>(now.time_since_epoch());
 }
 
+static BOOL NavigateURL(const wchar_t* url) {
+    HINSTANCE h = ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
+    return ((INT_PTR)h > 32);
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
@@ -756,7 +761,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             if (now - lastCheck >= AUTO_UPDATE_CHECK_INTERVAL) {
                 LOG(Logger::LevelDebug, std::format(L"Auto check for updates. Last check: {}h, now: {}h", lastCheck.count(), now.count()).c_str());
-                CheckForUpdate(hInst, mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
+                CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
             }
         }
         break;
@@ -797,17 +802,55 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case UM_UPDATE_CHECK_DONE:
-        if (OnUpdateCheckDone(hWnd, wParam, lParam, false)) {
-            appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
-            appState->Commit();
-        }
+        OnUpdateCheckDone(wParam, lParam,
+            [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
+                if (remote > current) {
+                    // New version available.
+                    auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_UPDATE_OR_NOT);
+                    if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                        if (!NavigateURL(url.c_str())) {
+                            LOG_LAST_ERROR();
+                        }
+                    }
+                } else {
+                    MessageBoxW(mainWindow, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+                }
+                try {
+                    appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
+                    appState->Commit();
+                } catch (...) {
+                }
+            }, 
+            []{},
+            []{
+                MessageBoxW(mainWindow, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            }
+        );
         return 0;
     case UM_AUTO_UPDATE_CHECK_DONE:
-        if (OnUpdateCheckDone(hWnd, wParam, lParam, true)) {
-            appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
-            appState->Commit();
-        }
-		return 0;
+        OnUpdateCheckDone(wParam, lParam,
+            [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
+                if (remote > current) {
+                    // New version available.
+                    auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_UPDATE_OR_NOT);
+                    if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                        if (!NavigateURL(url.c_str())) {
+                            LOG_LAST_ERROR();
+                        }
+                    }
+                }
+                try {
+                    appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
+                    appState->Commit();
+                } catch (...) {
+                }
+            },
+            [] {},
+            [] {
+                MessageBoxW(mainWindow, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+            }
+        );
+        return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
