@@ -772,8 +772,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case MicCtrl::WM_MUTED_STATE_CHANGED:
 		mutedStatedChangedDebouncer.Emit();
         return 0;
-    case UM_NOTIFY:
-        if (lParam == WM_RBUTTONUP) {
+    case UM_NOTIFY: {
+        // Note that NOTIFYICON_VERSION_4 is used.
+        const auto event = LOWORD(lParam);
+        switch (event) {
+        case WM_CONTEXTMENU: {
             SetForegroundWindow(hWnd);
             if (!IsWindowEnabled(mainWindow)) {
                 // Has modal dialog open, do not show menu.
@@ -789,11 +792,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (cmd != 0) {
                 ProcessNotifyMenuCmd(hWnd, cmd);
             }
-        } else if (lParam == WM_LBUTTONUP) {
+            break;
+        }
+        case NIN_SELECT:
+            // fallthorugh
+        case NIN_KEYSELECT:
             SetForegroundWindow(hWnd);
             ToggleMuted();
+            break;
         }
         return 0;
+    }
     case UM_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
@@ -1167,6 +1176,7 @@ void ShowNotificationImpl(bool silent) {
 
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
+    data.uVersion = NOTIFYICON_VERSION_4;
     data.hWnd = mainWindow;
     data.uID = NOTIFY_ID;
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
@@ -1199,7 +1209,7 @@ void ShowNotificationImpl(bool silent) {
     bool succeeded = false;
     if (!(succeeded = Shell_NotifyIconW(NIM_MODIFY, &data))) {
         // Not shown yet, try to add it.
-        if (succeeded = Shell_NotifyIconW(NIM_ADD, &data)) {
+        if (succeeded = Shell_NotifyIconW(NIM_ADD, &data) && Shell_NotifyIconW(NIM_SETVERSION, &data)) {
             // Check whether the notification is shown successfully.
             // Notification icon will not be added due to QUNS_QUIET_TIME.
             // If Shell_NotifyIconW is discarded, the following NOP NIM_MODIFY will fail.
