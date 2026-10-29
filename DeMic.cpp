@@ -191,7 +191,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     ReadConfig();
 
     if(waitForDebugger) {
-        MessageBoxW(NULL, L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
+        ShowMessageBoxW(L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
 	}
 
     std::ofstream loggerStream = OpenRotatingLogFile(defaultLogFilePath, 100 * 1024, 1); // 100KB per file, 1 backup
@@ -268,7 +268,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 return 0;
             }
         }
-        MessageBoxW(NULL, strRes->Load(IDS_ALREADY_RUNNING).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        ShowMessageBoxW(strRes->Load(IDS_ALREADY_RUNNING).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
         return 1;
     }
 
@@ -550,7 +550,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         } else {
             ok = EnableStartOnBoot(true);
             if (ok && !processElevated) {
-                if(MessageBoxW(mainWindow, strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                if(ShowMessageBoxW(strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                     if (!RelaunchAsAdmin()) {
                         ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
                     }
@@ -565,7 +565,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
         break;
     case ID_NO_PLUGIN:
-        MessageBoxW(hWnd, (strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+        ShowMessageBoxW((strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
         break;
     case ID_HELP_SHOW_LOG:
         if (!OpenFolderSelectFile(defaultLogFilePath.c_str())) {
@@ -786,16 +786,21 @@ void ProcessManualUpdateNotificationEvent(HWND hwnd, WORD event) {
     case NIN_KEYSELECT:
         [[fallthrough]];
     case NIN_BALLOONUSERCLICK:
+        if (!IsWindowEnabled(mainWindow)) {
+            // In modal loop, do not show messagebox and do not remove notification icon
+            // so that the user can interact with the notification icon later.
+            break; 
+        }
+        RemoveManualUpdateNotification();
         if (availableUpdate) {
             // New version available.
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + availableUpdate->Version.str() + strRes->Load(IDS_UPDATE_OR_NOT);
-            if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+            if (ShowMessageBoxW(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                 if (!NavigateURL(availableUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
                 }
             }
         }
-        RemoveManualUpdateNotification();
         break;
     }
 }
@@ -809,11 +814,17 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
     case NIN_KEYSELECT:
         [[fallthrough]];
     case NIN_BALLOONUSERCLICK:
+        if (!IsWindowEnabled(mainWindow)) {
+            // In modal loop, do not show messagebox and do not remove notification icon
+            // so that the user can interact with the notification icon later.
+            break;
+        }
+        RemoveAutoUpdateNotification();
         if (availableUpdate) {
             // New version available.
             const auto version = availableUpdate->Version.str();
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + version + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
-            switch (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
+            switch (ShowMessageBoxW(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
             case IDYES:
                 if (!NavigateURL(availableUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
@@ -842,7 +853,6 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
             }
             }
         }
-        RemoveAutoUpdateNotification();
         break;
     }
 }
@@ -923,7 +933,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }, 
             [] { LOG(Logger::LevelDebug, L"Update pending"); },
             []{
-                MessageBoxW(mainWindow, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+                ShowMessageBoxW(strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
             }
         );
         return 0;
@@ -1394,7 +1404,7 @@ static void RemoveNotification(UINT id) {
     data.hWnd = mainWindow;
     data.uID = id;
     if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
-        LOG_LAST_ERROR();
+        LOG(Logger::LevelWarn, L"Failed to remove notification");
         return;
     }
 }

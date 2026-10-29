@@ -132,3 +132,5 @@ static std::span<const T> LoadModuleResource(HMODULE hModule, LPCWSTR lpType, LP
 }
 
 std::filesystem::path GetModuleFilePath(HMODULE hModule = 0);
+
+int ShowMessageBoxW(LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);

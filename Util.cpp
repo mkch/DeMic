@@ -12,7 +12,7 @@ const std::wstring& StringRes::Load(UINT resId) {
     wchar_t* buf = NULL;
     const int n = LoadStringW(hInstance, resId, (LPWSTR)&buf, 0);
     if (n == 0) {
-        MessageBoxW(NULL, L"Can't load string resource!", L"DeMic", MB_ICONERROR);
+        ShowMessageBoxW(L"Can't load string resource!", L"DeMic", MB_ICONERROR|MB_TASKMODAL);
         std::exit(1);
     }
     stringResMap[resId] = std::wstring(buf, n);
@@ -150,4 +150,9 @@ std::filesystem::path GetModuleFilePath(HMODULE hModule) {
 		}
 		path.resize(newSize);
 	}
+}
+
+int ShowMessageBoxW(LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
+    int ret = MessageBoxW(nullptr, lpText, lpCaption, (uType | MB_SETFOREGROUND | MB_TASKMODAL) & ~MB_SYSTEMMODAL);
+    return ret;
 }

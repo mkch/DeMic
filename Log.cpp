@@ -105,5 +105,5 @@ void LogError(const wchar_t* file, int line, DWORD lastError) {
 }
 
 void ShowError(const wchar_t* msg) {
-	MessageBoxW(mainWindow, msg, appTitle.c_str(), MB_ICONERROR);
+	ShowMessageBoxW(msg, appTitle.c_str(), MB_ICONERROR);
 }

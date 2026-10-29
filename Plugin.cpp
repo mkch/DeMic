@@ -218,7 +218,7 @@ void LoadPlugins() {
 			return true;
 		}
 		if (!LoadPlugin(path)) {
-			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+			ShowMessageBoxW((strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
 		}
 		return true;
 	});
@@ -353,7 +353,7 @@ void OnPluginMenuItemCmd(UINT cmd) {
 
 	auto load = [path, &file]() {
 		if (!LoadPlugin(path)) {
-			MessageBoxW(mainWindow, (strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+			ShowMessageBoxW((strRes->Load(IDS_CAN_NOT_LOAD_PLUGIN) + path).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
 			configuredPluginFiles.erase(file);
 			return false;
 		}
