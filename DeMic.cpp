@@ -81,15 +81,18 @@ const bool processElevated = IsCurrentProcessElevated();
 
 std::unique_ptr <StringRes> strRes;
 
-void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed);
-void RemoveNotification(UINT id);
-void ShowMainNotification(bool silent);
-void UpdateMainNotification();
-void RemoveMainNotification();
-void ShowManualUpdateNotification();
-void RemoveManualUpdateNotification();
-void ShowAutoUpdateNotification();
-void RemoveAutoUpdateNotification();
+static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed);
+static void RemoveNotification(UINT id);
+static void ShowMainNotificationImpl(const std::wstring& info);
+static void ShowMainNotification(bool silent);
+static void UpdateMainNotification();
+static void RemoveMainNotification();
+static void ShowManualUpdateNotification();
+static void ShowNoUpdateNotification();
+static void RemoveNoUpdateNotification();
+static void RemoveManualUpdateNotification();
+static void ShowAutoUpdateNotification();
+static void RemoveAutoUpdateNotification();
 void ReadConfig();
 void WriteConfig();
 bool StartOnBootEnabled_Reg();
@@ -689,9 +692,6 @@ static void lastErrorLogger() {
     LOG_LAST_ERROR();
 };
 
-constexpr UINT REMOVE_NO_UPDATE_NOTIFICATION_DELAY = 10 * 1000; // 10s
-static TimeDebouncer<> removeNoUpdateNotificationDebouncer(REMOVE_NO_UPDATE_NOTIFICATION_DELAY, [] { RemoveManualUpdateNotification(); }, lastErrorLogger);
-
 static const UINT DEVICE_CHANGE_DELAY = 1000; // 1s
 static TimeDebouncer<> deviceStateChangedDebouncer(
     DEVICE_CHANGE_DELAY, [] {
@@ -963,7 +963,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     case WM_DESTROY:
-        removeNoUpdateNotificationDebouncer.Cancel();
         autoUpdateStartupDebouncer.Cancel();
         CancelUpdateCheck();
         WriteConfig();
@@ -1243,7 +1242,7 @@ static TimeDebouncer<>mainNotifyIconRetryDebouncer(
 	},
 	lastErrorLogger);
 
-void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed) {
+static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.uVersion = NOTIFYICON_VERSION_4;
@@ -1258,8 +1257,8 @@ void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareDa
         if (succeeded = Shell_NotifyIconW(NIM_ADD, &data) && Shell_NotifyIconW(NIM_SETVERSION, &data)) {
             // Check whether the notification is shown successfully.
             // Notification icon will not be added due to QUNS_QUIET_TIME.
-            // If Shell_NotifyIconW is discarded, the following NOP NIM_MODIFY will fail.
-            data.uFlags = NIF_MESSAGE;
+            // If Shell_NotifyIconW is discarded, the following silent NIM_MODIFY will fail.
+            data.uFlags &= ~NIF_INFO; // Do not show balloon on success.
             succeeded = Shell_NotifyIconW(NIM_MODIFY, &data);
         }
     }
@@ -1269,22 +1268,23 @@ void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareDa
     }
 }
 
-void ShowManualUpdateNotification() {
+static void ShowManualUpdateNotification() {
+    RemoveNoUpdateNotification();
     RemoveAutoUpdateNotification(); // Mutual exclusion
-    removeNoUpdateNotificationDebouncer.Cancel();
+    if (!availableUpdate) {
+        RemoveManualUpdateNotification();
+        ShowNoUpdateNotification();
+        return;
+    }
     ShowNotification(MANUAL_UPDATE_NOTIFICATION_ID, 
         [](NOTIFYICONDATAW& data) {
-            data.uFlags = NIF_MESSAGE | NIF_ICON;
-            data.uCallbackMessage = UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY;
-            // TODO: change to a "update available" icon.
-            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_MICROPHONE));
-            data.uFlags |= NIF_INFO;
-            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + strRes->Load(IDS_UPDATE_TITLE)).c_str());
+            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
             data.dwInfoFlags = NIIF_INFO;
-            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(availableUpdate ? IDS_UPDATE_AVAILABLE_TITLE : IDS_NO_UPDATE).c_str());
-            if (!availableUpdate) {
-                removeNoUpdateNotificationDebouncer.Emit();
-            }
+            data.uCallbackMessage = UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY;
+            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_UPDATE_AVAILABLE));
+            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
+            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
+            StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
         },
         []() {
             // Transitional notificaton. No need to retry.
@@ -1292,43 +1292,58 @@ void ShowManualUpdateNotification() {
     );
 }
 
-void RemoveManualUpdateNotification() {
+static void ShowNoUpdateNotification() {
+    RemoveAutoUpdateNotification();
+    RemoveManualUpdateNotification();
+    // No need to interact with the balloon.
+    ShowMainNotificationImpl(strRes->Load(IDS_NO_UPDATE));
+}
+
+static void RemoveNoUpdateNotification() {
+    // No need to interact with the balloon.
+    ShowMainNotificationImpl(L"");
+}
+
+static void RemoveManualUpdateNotification() {
     RemoveNotification(MANUAL_UPDATE_NOTIFICATION_ID);
 }
 
-void ShowAutoUpdateNotification() {
+static void ShowAutoUpdateNotification() {
+    RemoveNoUpdateNotification();
     RemoveManualUpdateNotification(); // Mutual exclusion
     ShowNotification(AUTO_UPDATE_NOTIFICATION_ID,
         [](NOTIFYICONDATAW& data) {
-            data.uFlags = NIF_MESSAGE | NIF_ICON;
-            data.uCallbackMessage = UM_AUTO_UPDATE_NOTIFICATION_NOTIFY;
-            // TODO: change to a "update available" icon.
-            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_MICROPHONE));
-            data.uFlags |= NIF_INFO;
-            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + strRes->Load(IDS_UPDATE_TITLE)).c_str());
+            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
             data.dwInfoFlags = NIIF_INFO;
-            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
+            data.uCallbackMessage = UM_AUTO_UPDATE_NOTIFICATION_NOTIFY;
+            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_UPDATE_AVAILABLE));
+            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
+            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_AUTO_UPDATE_AVAILABLE_TITLE).c_str());
+            StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
         },
         []() {
             // Transitional notificaton. No need to retry.
         }
     );
 }
-void RemoveAutoUpdateNotification() {
+
+static void RemoveAutoUpdateNotification() {
     RemoveNotification(AUTO_UPDATE_NOTIFICATION_ID);
 }
 
-void ShowMainNotification(bool silent) {
+// Shows the main notification.
+// Parameter info is the balloon text; empty means silent.
+static void ShowMainNotificationImpl(const std::wstring& info) {
     bool failed = false;
     ShowNotification(MAIN_NOTIFICATION_ID,
-        [silent](NOTIFYICONDATAW& data) {
+        [&info](NOTIFYICONDATAW& data) {
             mainNotifyIconRetryDebouncer.Cancel();
-            lastShowMainNotificationSilent = silent;
+            lastShowMainNotificationSilent = info.empty();
 
             data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-            if (!silent) {
+            if (!info.empty()) {
                 data.uFlags |= NIF_INFO;
-                StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
+                StringCbCopyW(data.szInfo, sizeof(data.szInfo), info.c_str());
                 StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + VERSION).c_str());
                 data.dwInfoFlags = NIIF_INFO;
             }
@@ -1350,26 +1365,30 @@ void ShowMainNotification(bool silent) {
                     strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(),
                     version.c_str(), hotKeyInfo.GetStr().c_str());
             }
-        }, 
+        },
         [&failed] {
             failed = true;
             // Retry.
             mainNotifyIconRetryDebouncer.Emit();
         });
 
-        if (!failed && simulateAddNotifIconFailure) {
-            LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
-            RemoveMainNotification();
-            // Retry.
-            mainNotifyIconRetryDebouncer.Emit();
-        }
+    if (!failed && simulateAddNotifIconFailure) {
+        LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
+        RemoveMainNotification();
+        // Retry.
+        mainNotifyIconRetryDebouncer.Emit();
+    }
 }
 
-void UpdateMainNotification() {
+static void ShowMainNotification(bool silent) {
+    ShowMainNotificationImpl(silent ? L"" : strRes->Load(IDS_RUNNING_IN_SYSTEM_TRAY));
+}
+
+static void UpdateMainNotification() {
     ShowMainNotification(true);
 }
 
-void RemoveNotification(UINT id) {
+static void RemoveNotification(UINT id) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.hWnd = mainWindow;
@@ -1380,7 +1399,7 @@ void RemoveNotification(UINT id) {
     }
 }
 
-void RemoveMainNotification() {
+static void RemoveMainNotification() {
     RemoveNotification(MAIN_NOTIFICATION_ID);
 }
 

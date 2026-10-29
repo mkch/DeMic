@@ -41,6 +41,9 @@
 #define IDR_START_ON_BOOT               161
 #define IDS_CHECKING_FOR_UPDATES        162
 #define IDR_UPDATE_MENU                 162
+#define IDS_AUTO_UPDATE_AVAILABLE_TITLE 163
+#define IDI_UPDATE_AVAILABLE            164
+#define IDS_DEMIC_UPDATE_AVAILABLE      164
 #define IDC_HOTKEY                      1004
 #define IDC_ENABLE_ON_SOUND             1005
 #define IDC_ON_SOUND_PLAY               1006

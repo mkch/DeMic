@@ -220,6 +220,7 @@
     <Image Include="no_microphone.ico" />
     <Image Include="small.ico" />
     <Image Include="microphone.ico" />
+    <Image Include="update_available.ico" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="manifest.xml" />
