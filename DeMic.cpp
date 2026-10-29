@@ -26,6 +26,13 @@
 #include "JSONState.h"
 
 
+// IDs of Shell_NotifyIconW.
+enum {
+    MAIN_NOTIFICATION_ID = 1,
+    MANUAL_UPDATE_NOTIFICATION_ID,
+    AUTO_UPDATE_NOTIFICATION_ID,
+};
+
 static const auto STATE_AUTO_UPDATE = "AutoUpdate";
 static const auto STATE_AUTO_UPDATE_IGNORE = "IgnoreVersion";
 
@@ -34,12 +41,17 @@ JSONState* appState = NULL;
 std::unique_ptr<InstanceLock> instanceLock;
 
 enum {
-    // Notify message used by Shell_NotifyIconW.
-    UM_NOTIFY = WM_USER + 1,
+    // Notify messages used by Shell_NotifyIconW.
+    // Shell_NotifyIconW use 0 id for all NIN_BALLOON* messages, so
+    // these notification icons can't share the same notify message.
+    UM_MAIN_NOTIFICATION_NOTIFY = WM_USER + 1,
+    UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY,
+    UM_AUTO_UPDATE_NOTIFICATION_NOTIFY,
+
     // Microphone command message used by command line args.
     UM_MIC_CMD,
     // Done message used by UpdateChecker.
-    UM_UPDATE_CHECK_DONE,
+    UM_MANUAL_UPDATE_CHECK_DONE,
     // Done message used by UpdateChecker for automatic checking.
     UM_AUTO_UPDATE_CHECK_DONE,
 };
@@ -49,7 +61,14 @@ static UINT wmTaskbarCreated = 0;
 
 static const int HOTKEY_ID = 1;
 
-
+// The updated version information retrieved by update checker.
+struct AvailableUpdate {
+    AvailableUpdate(const WSemVer& version, const std::wstring& url) :Version(version), Url(url) {}
+    AvailableUpdate(const AvailableUpdate& r):Version(r.Version), Url(r.Url) {}
+    const WSemVer Version;
+    const std::wstring Url;
+};
+static std::optional<AvailableUpdate> availableUpdate;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
@@ -62,9 +81,15 @@ const bool processElevated = IsCurrentProcessElevated();
 
 std::unique_ptr <StringRes> strRes;
 
-void ShowNotification(bool silent);
-void UpdateNotification();
-void RemoveNotification();
+void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed);
+void RemoveNotification(UINT id);
+void ShowMainNotification(bool silent);
+void UpdateMainNotification();
+void RemoveMainNotification();
+void ShowManualUpdateNotification();
+void RemoveManualUpdateNotification();
+void ShowAutoUpdateNotification();
+void RemoveAutoUpdateNotification();
 void ReadConfig();
 void WriteConfig();
 bool StartOnBootEnabled_Reg();
@@ -545,7 +570,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         }
         break;
     case ID_MENU_CHECK_FOR_UPDATES:
-        CheckForUpdate(mainWindow, UM_UPDATE_CHECK_DONE);
+        CheckForUpdate(mainWindow, UM_MANUAL_UPDATE_CHECK_DONE);
         break;
     case ID_MENU_AUTO_CHECK_FOR_UPDATES:
         autoCheckForUpdates = !autoCheckForUpdates;
@@ -659,17 +684,19 @@ MicCtrl::MuteState GetMuteState() {
     return micCtrl->GetMuteState();
 }
 
-// Debounce interval for device state change events (ms).
-static const UINT DEVICE_CHANGE_DELAY = 1000;
 
 static void lastErrorLogger() {
     LOG_LAST_ERROR();
 };
 
+constexpr UINT REMOVE_NO_UPDATE_NOTIFICATION_DELAY = 10 * 1000; // 10s
+static TimeDebouncer<> removeNoUpdateNotificationDebouncer(REMOVE_NO_UPDATE_NOTIFICATION_DELAY, [] { RemoveManualUpdateNotification(); }, lastErrorLogger);
+
+static const UINT DEVICE_CHANGE_DELAY = 1000; // 1s
 static TimeDebouncer<> deviceStateChangedDebouncer(
     DEVICE_CHANGE_DELAY, [] {
         micCtrl->ReloadDevices();
-        UpdateNotification();
+        UpdateMainNotification();
         CallPluginMicStateListeners();
     }, 
 lastErrorLogger);
@@ -684,12 +711,12 @@ static const UINT MUTED_STATE_CHANGE_DELAY = 20;
 
 static TimeDebouncer<> mutedStatedChangedDebouncer(
     MUTED_STATE_CHANGE_DELAY, [] {
-        UpdateNotification();
+        UpdateMainNotification();
         CallPluginMicStateListeners();
     },
 lastErrorLogger);
 
-extern TimeDebouncer<>shellNotifyIconRetryDebouncer;
+extern TimeDebouncer<>mainNotifyIconRetryDebouncer;
 
 static void prepareTaskbarCreatedNotification() {
     // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
@@ -720,8 +747,107 @@ static TimeDebouncer<> autoUpdateStartupDebouncer(AUTO_UPDATE_DELAY, [] {
     CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
 }, lastErrorLogger);
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
+static void ProcessMainNotificationEvent(HWND hwnd, WORD event) {
+    switch (event) {
+    case WM_CONTEXTMENU: {
+        SetForegroundWindow(hwnd);
+        if (!IsWindowEnabled(hwnd)) {
+            // Has modal dialog open, do not show menu.
+            return;
+        }
+        POINT pt = { 0 };
+        GetCursorPos(&pt);
+        UINT_PTR cmd = TrackPopupMenu(popupMenu,
+            TPM_RETURNCMD | GetSystemMetrics(SM_MENUDROPALIGNMENT),
+            pt.x, pt.y,
+            0,
+            hwnd, NULL);
+        PostMessage(hwnd, WM_NULL, 0, 0);
+        if (cmd != 0) {
+            ProcessNotifyMenuCmd(hwnd, cmd);
+        }
+        break;
+    }
+    case NIN_SELECT:
+        [[fallthrough]];
+    case NIN_KEYSELECT:
+        SetForegroundWindow(hwnd);
+        ToggleMuted();
+        break;
+    }
+}
+
+void ProcessManualUpdateNotificationEvent(HWND hwnd, WORD event) {
+    switch (event) {
+    case WM_CONTEXTMENU:
+        [[fallthrough]];
+    case NIN_SELECT:
+        [[fallthrough]];
+    case NIN_KEYSELECT:
+        [[fallthrough]];
+    case NIN_BALLOONUSERCLICK:
+        if (availableUpdate) {
+            // New version available.
+            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + availableUpdate->Version.str() + strRes->Load(IDS_UPDATE_OR_NOT);
+            if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                if (!NavigateURL(availableUpdate->Url.c_str())) {
+                    LOG_LAST_ERROR();
+                }
+            }
+        }
+        RemoveManualUpdateNotification();
+        break;
+    }
+}
+
+void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
+    switch (event) {
+    case WM_CONTEXTMENU:
+        [[fallthrough]];
+    case NIN_SELECT:
+        [[fallthrough]];
+    case NIN_KEYSELECT:
+        [[fallthrough]];
+    case NIN_BALLOONUSERCLICK:
+        if (availableUpdate) {
+            // New version available.
+            const auto version = availableUpdate->Version.str();
+            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + version + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
+            switch (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
+            case IDYES:
+                if (!NavigateURL(availableUpdate->Url.c_str())) {
+                    LOG_LAST_ERROR();
+                }
+                break;
+            case IDCANCEL: {
+                try {
+                    // Save ignored version
+                    auto& state = appState->GetState();
+                    const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
+                    const auto u8ver = ToUTF8(version);
+                    const std::string ver(reinterpret_cast<const char*>(u8ver.data()), u8ver.length());
+                    if (autoUpdate != state.end()) {
+                        if (!(*autoUpdate).is_object()) {
+                            (*autoUpdate) = json::object();
+                        }
+                        (*autoUpdate)[STATE_AUTO_UPDATE_IGNORE] = ver;
+                    } else {
+                        state[STATE_AUTO_UPDATE][STATE_AUTO_UPDATE_IGNORE] = ver;
+                    }
+                    appState->Commit();
+                } catch (...) {
+                    LOG(Logger::LevelError, L"Failed to write ignored version");
+                }
+                break;
+            }
+            }
+        }
+        RemoveAutoUpdateNotification();
+        break;
+    }
+}
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case UM_MIC_CMD:
         switch (wParam) {
@@ -750,7 +876,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             hotKeyInfo.SetValue(0);
         }
         LOG(Logger::Level::LevelDebug, L"Show notification from WM_CREATE");
-        ShowNotification(silentMode);
+        ShowMainNotification(silentMode);
 
         // Check for updates on startup.
         if(autoCheckForUpdates) {
@@ -772,51 +898,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case MicCtrl::WM_MUTED_STATE_CHANGED:
 		mutedStatedChangedDebouncer.Emit();
         return 0;
-    case UM_NOTIFY: {
+    case UM_MAIN_NOTIFICATION_NOTIFY:
         // Note that NOTIFYICON_VERSION_4 is used.
-        const auto event = LOWORD(lParam);
-        switch (event) {
-        case WM_CONTEXTMENU: {
-            SetForegroundWindow(hWnd);
-            if (!IsWindowEnabled(mainWindow)) {
-                // Has modal dialog open, do not show menu.
-                return 0;
-            }
-            POINT pt = { 0 };
-            GetCursorPos(&pt);
-            UINT_PTR cmd = TrackPopupMenu(popupMenu,
-                TPM_RETURNCMD | GetSystemMetrics(SM_MENUDROPALIGNMENT),
-                pt.x, pt.y,
-                0,
-                hWnd, NULL);
-            if (cmd != 0) {
-                ProcessNotifyMenuCmd(hWnd, cmd);
-            }
-            break;
-        }
-        case NIN_SELECT:
-            // fallthorugh
-        case NIN_KEYSELECT:
-            SetForegroundWindow(hWnd);
-            ToggleMuted();
-            break;
-        }
+        ProcessMainNotificationEvent(hWnd, LOWORD(lParam));
         return 0;
-    }
-    case UM_UPDATE_CHECK_DONE:
+    case UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY:
+        // Note that NOTIFYICON_VERSION_4 is used.
+        ProcessManualUpdateNotificationEvent(hWnd, LOWORD(lParam));
+        return 0;
+    case UM_AUTO_UPDATE_NOTIFICATION_NOTIFY:
+        // Note that NOTIFYICON_VERSION_4 is used.
+        ProcessAutoUpdateNotificationEvent(hWnd, LOWORD(lParam));
+        return 0;
+    case UM_MANUAL_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
                 if (remote > current) {
                     // New version available.
-                    auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_UPDATE_OR_NOT);
-                    if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                        if (!NavigateURL(url.c_str())) {
-                            LOG_LAST_ERROR();
-                        }
-                    }
+                    availableUpdate.emplace(remote, url);
                 } else {
-                    MessageBoxW(mainWindow, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+                    availableUpdate.reset();
                 }
+                ShowManualUpdateNotification();
             }, 
             [] { LOG(Logger::LevelDebug, L"Update pending"); },
             []{
@@ -827,50 +930,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_AUTO_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
-                if (remote <= current) {
-                    return;
-                }
-                // New version available.
-                std::unique_ptr<WSemVer> ignored;
-                try {
-                    // Parse ignored version.
-                    const auto autoUpdate = appState->GetState().at(STATE_AUTO_UPDATE);
-                    const std::string ignoredVer = autoUpdate.at(STATE_AUTO_UPDATE_IGNORE);
-                    ignored = parseSemVer(FromUTF8(reinterpret_cast<const char8_t*>(ignoredVer.data()), ignoredVer.length()));
-                } catch (...) {
-                    LOG(Logger::LevelDebug, L"Failed to read ignored version. Malformed data? Ignore");
-                }
-                if (ignored && *ignored >= remote) {
-                    return; // Ignore this version.
-                }
-                auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
-                switch (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
-                case IDYES:
-                    if (!NavigateURL(url.c_str())) {
-                        LOG_LAST_ERROR();
+                if (remote > current) {
+                    // New version available.
+                    std::unique_ptr<WSemVer> ignored;
+                    try {
+                        // Parse ignored version.
+                        const auto autoUpdate = appState->GetState().at(STATE_AUTO_UPDATE);
+                        const std::string ignoredVer = autoUpdate.at(STATE_AUTO_UPDATE_IGNORE);
+                        ignored = parseSemVer(FromUTF8(reinterpret_cast<const char8_t*>(ignoredVer.data()), ignoredVer.length()));
+                    } catch (...) {
+                        LOG(Logger::LevelDebug, L"Failed to read ignored version. Malformed data? Ignore");
                     }
-                    break;
-                case IDCANCEL: {
-                        try {
-                            // Save ignored version
-                            auto& state = appState->GetState();
-                            const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
-                            const auto u8ver = ToUTF8(remote.str());
-                            const std::string ver(reinterpret_cast<const char*>(u8ver.data()), u8ver.length());
-                            if (autoUpdate != state.end()) {
-                                if (!(*autoUpdate).is_object()) {
-                                    (*autoUpdate) = json::object();
-                                }
-                                (*autoUpdate)[STATE_AUTO_UPDATE_IGNORE] = ver;
-                            } else {
-                                state[STATE_AUTO_UPDATE][STATE_AUTO_UPDATE_IGNORE] = ver;
-                            }
-                            appState->Commit();
-                        } catch (...) {
-                            LOG(Logger::LevelError, L"Failed to write ignored version");
-                        }
-                        break;
+                    if (ignored && *ignored >= remote) {
+                        availableUpdate.reset();
+                        return; // Ignore this version.
                     }
+                    availableUpdate.emplace(remote, url);
+                    ShowAutoUpdateNotification();
+                } else {
+                    availableUpdate.reset();
                 }
             },
             [] { LOG(Logger::LevelDebug, L"Update pending when auto update"); },
@@ -885,14 +963,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_DESTROY:
+        removeNoUpdateNotificationDebouncer.Cancel();
         autoUpdateStartupDebouncer.Cancel();
         CancelUpdateCheck();
         WriteConfig();
         deviceStateChangedDebouncer.Cancel();
         defaultDeviceChangedDebouncer.Cancel();
         mutedStatedChangedDebouncer.Cancel();
-        shellNotifyIconRetryDebouncer.Cancel();
-        RemoveNotification();
+        mainNotifyIconRetryDebouncer.Cancel();
+        RemoveMainNotification();
+        RemoveManualUpdateNotification();
+        RemoveAutoUpdateNotification();
         UnregisterHotKey(hWnd, HOTKEY_ID);
         PostQuitMessage(0);
         break;
@@ -946,7 +1027,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         // When your taskbar application receives this message, it should assume that 
         // any taskbar icons it added have been removed and add them again. 
 
-        ShowNotification(true); // silently add the notification icon.
+        ShowMainNotification(true); // silently add the notification icon.
         LOG(Logger::LevelDebug, L"Add notification icon after the taskbar is created");
         return 0;
     }
@@ -996,7 +1077,7 @@ INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                     SetFocus(hotKeyCtrl);
                     break;
                 }
-				UpdateNotification();
+				UpdateMainNotification();
                 WriteConfig();
             }
             EndDialog(hDlg, 0);
@@ -1140,19 +1221,14 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     return (INT_PTR)FALSE;
 }
 
-// ID of Shell_NotifyIconW.
-static const UINT NOTIFY_ID = 1;
-
 // Whether the last notification is shown in silent mode.
 // Used for retrying.
-static bool lastShowNotificationSilent = false; 
-
-void ShowNotificationImpl(bool silent);
+static bool lastShowMainNotificationSilent = false; 
 
 // Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
 static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 5000;
 
-static TimeDebouncer<>shellNotifyIconRetryDebouncer(
+static TimeDebouncer<>mainNotifyIconRetryDebouncer(
 	SHELL_NOTIFY_ICON_RETRY_INTERVAL, 
 	[]() {
 		LOG(Logger::LevelDebug, L"Retry showing notification icon");
@@ -1160,50 +1236,20 @@ static TimeDebouncer<>shellNotifyIconRetryDebouncer(
 		if (simulateAddNotifIconFailure) {
 			simulateAddNotifIconFailure = false; // Let the retry succeed.
 		}
-		ShowNotificationImpl(lastShowNotificationSilent);
+		ShowMainNotification(lastShowMainNotificationSilent);
 		if (simulatedFailure) {
 			simulateAddNotifIconFailure = true; // Restore the simulated failure.
 		}
 	},
 	lastErrorLogger);
 
-// ShowNotificationImpl adds or modifies the notification icon and tooltip based on the current microphone state in system tray.
-// If silent is false, a balloon notification is shown displaying the usage message.
-void ShowNotificationImpl(bool silent) {
-    shellNotifyIconRetryDebouncer.Cancel();
-
-    lastShowNotificationSilent = silent;
-
+void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.uVersion = NOTIFYICON_VERSION_4;
     data.hWnd = mainWindow;
-    data.uID = NOTIFY_ID;
-    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-    if (!silent) {
-        data.uFlags |= NIF_INFO;
-        StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
-        StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + VERSION).c_str());
-        data.dwInfoFlags = NIIF_INFO;
-    }
-    data.uCallbackMessage = UM_NOTIFY;
-    const auto state = micCtrl->GetMuteState();
-    data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
-        state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED : 
-        state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
-    std::wstring version = VERSION;
-    if (processElevated) {
-		version += L" *"; // Indicates running with elevated privilege.
-    }
-    if (hotKeyInfo.Empty()) {
-        wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
-            strRes->Load(IDS_NOTIFICATION_TIP).c_str(), 
-            version.c_str());
-    } else {
-        wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], 
-            strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(), 
-            version.c_str(), hotKeyInfo.GetStr().c_str());
-    }
+    data.uID = id;
+    onPrepareData(data);
 
     // Try to modify.
     bool succeeded = false;
@@ -1217,38 +1263,125 @@ void ShowNotificationImpl(bool silent) {
             succeeded = Shell_NotifyIconW(NIM_MODIFY, &data);
         }
     }
-
     if (!succeeded) {
         LOG_LAST_ERROR();
-    } else if (simulateAddNotifIconFailure) {
-        LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
-        RemoveNotification();
-        succeeded = false;
-    }
-
-    if (!succeeded) {
-        // Retry.
-        shellNotifyIconRetryDebouncer.Emit();
+        onFailed();
     }
 }
 
-void ShowNotification(bool silent) {
-    ShowNotificationImpl(silent);
+void ShowManualUpdateNotification() {
+    RemoveAutoUpdateNotification(); // Mutual exclusion
+    removeNoUpdateNotificationDebouncer.Cancel();
+    ShowNotification(MANUAL_UPDATE_NOTIFICATION_ID, 
+        [](NOTIFYICONDATAW& data) {
+            data.uFlags = NIF_MESSAGE | NIF_ICON;
+            data.uCallbackMessage = UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY;
+            // TODO: change to a "update available" icon.
+            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_MICROPHONE));
+            data.uFlags |= NIF_INFO;
+            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + strRes->Load(IDS_UPDATE_TITLE)).c_str());
+            data.dwInfoFlags = NIIF_INFO;
+            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(availableUpdate ? IDS_UPDATE_AVAILABLE_TITLE : IDS_NO_UPDATE).c_str());
+            if (!availableUpdate) {
+                removeNoUpdateNotificationDebouncer.Emit();
+            }
+        },
+        []() {
+            // Transitional notificaton. No need to retry.
+        }
+    );
 }
 
-void UpdateNotification() {
-    ShowNotificationImpl(true);
+void RemoveManualUpdateNotification() {
+    RemoveNotification(MANUAL_UPDATE_NOTIFICATION_ID);
 }
 
-void RemoveNotification() {
+void ShowAutoUpdateNotification() {
+    RemoveManualUpdateNotification(); // Mutual exclusion
+    ShowNotification(AUTO_UPDATE_NOTIFICATION_ID,
+        [](NOTIFYICONDATAW& data) {
+            data.uFlags = NIF_MESSAGE | NIF_ICON;
+            data.uCallbackMessage = UM_AUTO_UPDATE_NOTIFICATION_NOTIFY;
+            // TODO: change to a "update available" icon.
+            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_MICROPHONE));
+            data.uFlags |= NIF_INFO;
+            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + strRes->Load(IDS_UPDATE_TITLE)).c_str());
+            data.dwInfoFlags = NIIF_INFO;
+            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
+        },
+        []() {
+            // Transitional notificaton. No need to retry.
+        }
+    );
+}
+void RemoveAutoUpdateNotification() {
+    RemoveNotification(AUTO_UPDATE_NOTIFICATION_ID);
+}
+
+void ShowMainNotification(bool silent) {
+    bool failed = false;
+    ShowNotification(MAIN_NOTIFICATION_ID,
+        [silent](NOTIFYICONDATAW& data) {
+            mainNotifyIconRetryDebouncer.Cancel();
+            lastShowMainNotificationSilent = silent;
+
+            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+            if (!silent) {
+                data.uFlags |= NIF_INFO;
+                StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_RUNNING_IN_SYSTEM_TRAY).c_str());
+                StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), (strRes->Load(IDS_APP_TITLE) + L" " + VERSION).c_str());
+                data.dwInfoFlags = NIIF_INFO;
+            }
+            data.uCallbackMessage = UM_MAIN_NOTIFICATION_NOTIFY;
+            const auto state = micCtrl->GetMuteState();
+            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
+                state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED :
+                state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
+            std::wstring version = VERSION;
+            if (processElevated) {
+                version += L" *"; // Indicates running with elevated privilege.
+            }
+            if (hotKeyInfo.Empty()) {
+                wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0],
+                    strRes->Load(IDS_NOTIFICATION_TIP).c_str(),
+                    version.c_str());
+            } else {
+                wnsprintfW(data.szTip, sizeof data.szTip / sizeof data.szTip[0],
+                    strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(),
+                    version.c_str(), hotKeyInfo.GetStr().c_str());
+            }
+        }, 
+        [&failed] {
+            failed = true;
+            // Retry.
+            mainNotifyIconRetryDebouncer.Emit();
+        });
+
+        if (!failed && simulateAddNotifIconFailure) {
+            LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
+            RemoveMainNotification();
+            // Retry.
+            mainNotifyIconRetryDebouncer.Emit();
+        }
+}
+
+void UpdateMainNotification() {
+    ShowMainNotification(true);
+}
+
+void RemoveNotification(UINT id) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.hWnd = mainWindow;
-    data.uID = NOTIFY_ID;
+    data.uID = id;
     if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
         LOG_LAST_ERROR();
         return;
     }
+}
+
+void RemoveMainNotification() {
+    RemoveNotification(MAIN_NOTIFICATION_ID);
 }
 
 // ini section name.

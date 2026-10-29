@@ -24,6 +24,7 @@
 #define IDS_RUN_AS_ADMIN_OR_NOT         119
 #define IDS_CHANGE_SETTING_FAILED       120
 #define IDS_AUTO_UPDATE_OR_NOT          121
+#define IDS_UPDATE_TITLE                122
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
 #define IDI_NO_MICROPHONE               142
@@ -32,6 +33,7 @@
 #define IDS_NO_UPDATE                   156
 #define IDS_UPDATE_AVAILABLE            157
 #define IDR_HELP_MENU                   158
+#define IDS_UPDATE_AVAILABLE_TITLE      158
 #define IDS_UPDATE_CHECK_FAILED         159
 #define IDR_NOTIF_MENU                  159
 #define IDS_UPDATE_OR_NOT               160
@@ -68,7 +70,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        163
+#define _APS_NEXT_RESOURCE_VALUE        164
 #define _APS_NEXT_COMMAND_VALUE         32822
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           110
