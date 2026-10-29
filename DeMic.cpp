@@ -14,7 +14,6 @@
 #include <windowsx.h>
 #include <shlobj.h>
 #include <filesystem>
-#include <chrono>
 
 #include "Plugin.h"
 #include "TimeDebouncer.h"
@@ -27,8 +26,8 @@
 #include "JSONState.h"
 
 
-static const auto STATE_LAST_UPDATE_CHECK_TIME = "LastUpdateCheckTime";
-constexpr auto AUTO_UPDATE_CHECK_INTERVAL = std::chrono::hours(2 * 24); // 2 days interval for automatic update check.
+static const auto STATE_AUTO_UPDATE = "AutoUpdate";
+static const auto STATE_AUTO_UPDATE_IGNORE = "IgnoreVersion";
 
 JSONState* appState = NULL;
 
@@ -707,15 +706,19 @@ static void prepareTaskbarCreatedNotification() {
     }
 }
 
-static std::chrono::hours NowSinceEpoch() {
-    const auto now = std::chrono::system_clock::now();
-    return std::chrono::floor<std::chrono::hours>(now.time_since_epoch());
-}
-
 static BOOL NavigateURL(const wchar_t* url) {
     HINSTANCE h = ShellExecuteW(NULL, L"open", url, NULL, NULL, SW_SHOWNORMAL);
     return ((INT_PTR)h > 32);
 }
+
+constexpr UINT AUTO_UPDATE_DELAY = 30 * 1000; // 30s.
+static TimeDebouncer<> autoUpdateStartupDebouncer(AUTO_UPDATE_DELAY, [] {
+    if (!autoCheckForUpdates) {
+        return;
+    }
+    LOG(Logger::LevelDebug, L"Check for updates automatically");
+    CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
+}, lastErrorLogger);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -749,20 +752,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         LOG(Logger::Level::LevelDebug, L"Show notification from WM_CREATE");
         ShowNotification(silentMode);
 
+        // Check for updates on startup.
         if(autoCheckForUpdates) {
-            const auto now = NowSinceEpoch();
-            std::chrono::hours lastCheck{ 0 };
-            const auto& state = appState->GetState();
-            if (state.find(STATE_LAST_UPDATE_CHECK_TIME) != state.end()) {
-                try {
-                    lastCheck = std::chrono::hours(state[STATE_LAST_UPDATE_CHECK_TIME].get<long long>());
-                } catch (...) {}
-            }
-
-            if (now - lastCheck >= AUTO_UPDATE_CHECK_INTERVAL) {
-                LOG(Logger::LevelDebug, std::format(L"Auto check for updates. Last check: {}h, now: {}h", lastCheck.count(), now.count()).c_str());
-                CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
-            }
+            LOG(Logger::LevelDebug, L"Schedule auto update checking on startup");
+            autoUpdateStartupDebouncer.Emit();
         }
         break;
     case WM_HOTKEY:
@@ -815,13 +808,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 } else {
                     MessageBoxW(mainWindow, strRes->Load(IDS_NO_UPDATE).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
                 }
-                try {
-                    appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
-                    appState->Commit();
-                } catch (...) {
-                }
             }, 
-            []{},
+            [] { LOG(Logger::LevelDebug, L"Update pending"); },
             []{
                 MessageBoxW(mainWindow, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
             }
@@ -830,25 +818,54 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case UM_AUTO_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
-                if (remote > current) {
-                    // New version available.
-                    auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_UPDATE_OR_NOT);
-                    if (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                        if (!NavigateURL(url.c_str())) {
-                            LOG_LAST_ERROR();
+                if (remote <= current) {
+                    return;
+                }
+                // New version available.
+                std::unique_ptr<WSemVer> ignored;
+                try {
+                    // Parse ignored version.
+                    const auto autoUpdate = appState->GetState().at(STATE_AUTO_UPDATE);
+                    const std::string ignoredVer = autoUpdate.at(STATE_AUTO_UPDATE_IGNORE);
+                    ignored = parseSemVer(FromUTF8(reinterpret_cast<const char8_t*>(ignoredVer.data()), ignoredVer.length()));
+                } catch (...) {
+                    LOG(Logger::LevelDebug, L"Failed to read ignored version. Malformed data? Ignore");
+                }
+                if (ignored && *ignored >= remote) {
+                    return; // Ignore this version.
+                }
+                auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + remote.str() + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
+                switch (MessageBoxW(mainWindow, message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
+                case IDYES:
+                    if (!NavigateURL(url.c_str())) {
+                        LOG_LAST_ERROR();
+                    }
+                    break;
+                case IDCANCEL: {
+                        try {
+                            // Save ignored version
+                            auto& state = appState->GetState();
+                            const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
+                            const auto u8ver = ToUTF8(remote.str());
+                            const std::string ver(reinterpret_cast<const char*>(u8ver.data()), u8ver.length());
+                            if (autoUpdate != state.end()) {
+                                if (!(*autoUpdate).is_object()) {
+                                    (*autoUpdate) = json::object();
+                                }
+                                (*autoUpdate)[STATE_AUTO_UPDATE_IGNORE] = ver;
+                            } else {
+                                state[STATE_AUTO_UPDATE][STATE_AUTO_UPDATE_IGNORE] = ver;
+                            }
+                            appState->Commit();
+                        } catch (...) {
+                            LOG(Logger::LevelError, L"Failed to write ignored version");
                         }
+                        break;
                     }
                 }
-                try {
-                    appState->GetState()[STATE_LAST_UPDATE_CHECK_TIME] = NowSinceEpoch().count();
-                    appState->Commit();
-                } catch (...) {
-                }
             },
-            [] {},
-            [] {
-                MessageBoxW(mainWindow, strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
-            }
+            [] { LOG(Logger::LevelDebug, L"Update pending when auto update"); },
+            [] { LOG(Logger::LevelWarn, L"Auto update failed"); }
         );
         return 0;
     case WM_PAINT: {
@@ -859,6 +876,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_DESTROY:
+        autoUpdateStartupDebouncer.Cancel();
         CancelUpdateCheck();
         WriteConfig();
         deviceStateChangedDebouncer.Cancel();

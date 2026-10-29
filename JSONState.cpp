@@ -16,6 +16,10 @@ JSONState::JSONState(const std::wstring& filePath) : filePath(filePath) {
 }
 
 void JSONState::Save() {
+	if (state.is_null()) {
+		// Nothing has been written. Do not create an empty (null) state file.
+		return;
+	}
 	std::ofstream out(filePath);
 	if(!out) {
 		LOG_ERROR(std::format(L"Failed to open JSON file for writing: {}", filePath).c_str());
