@@ -35,7 +35,7 @@ enum {
 
 static const auto STATE_AUTO_UPDATE = "AutoUpdate";
 static const auto STATE_AUTO_UPDATE_IGNORE = "IgnoreVersion";
-static const auto STATE_AUTO_UPDATE_LAST_SUCCESS_TIME = "LastSuccess";
+static const auto STATE_AUTO_UPDATE_LAST_SUCCESS_TIME = "LastSuccessTime";
 
 JSONState* appState = NULL;
 
