@@ -35,6 +35,7 @@ enum {
 
 static const auto STATE_AUTO_UPDATE = "AutoUpdate";
 static const auto STATE_AUTO_UPDATE_IGNORE = "IgnoreVersion";
+static const auto STATE_AUTO_UPDATE_LAST_SUCCESS_TIME = "LastSuccess";
 
 JSONState* appState = NULL;
 
@@ -738,14 +739,46 @@ static BOOL NavigateURL(const wchar_t* url) {
     return ((INT_PTR)h > 32);
 }
 
+static std::chrono::hours HoursSinceEpoch(const std::chrono::system_clock::time_point& t) {
+    return std::chrono::duration_cast<std::chrono::hours>(t.time_since_epoch());
+}
+
+static std::chrono::system_clock::time_point TimePointSinceEpoch(const std::chrono::hours h) {
+    return std::chrono::system_clock::time_point(h);
+}
+
 constexpr UINT AUTO_UPDATE_DELAY = 30 * 1000; // 30s.
-static TimeDebouncer<> autoUpdateStartupDebouncer(AUTO_UPDATE_DELAY, [] {
+constexpr std::chrono::hours MIN_AUTO_UPDATE_INTERVAL = std::chrono::hours(12); // 12h
+
+static void PerformAutoUpdateChecking() {
     if (!autoCheckForUpdates) {
         return;
     }
+    // Time throttling.
+    // Only applies to auto-updates themselves and is not affected by manual updates.
+    using namespace std::chrono;
+    const auto now = system_clock::now();
+    const auto& state = appState->GetState();
+    const auto lastSuccessTime = state.find(STATE_AUTO_UPDATE_LAST_SUCCESS_TIME);
+    if (lastSuccessTime != state.end() && lastSuccessTime->is_number_integer() && lastSuccessTime->is_number_unsigned()) {
+        const uint64_t h = *lastSuccessTime;
+        constexpr uint64_t MAX_HOURS_SINCE_EPOCH = sys_time<hours>(sys_days(year_month_day{ year(3000), January, day(1) })).time_since_epoch().count(); // January 1st, 3000
+        if (h > 0 && h < MAX_HOURS_SINCE_EPOCH) {
+            const auto interval = now - TimePointSinceEpoch(hours(h));
+            if (interval >= hours(0) && interval < MIN_AUTO_UPDATE_INTERVAL) {
+                LOG(Logger::LevelDebug, 
+                    std::format(L"Auto update checking canceled due to time throttling. Interval={:.2f}h Min={}h", 
+                        duration<float, hours::period>(interval).count(),
+                        MIN_AUTO_UPDATE_INTERVAL.count()
+                    ).c_str());
+                return; // Too frequent.
+            }
+        }        
+    }
     LOG(Logger::LevelDebug, L"Check for updates automatically");
     CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
-}, lastErrorLogger);
+}
+static TimeDebouncer<> autoUpdateStartupDebouncer(AUTO_UPDATE_DELAY, PerformAutoUpdateChecking, lastErrorLogger);
 
 static void ProcessMainNotificationEvent(HWND hwnd, WORD event) {
     switch (event) {
@@ -891,7 +924,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // Check for updates on startup.
         if(autoCheckForUpdates) {
             LOG(Logger::LevelDebug, L"Schedule auto update checking on startup");
-            autoUpdateStartupDebouncer.Emit();
+            if (!simulateVersionForUpdateCheck.empty()) {
+                PerformAutoUpdateChecking(); // No delay when debugging update checking.
+            } else {
+                autoUpdateStartupDebouncer.Emit();
+            }
         }
         break;
     case WM_HOTKEY:
@@ -940,6 +977,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case UM_AUTO_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
+
+                // Save last success time for time throttling.
+                auto& state = appState->GetState();
+                if (!state.is_object()) {
+                    state = json::object();
+                }
+                const auto now = std::chrono::system_clock::now();
+                state[STATE_AUTO_UPDATE_LAST_SUCCESS_TIME] = static_cast<uint64_t>(HoursSinceEpoch(now).count());
+                appState->Commit();
+
                 if (remote > current) {
                     // New version available.
                     std::unique_ptr<WSemVer> ignored;
