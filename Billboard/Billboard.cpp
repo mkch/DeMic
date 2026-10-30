@@ -62,9 +62,9 @@ void ReadConfig() {
 	}
 	try {
 		const auto config = json::parse(in);
-		alwaysOnTop = config[CONFIG_ALWAYS_ON_TOP];
-		const auto lastRect = config[CONFIG_LAST_RECT];
-		lastWindowRect = {lastRect[CONFIG_LEFT], lastRect[CONFIG_TOP], lastRect[CONFIG_RIGHT], lastRect[CONFIG_BOTTOM]};
+		alwaysOnTop = config.at(CONFIG_ALWAYS_ON_TOP);
+		const auto lastRect = config.at(CONFIG_LAST_RECT);
+		lastWindowRect = {lastRect.at(CONFIG_LEFT), lastRect.at(CONFIG_TOP), lastRect.at(CONFIG_RIGHT), lastRect.at(CONFIG_BOTTOM)};
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
 		ShowError(host, state, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
@@ -135,7 +135,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
 	DEMIC_CURRENT_SDK_VERSION,
 	NULL,			/*Name*/
-	{1, 5},			/*Version*/
+	{1, 6},			/*Version*/
 	OnLoaded,		/*OnLoaded*/
 	OnMenuItemCmd,	/*OnMenuItemCmd*/
 	OnUnload,		/*OnUnload*/

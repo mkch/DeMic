@@ -131,10 +131,10 @@ void InitHTTPServer() {
 
 
     auto stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_STRINGS__zh_CN));
-    Strings__zh_CN = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size()))["resource"];
+    Strings__zh_CN = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size())).at("resource");
 
     stringRes = LoadModuleResource<char>(hInstance, RT_HTML, MAKEINTRESOURCEW(IDR_SERVER_STRINGS__en_US));
-    Strings__en_US = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size()))["resource"];
+    Strings__en_US = nlohmann::json::parse(std::string_view((const char*)stringRes.data(), stringRes.size())).at("resource");
 }
 
 // handleHtppIfModifiedSince checks the "If-Modified-Since" header and

@@ -137,8 +137,8 @@ void ReadConfig() {
             devices = &profile; // profile is an array of devices.
         }
         std::for_each(devices->begin(), devices->end(), [](const json& dev) {
-            auto id = dev[CONFIG_ID].get<std::string>();
-            auto name = dev[CONFIG_NAME].get<std::string>();
+            auto id = dev.at(CONFIG_ID).get<std::string>();
+            auto name = dev.at(CONFIG_NAME).get<std::string>();
             auto u8Id = std::u8string_view((const char8_t*)id.data(), id.length());
 			auto u8Name = std::u8string_view((const char8_t*)name.data(), name.length());
             selectedDev[FromUTF8(u8Id)] = FromUTF8(u8Name);
@@ -347,7 +347,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,	        /*Name*/
-    {1, 5},			/*Version*/
+    {1, 6},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
 };

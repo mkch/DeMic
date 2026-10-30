@@ -63,22 +63,22 @@ void ReadConfig() {
     try {
         using json = nlohmann::json;
         const auto configJson = json::parse(in);
-        const std::string type = configJson["Type"];
+        const std::string type = configJson.at("Type");
         if (type == "Toggle") {
            config.Type = TYPE_TOGGLE;
-		   config.Hotkey = configJson["Hotkey"];
+		   config.Hotkey = configJson.at("Hotkey");
            config.Hotkey2 = 0;
         } else if(type == "OnOff") {
             config.Type = TYPE_ON_OFF;
-            config.Hotkey = configJson["HotkeyOn"];
-            config.Hotkey2 = configJson["HotkeyOff"];;
+            config.Hotkey = configJson.at("HotkeyOn");
+            config.Hotkey2 = configJson.at("HotkeyOff");;
         } else if(type == "PTT") {
             config.Type = TYPE_PTT;
-            config.Hotkey = configJson["Hotkey"];
+            config.Hotkey = configJson.at("Hotkey");
             config.Hotkey2 = 0;
         } else if (type == "PTM") {
             config.Type = TYPE_PTM;
-            config.Hotkey = configJson["Hotkey"];
+            config.Hotkey = configJson.at("Hotkey");
             config.Hotkey2 = 0;
         } else {
             config.Type = TYPE_NONE;
@@ -198,7 +198,7 @@ static void OnMenuItemCmd(UINT id) {
 static DeMic_PluginInfo plugin = {
     DEMIC_CURRENT_SDK_VERSION,
     NULL,			/*Name*/
-    {1, 0},			/*Version*/
+    {1, 1},			/*Version*/
     OnLoaded,		/*OnLoaded*/
     OnMenuItemCmd,	/*OnMenuItemCmd*/
     OnUnload,		/*OnUnload*/
