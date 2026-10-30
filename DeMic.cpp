@@ -1461,7 +1461,7 @@ static void RemoveNotification(UINT id) {
     data.hWnd = mainWindow;
     data.uID = id;
     if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
-        LOG(Logger::LevelWarn, L"Failed to remove notification");
+        LOG(Logger::LevelDebug, L"Failed to remove notification");
         return;
     }
 }
