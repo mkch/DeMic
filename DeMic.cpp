@@ -759,21 +759,24 @@ static void PerformAutoUpdateChecking() {
     using namespace std::chrono;
     const auto now = system_clock::now();
     const auto& state = appState->GetState();
-    const auto lastSuccessTime = state.find(STATE_AUTO_UPDATE_LAST_SUCCESS_TIME);
-    if (lastSuccessTime != state.end() && lastSuccessTime->is_number_integer() && lastSuccessTime->is_number_unsigned()) {
-        const uint64_t h = *lastSuccessTime;
-        constexpr uint64_t MAX_HOURS_SINCE_EPOCH = sys_time<hours>(sys_days(year_month_day{ year(3000), January, day(1) })).time_since_epoch().count(); // January 1st, 3000
-        if (h > 0 && h < MAX_HOURS_SINCE_EPOCH) {
-            const auto interval = now - TimePointSinceEpoch(hours(h));
-            if (interval >= hours(0) && interval < MIN_AUTO_UPDATE_INTERVAL) {
-                LOG(Logger::LevelDebug, 
-                    std::format(L"Auto update checking canceled due to time throttling. Interval={:.2f}h Min={}h", 
-                        duration<float, hours::period>(interval).count(),
-                        MIN_AUTO_UPDATE_INTERVAL.count()
-                    ).c_str());
-                return; // Too frequent.
+    const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
+    if (autoUpdate != state.end() && autoUpdate->is_object()) {
+        const auto lastSuccessTime = autoUpdate->find(STATE_AUTO_UPDATE_LAST_SUCCESS_TIME);
+        if (lastSuccessTime != autoUpdate->end() && lastSuccessTime->is_number_integer() && lastSuccessTime->is_number_unsigned()) {
+            const uint64_t h = *lastSuccessTime;
+            constexpr uint64_t MAX_HOURS_SINCE_EPOCH = sys_time<hours>(sys_days(year_month_day{ year(3000), January, day(1) })).time_since_epoch().count(); // January 1st, 3000
+            if (h > 0 && h < MAX_HOURS_SINCE_EPOCH) {
+                const auto interval = now - TimePointSinceEpoch(hours(h));
+                if (interval >= hours(0) && interval < MIN_AUTO_UPDATE_INTERVAL) {
+                    LOG(Logger::LevelDebug,
+                        std::format(L"Auto update checking canceled due to time throttling. Interval={:.2f}h Min={}h",
+                            duration<float, hours::period>(interval).count(),
+                            MIN_AUTO_UPDATE_INTERVAL.count()
+                        ).c_str());
+                    return; // Too frequent.
+                }
             }
-        }        
+        }
     }
     LOG(Logger::LevelDebug, L"Check for updates automatically");
     CheckForUpdate(mainWindow, UM_AUTO_UPDATE_CHECK_DONE);
@@ -864,20 +867,16 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
                 }
                 break;
             case IDCANCEL: {
+                // Save ignored version.
                 try {
-                    // Save ignored version
                     auto& state = appState->GetState();
-                    const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
+                    auto& autoUpdate = state[STATE_AUTO_UPDATE];
+                    if (!autoUpdate.is_object()) {
+                        autoUpdate = json::object();
+                    }
                     const auto u8ver = ToUTF8(version);
                     const std::string ver(reinterpret_cast<const char*>(u8ver.data()), u8ver.length());
-                    if (autoUpdate != state.end()) {
-                        if (!(*autoUpdate).is_object()) {
-                            (*autoUpdate) = json::object();
-                        }
-                        (*autoUpdate)[STATE_AUTO_UPDATE_IGNORE] = ver;
-                    } else {
-                        state[STATE_AUTO_UPDATE][STATE_AUTO_UPDATE_IGNORE] = ver;
-                    }
+                    autoUpdate[STATE_AUTO_UPDATE_IGNORE] = ver;
                     appState->Commit();
                 } catch (...) {
                     LOG(Logger::LevelError, L"Failed to write ignored version");
@@ -979,24 +978,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
 
                 // Save last success time for time throttling.
-                auto& state = appState->GetState();
-                if (!state.is_object()) {
-                    state = json::object();
+                try {
+                    auto& state = appState->GetState();
+                    auto& autoUpdate = state[STATE_AUTO_UPDATE];
+                    if (!autoUpdate.is_object()) {
+                        autoUpdate = json::object();
+                    }
+                    autoUpdate[STATE_AUTO_UPDATE_LAST_SUCCESS_TIME] =
+                        static_cast<uint64_t>(HoursSinceEpoch(std::chrono::system_clock::now()).count());
+                    appState->Commit();
+                } catch (...) {
+                    LOG(Logger::LevelError, L"Failed to write auto update last success time");
                 }
-                const auto now = std::chrono::system_clock::now();
-                state[STATE_AUTO_UPDATE_LAST_SUCCESS_TIME] = static_cast<uint64_t>(HoursSinceEpoch(now).count());
-                appState->Commit();
 
                 if (remote > current) {
                     // New version available.
                     std::unique_ptr<WSemVer> ignored;
-                    try {
-                        // Parse ignored version.
-                        const auto autoUpdate = appState->GetState().at(STATE_AUTO_UPDATE);
-                        const std::string ignoredVer = autoUpdate.at(STATE_AUTO_UPDATE_IGNORE);
-                        ignored = parseSemVer(FromUTF8(reinterpret_cast<const char8_t*>(ignoredVer.data()), ignoredVer.length()));
-                    } catch (...) {
-                        LOG(Logger::LevelDebug, L"Failed to read ignored version. Malformed data? Ignore");
+                    const auto& state = appState->GetState();
+                    const auto autoUpdate = state.find(STATE_AUTO_UPDATE);
+                    if (autoUpdate != state.end() && autoUpdate->is_object()) {
+                        const auto ignoreVer = autoUpdate->find(STATE_AUTO_UPDATE_IGNORE);
+                        if (ignoreVer != autoUpdate->end()) {
+                            try {
+                                // Parse ignored version.
+                                const std::string ignoredVer = *ignoreVer;
+                                ignored = parseSemVer(FromUTF8(reinterpret_cast<const char8_t*>(ignoredVer.data()), ignoredVer.length()));
+                            } catch (...) {
+                                LOG(Logger::LevelDebug, L"Failed to read ignored version. Malformed data? Ignore");
+                            }
+                        }
                     }
                     if (ignored && *ignored >= remote) {
                         availableUpdate.reset();
