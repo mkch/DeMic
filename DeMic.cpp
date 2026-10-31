@@ -127,7 +127,7 @@ std::wstring cmdLineArgs; // The command line args to use when starting the firs
 std::wstring cmdLineArgs2; // The command line args to use when starting this exe while already running. 
 
 Logger::Level logLevel = Logger::LevelError; // The log level for logging.
-BOOL simulateNoMicphone = FALSE; // Simulate no microphone for testing.
+BOOL simulateNoMicrophone = FALSE; // Simulate no microphone for testing.
 std::wstring preferredUILanguages; // Comma separated list or empty.
 bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
 bool simulateAddNotifIconFailure = false; // Simulate failure of adding notification icon for testing.
@@ -242,7 +242,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     LocalFree(argv);
 
 
-    micCtrl = std::make_unique<MicCtrl>(simulateNoMicphone);
+    micCtrl = std::make_unique<MicCtrl>(simulateNoMicrophone);
 
     micCtrl->SetDevFilter(devFilter);
     
@@ -1544,7 +1544,7 @@ void ReadConfig() {
 
     logLevel = (Logger::Level)GetPrivateProfileIntW(CONFIG_LOG, CONFIG_LOG_LEVEL, Logger::LevelError, configFilePath.c_str());
 
-	simulateNoMicphone =  GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_NO_MICROPHONE, 0, configFilePath.c_str()) == 1;
+	simulateNoMicrophone =  GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_NO_MICROPHONE, 0, configFilePath.c_str()) == 1;
 
 	buf[0] = 0;
 	GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_PREFERRED_UI_LANGUAGES, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
