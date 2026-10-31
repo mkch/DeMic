@@ -8,22 +8,19 @@ The application icon is described as vector geometry in a 256 x 256 design space
     * a red "muted" slash drawn on top of the microphone.
 
 It also renders the tray notification icons.  They reuse the same microphone,
-stretched horizontally by TRAY_STRETCH and scaled so that it fills the canvas.
-The head ends on a cap that shares its centre with the cradle arc, which keeps
-the gap between the two even, and everything is outlined in black so that it
-stays readable on light desktop themes:
+widened horizontally by TRAY_STRETCH and scaled uniformly so that it fills the
+canvas, and outlined in black so that it stays readable on light desktop themes:
 
     microphone.ico          plain microphone
     microphone_muted.ico    microphone with a red slash
-    no_microphone.ico       microphone with a red question mark
+    no_microphone.ico       microphone with a red cross
     update_available.ico    microphone with a blue update badge
 
 Running this script rewrites:
 
-    icons/design/DeMic-<size>.png   one PNG per size of the application icon
-    DeMic.ico                       the icon resource used by DeMic.rc
-    icons/design/<name>-<size>.png  one PNG per size of every tray icon
-    <name>.ico                      the tray icon resources
+    app-logo.png   the 512 px application icon (solution root)
+    DeMic.ico     the icon resource used by DeMic.rc
+    <name>.ico    the tray icon resources
 
 Requires only the Python standard library.
 """
@@ -35,6 +32,7 @@ import zlib
 
 DESIGN = 256.0
 SIZES = (256, 128, 64, 48, 40, 32, 24, 20, 16)
+APP_LOGO_SIZE = 512
 
 WHITE = (255, 255, 255)
 SLASH_COLOR = (229, 72, 77)
@@ -44,23 +42,25 @@ BACKGROUND_TOP = (32, 52, 80)
 BACKGROUND_BOTTOM = (13, 24, 40)
 
 HEAD_CENTER_X = 128.0
-HEAD_RADIUS = 34.0
-HEAD_TOP = 25.5
-HEAD_BOTTOM = 144.0
-
 CRADLE_CENTER_X = 128.0
 CRADLE_CENTER_Y = 115.12
-CRADLE_OUTER_RADIUS = 60.79
-CRADLE_INNER_RADIUS = 42.29
+
+HEAD_RADIUS = 39.1
+HEAD_TOP = 25.5
+
+CRADLE_OUTER_RADIUS = 65.89
+CRADLE_INNER_RADIUS = 47.39
 CRADLE_MID_RADIUS = (CRADLE_OUTER_RADIUS + CRADLE_INNER_RADIUS) / 2.0
 CRADLE_HALF_THICKNESS = (CRADLE_OUTER_RADIUS - CRADLE_INNER_RADIUS) / 2.0
 ARM_TOP = 113.0
 
-STEM_LEFT = 118.76
-STEM_RIGHT = 137.24
+STEM_HALF_WIDTH = 13.86
 # the stem spans into the cradle and the base so the union has no seams
 STEM_TOP = 165.0
 STEM_BOTTOM = 212.0
+# how far the stem reaches past the inner edge of the cradle, which keeps its top
+# edge hidden behind the cradle arc whatever the cradle radius is
+STEM_OVERLAP = STEM_TOP - (CRADLE_CENTER_Y + CRADLE_INNER_RADIUS)
 
 BASE_LEFT = 79.32
 BASE_RIGHT = 176.68
@@ -76,16 +76,10 @@ BLACK = (0, 0, 0)
 
 # --- tray notification icons -------------------------------------------------
 
-# Horizontal stretch applied to the microphone of the application icon.  1.0
-# keeps the proportions of the application icon, larger values make the tray
-# icon wider.
+# The tray microphone is widened horizontally: the head's cap radius, the cradle
+# radii and the stem width are all enlarged by this factor while every circle
+# keeps its centre.  See microphone_distance().
 TRAY_STRETCH = 1.15
-
-# The tray head ends on a cap whose centre coincides with the centre of the
-# cradle arc, so the gap between the head and the cradle is the same all the way
-# round.
-TRAY_HEAD_RADIUS = HEAD_RADIUS
-TRAY_HEAD_BOTTOM = CRADLE_CENTER_Y + TRAY_HEAD_RADIUS
 
 TRAY_NAMES = ('microphone', 'microphone_muted', 'no_microphone', 'update_available')
 TRAY_SIZES = (64, 48, 40, 32, 24, 20, 16)
@@ -93,12 +87,16 @@ TRAY_OUTLINE_LIMIT = 24
 TRAY_OUTLINE_SMALL = 1.0
 TRAY_OUTLINE_LARGE = 2.0
 
-# The question mark is described in its own units (stroke width 1.0).  The
-# fields are: stroke width, arc radius, arc start angle, arc end angle, stem
-# length, gap before the dot, dot radius, glyph height as a fraction of the
-# canvas.
-QUESTION = (1.0, 2.0, 190.0, 455.0, 1.25, 1.45, 0.70, 0.55)
-QUESTION_MIN_STROKE = 1.4
+# The no-microphone mark is a red cross centred in the microphone head.  The
+# tray microphone is widened by TRAY_STRETCH, which adds to the cap radius and
+# therefore lowers the bottom of the head, so the centre follows it.
+CROSS_CENTER = (HEAD_CENTER_X,
+                (HEAD_TOP + CRADLE_CENTER_Y + HEAD_RADIUS * TRAY_STRETCH) / 2.0)
+CROSS_HALF_SPAN = 24.0
+CROSS_HALF_WIDTH = 7.5
+# the cross keeps a minimum stroke width so that it stays readable when the
+# tray icon is drawn small
+CROSS_MIN_WIDTH = 1.6
 
 BADGE_COLOR = (10, 132, 216)
 BADGE_CENTER = 0.755
@@ -130,9 +128,12 @@ def capsule_distance(x, y, start, end, radius):
     return math.hypot(x - (start[0] + t * dx), y - (start[1] + t * dy)) - radius
 
 
-def head_distance(x, y, bottom=HEAD_BOTTOM, radius=HEAD_RADIUS):
-    # A head that is shorter than it is wide degenerates into a circle, so the
-    # cap radius can never exceed half the height.
+def head_distance(x, y, radius=HEAD_RADIUS):
+    # The head ends on a cap whose centre is the cradle centre, which keeps the
+    # gap between the head and the cradle even.  A head that is shorter than it is
+    # wide degenerates into a circle, so the cap radius cannot exceed half the
+    # height.
+    bottom = CRADLE_CENTER_Y + radius
     radius = min(radius, (bottom - HEAD_TOP) / 2.0)
     return capsule_distance(
         x, y,
@@ -141,23 +142,45 @@ def head_distance(x, y, bottom=HEAD_BOTTOM, radius=HEAD_RADIUS):
         radius)
 
 
-def cradle_distance(x, y):
-    # The cradle is the stroke of a U shaped path with square ends: a vertical
+def cradle_distance(x, y, mid_radius=CRADLE_MID_RADIUS,
+                    half_thickness=CRADLE_HALF_THICKNESS):
+    # The cradle is the stroke of a U shaped path with round ends: a vertical
     # arm, a half circle and a second vertical arm, all with the same thickness.
+    # Rounding the ends with the radius of the stroke turns the flat tops into
+    # domes, which keeps their topmost point at ARM_TOP.
     dx = x - CRADLE_CENTER_X
     dy = y - CRADLE_CENTER_Y
-    if dy > 0.0:
-        path = abs(math.hypot(dx, dy) - CRADLE_MID_RADIUS)
-    else:
-        path = math.hypot(abs(dx) - CRADLE_MID_RADIUS, max(0.0, ARM_TOP - y))
-    return max(path - CRADLE_HALF_THICKNESS, ARM_TOP - y)
+    across = abs((math.hypot(dx, dy) if dy > 0.0 else abs(dx)) - mid_radius)
+    along = ARM_TOP + half_thickness - y
+    return (math.hypot(max(across, 0.0), max(along, 0.0))
+            + min(max(across, along), 0.0) - half_thickness)
 
 
-def microphone_distance(x, y, head_bottom=HEAD_BOTTOM, head_radius=HEAD_RADIUS):
-    return min(head_distance(x, y, head_bottom, head_radius),
-               cradle_distance(x, y),
-               rounded_rect_distance(x, y, STEM_LEFT, STEM_TOP, STEM_RIGHT,
-                                     STEM_BOTTOM, 0.0),
+def stretched_geometry(stretch):
+    """Cap radius, cradle radii and stem size of the microphone widened by `stretch`.
+
+    The cap radius and the stem width are multiplied by `stretch`, while the
+    cradle radii grow by the same absolute amount as the cap radius, so the gap
+    between the head and the cradle stays even and the cradle keeps its
+    thickness.  Every centre stays where it is.
+    """
+    head_radius = HEAD_RADIUS * stretch
+    growth = head_radius - HEAD_RADIUS
+    inner = CRADLE_INNER_RADIUS + growth
+    outer = CRADLE_OUTER_RADIUS + growth
+    return (head_radius, inner, outer,
+            STEM_HALF_WIDTH * stretch,
+            CRADLE_CENTER_Y + inner + STEM_OVERLAP)
+
+
+def microphone_distance(x, y, stretch=1.0):
+    """Widen the microphone horizontally by `stretch`; see stretched_geometry()."""
+    head_radius, inner, outer, stem_half, stem_top = stretched_geometry(stretch)
+    return min(head_distance(x, y, head_radius),
+               cradle_distance(x, y, (inner + outer) / 2.0,
+                               (outer - inner) / 2.0),
+               rounded_rect_distance(x, y, HEAD_CENTER_X - stem_half, stem_top,
+                                     HEAD_CENTER_X + stem_half, STEM_BOTTOM, 0.0),
                rounded_rect_distance(x, y, BASE_LEFT, BASE_TOP, BASE_RIGHT,
                                      BASE_BOTTOM, BASE_RADIUS))
 
@@ -166,20 +189,20 @@ def slash_distance(x, y):
     return capsule_distance(x, y, SLASH_START, SLASH_END, SLASH_RADIUS)
 
 
+def cross_distance(x, y, half_width):
+    """Distance to the red cross drawn in the microphone head."""
+    cx, cy = CROSS_CENTER
+    return min(capsule_distance(x, y, (cx - CROSS_HALF_SPAN, cy - CROSS_HALF_SPAN),
+                                (cx + CROSS_HALF_SPAN, cy + CROSS_HALF_SPAN),
+                                half_width),
+               capsule_distance(x, y, (cx - CROSS_HALF_SPAN, cy + CROSS_HALF_SPAN),
+                                (cx + CROSS_HALF_SPAN, cy - CROSS_HALF_SPAN),
+                                half_width))
+
+
 def coverage(distance, scale):
     """Anti-aliased coverage of a shape from its signed distance (design units)."""
     return min(1.0, max(0.0, 0.5 - distance * scale))
-
-
-def arc_distance(x, y, radius, start_deg, end_deg, half_width):
-    """Distance to a circular arc with round caps; angles use screen coordinates."""
-    angle = math.degrees(math.atan2(y, x)) % 360.0
-    if (angle - start_deg) % 360.0 <= end_deg - start_deg:
-        return abs(math.hypot(x, y) - radius) - half_width
-    start = math.radians(start_deg)
-    end = math.radians(end_deg)
-    return min(math.hypot(x - radius * math.cos(start), y - radius * math.sin(start)),
-               math.hypot(x - radius * math.cos(end), y - radius * math.sin(end))) - half_width
 
 
 def polygon_distance(x, y, points):
@@ -191,34 +214,6 @@ def polygon_distance(x, y, points):
         ex, ey = bx - ax, by - ay
         inside = min(inside, ((x - ax) * -ey + (y - ay) * ex) / math.hypot(ex, ey))
     return -inside
-
-
-def question_bounds(q):
-    stroke, radius, _, _, stem, gap, dot, _ = q
-    half = stroke / 2.0
-    return (-radius - half, -radius - half, radius + half, radius + stem + gap + dot)
-
-
-def tray_question(size):
-    """Question mark geometry, scale and centre for a tray icon of the given size."""
-    q = QUESTION
-    for _ in range(2):
-        left, top, right, bottom = question_bounds(q)
-        q = (max(q[0], QUESTION_MIN_STROKE * (bottom - top) / (q[7] * size)),) + q[1:]
-    left, top, right, bottom = question_bounds(q)
-    scale = q[7] * size / (bottom - top)
-    return (q, scale,
-            size / 2.0 - scale * (left + right) / 2.0,
-            size / 2.0 - scale * (top + bottom) / 2.0)
-
-
-def question_distance(x, y, q):
-    stroke, radius, start, end, stem, gap, dot, _ = q
-    half = stroke / 2.0
-    distance = arc_distance(x, y, radius, start, end, half)
-    distance = min(distance, capsule_distance(x, y, (0.0, radius),
-                                              (0.0, radius + stem), half))
-    return min(distance, math.hypot(x, y - (radius + stem + gap)) - dot)
 
 
 def badge_arrow_distance(x, y):
@@ -274,14 +269,13 @@ def tray_outline_width(size):
 def tray_mapping(size):
     """Map canvas pixels onto the design space of the application icon.
 
-    The microphone keeps its shape and is only stretched horizontally by
-    TRAY_STRETCH; it is scaled so that it fills the canvas height, which leaves
-    exactly the outline width free on the top and bottom edges.
+    The microphone is widened by TRAY_STRETCH in microphone_distance() and then
+    scaled uniformly so that it fills the canvas height, which leaves exactly the
+    outline width free on the top and bottom edges.
     """
     stroke = tray_outline_width(size)
-    scale_y = (size - 2.0 * stroke) / (BASE_BOTTOM - HEAD_TOP)
-    scale_x = scale_y * TRAY_STRETCH
-    return stroke, scale_x, scale_y, math.sqrt(scale_x * scale_y)
+    scale = (size - 2.0 * stroke) / (BASE_BOTTOM - HEAD_TOP)
+    return stroke, scale
 
 
 def overlay(r, g, b, alpha, amount, color):
@@ -295,11 +289,11 @@ def overlay(r, g, b, alpha, amount, color):
 
 
 def render_tray(size, name):
-    stroke, scale_x, scale_y, distance_scale = tray_mapping(size)
+    stroke, scale = tray_mapping(size)
     badge_gap = stroke
     badge_center = BADGE_CENTER * size
     badge_radius = BADGE_RADIUS * size
-    question, question_scale, question_x, question_y = tray_question(size)
+    cross_half_width = max(CROSS_HALF_WIDTH, CROSS_MIN_WIDTH / (2.0 * scale))
 
     pixels = bytearray(size * size * 4)
     for py in range(size):
@@ -307,10 +301,9 @@ def render_tray(size, name):
         y = py + 0.5
         for px in range(size):
             x = px + 0.5
-            u = HEAD_CENTER_X + (x - size / 2.0) / scale_x
-            v = HEAD_TOP + (y - stroke) / scale_y
-            distance = microphone_distance(u, v, TRAY_HEAD_BOTTOM,
-                                           TRAY_HEAD_RADIUS) * distance_scale
+            u = HEAD_CENTER_X + (x - size / 2.0) / scale
+            v = HEAD_TOP + (y - stroke) / scale
+            distance = microphone_distance(u, v, TRAY_STRETCH) * scale
 
             white = coverage(distance, 1.0)
             alpha = coverage(distance - stroke, 1.0)
@@ -324,12 +317,10 @@ def render_tray(size, name):
                 r = g = b = 0.0
 
             if name == 'microphone_muted':
-                slash = coverage(slash_distance(u, v) * distance_scale, 1.0)
+                slash = coverage(slash_distance(u, v) * scale, 1.0)
                 r, g, b, alpha = overlay(r, g, b, alpha, slash, SLASH_COLOR)
             elif name == 'no_microphone':
-                mark = coverage(question_distance(
-                    (x - question_x) / question_scale,
-                    (y - question_y) / question_scale, question) * question_scale, 1.0)
+                mark = coverage(cross_distance(u, v, cross_half_width) * scale, 1.0)
                 r, g, b, alpha = overlay(r, g, b, alpha, mark, SLASH_COLOR)
             elif name == 'update_available':
                 dx = x - badge_center
@@ -357,11 +348,13 @@ def png_chunk(tag, data):
             + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff))
 
 
-def png_bytes(size, rgba):
+def png_bytes(size, rgba, height=None):
+    """PNG of an RGBA bitmap; `size` is its width, `height` defaults to it."""
+    height = size if height is None else height
     raw = b''.join(b'\x00' + rgba[y * size * 4:(y + 1) * size * 4]
-                   for y in range(size))
+                   for y in range(height))
     return (b'\x89PNG\r\n\x1a\n'
-            + png_chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0))
+            + png_chunk(b'IHDR', struct.pack('>IIBBBBB', size, height, 8, 6, 0, 0, 0))
             + png_chunk(b'IDAT', zlib.compress(raw, 9))
             + png_chunk(b'IEND', b''))
 
@@ -406,30 +399,26 @@ def ico_bytes(frames):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    design_dir = os.path.join(here, 'design')
     root_dir = os.path.normpath(os.path.join(here, os.pardir))
-    os.makedirs(design_dir, exist_ok=True)
 
-    frames = []
-    for size in SIZES:
-        rgba = render(size)
-        write_design_png(design_dir, 'DeMic', size, rgba)
-        frames.append((size, rgba))
+    frames = [(size, render(size)) for size in SIZES]
     write_ico(os.path.join(root_dir, 'DeMic.ico'), frames)
+
+    write_png(os.path.join(root_dir, 'app-logo.png'), APP_LOGO_SIZE,
+              render(APP_LOGO_SIZE))
 
     for name in TRAY_NAMES:
         frames = []
         for size in TRAY_SIZES:
             rgba = render_tray(size, name)
-            write_design_png(design_dir, name, size, rgba)
             frames.append((size, rgba))
         write_ico(os.path.join(root_dir, name + '.ico'), frames)
 
 
-def write_design_png(design_dir, name, size, rgba):
-    path = os.path.join(design_dir, '%s-%d.png' % (name, size))
+def write_png(path, size, rgba):
     with open(path, 'wb') as f:
         f.write(png_bytes(size, rgba))
+    print('wrote %s' % path)
 
 
 def write_ico(path, frames):
