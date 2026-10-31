@@ -306,6 +306,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         DispatchMessage(&msg);
     }
 
+    // Destroy the microphone controller before uninitializing COM. Its destructor calls
+    // IMMDeviceEnumerator, which is dangling once COM is uninitialized (access violation on exit).
+    micCtrl.reset();
+
     CoUninitialize();
     return (int) msg.wParam;
 }

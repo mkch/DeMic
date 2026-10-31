@@ -143,6 +143,9 @@ private:
 public:
     MicCtrl(bool simulateNoMic = false);
 	~MicCtrl();
+	// MicCtrl owns COM interfaces and callback references; copying would double-release them.
+	MicCtrl(const MicCtrl&) = delete;
+	MicCtrl& operator=(const MicCtrl&) = delete;
 	// Reload microphone devices. Should be called when device changed.
 	void ReloadDevices();
     enum MuteState{
