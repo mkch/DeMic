@@ -104,8 +104,6 @@ void DisableStartOnBoot_Reg();
 bool DisableStartOnBoot();
 bool RelaunchAsAdmin();
 bool ResetHotKey(HWND hwnd);
-static bool AlreadyRunning();
-static bool IsAnotherInstanceRunning();
 void PlayOnSound(const std::wstring&);
 void PlayOffSound(const std::wstring&);
 BOOL devFilter(const wchar_t* devID);
@@ -1717,25 +1715,6 @@ bool RelaunchAsAdmin() {
         return true;
     }
     return false;
-}
-
-static const auto RUNNING_MUTEX_NAME = L"DeMic is running";
-static bool AlreadyRunning() {
-    if (CreateMutexW(NULL, FALSE, RUNNING_MUTEX_NAME) == NULL) {
-        LOG_LAST_ERROR();
-        std::exit(1);
-    }
-    return GetLastError() == ERROR_ALREADY_EXISTS;
-}
-static bool IsAnotherInstanceRunning() {
-    HANDLE hMutex = CreateMutexW(NULL, FALSE, RUNNING_MUTEX_NAME);
-    if (hMutex == NULL) {
-        LOG_LAST_ERROR();
-        std::exit(1);
-    }
-    bool ret = GetLastError() == ERROR_ALREADY_EXISTS;
-    CloseHandle(hMutex);
-    return ret;
 }
 
 std::wstring GetDefaultLogFilePath() {
