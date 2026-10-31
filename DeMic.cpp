@@ -193,9 +193,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         ShowMessageBox(L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
 	}
 
-    std::ofstream loggerStream = OpenRotatingLogFile(defaultLogFilePath, 100 * 1024, 1); // 100KB per file, 1 backup
-    Logger defaultLogger(&loggerStream, logLevel);
-    SetDefaultLogger(&defaultLogger);
+    // The logger must outlive all static storage objects, because their destructors may log
+    // (e.g. ~MicCtrl via VERIFY_*). There is no way to know when the last log happens, 
+    // so the logger and its stream are intentionally leaked; the process reclaims them at exit.
+    SetDefaultLogger(
+        // never deleted
+        new Logger(
+            // never deleted
+            new std::ofstream(OpenRotatingLogFile(defaultLogFilePath, 100 * 1024, 1)),  // 100KB per file, 1 backup
+            logLevel
+        )
+    );
     LOG(Logger::LevelDebug, (std::wstringstream() << L"started.").str().c_str()); // Test logger
 
     const std::wstring stateFilePath = std::filesystem::path(moduleFilePath).parent_path() / L"state.json";
