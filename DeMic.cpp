@@ -190,7 +190,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     ReadConfig();
 
     if(waitForDebugger) {
-        ShowMessageBoxW(L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
+        ShowMessageBox(L"Waiting for debugger to attach. Click OK after attaching.", L"DeMic", MB_OK);
 	}
 
     std::ofstream loggerStream = OpenRotatingLogFile(defaultLogFilePath, 100 * 1024, 1); // 100KB per file, 1 backup
@@ -267,7 +267,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                 return 0;
             }
         }
-        ShowMessageBoxW(strRes->Load(IDS_ALREADY_RUNNING).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+        ShowMessageBox(strRes->Load(IDS_ALREADY_RUNNING).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
         return 1;
     }
 
@@ -549,7 +549,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         } else {
             ok = EnableStartOnBoot(true);
             if (ok && !processElevated) {
-                if(ShowMessageBoxW(strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                if(ShowMessageBox(strRes->Load(IDS_RUN_AS_ADMIN_OR_NOT).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                     if (!RelaunchAsAdmin()) {
                         ShowError(strRes->Load(IDS_RELAUNCH_FAILED).c_str());
                     }
@@ -564,7 +564,7 @@ static void ProcessNotifyMenuCmd(HWND hWnd, UINT_PTR cmd) {
         SendMessage(mainWindow, WM_CLOSE, 0, 0);
         break;
     case ID_NO_PLUGIN:
-        ShowMessageBoxW((strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
+        ShowMessageBox((strRes->Load(IDS_PLUGIN_INSTRUCTION) + GetPluginDir()).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONINFORMATION);
         break;
     case ID_HELP_SHOW_LOG:
         if (!OpenFolderSelectFile(defaultLogFilePath.c_str())) {
@@ -829,7 +829,7 @@ void ProcessManualUpdateNotificationEvent(HWND hwnd, WORD event) {
         if (availableUpdate) {
             // New version available.
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + availableUpdate->Version.str() + strRes->Load(IDS_UPDATE_OR_NOT);
-            if (ShowMessageBoxW(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
+            if (ShowMessageBox(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
                 if (!NavigateURL(availableUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
                 }
@@ -858,7 +858,7 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
             // New version available.
             const auto version = availableUpdate->Version.str();
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + version + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
-            switch (ShowMessageBoxW(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
+            switch (ShowMessageBox(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
             case IDYES:
                 if (!NavigateURL(availableUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
@@ -967,7 +967,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }, 
             [] { LOG(Logger::LevelDebug, L"Update pending"); },
             []{
-                ShowMessageBoxW(strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
+                ShowMessageBox(strRes->Load(IDS_UPDATE_CHECK_FAILED).c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONERROR);
             }
         );
         return 0;

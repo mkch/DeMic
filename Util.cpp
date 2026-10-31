@@ -12,7 +12,7 @@ const std::wstring& StringRes::Load(UINT resId) {
     wchar_t* buf = NULL;
     const int n = LoadStringW(hInstance, resId, (LPWSTR)&buf, 0);
     if (n == 0) {
-        ShowMessageBoxW(L"Can't load string resource!", L"DeMic", MB_ICONERROR|MB_TASKMODAL);
+        ShowMessageBox(L"Can't load string resource!", L"DeMic", MB_ICONERROR|MB_TASKMODAL);
         std::exit(1);
     }
     stringResMap[resId] = std::wstring(buf, n);
@@ -152,7 +152,11 @@ std::filesystem::path GetModuleFilePath(HMODULE hModule) {
 	}
 }
 
-int ShowMessageBoxW(LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
-    int ret = MessageBoxW(nullptr, lpText, lpCaption, (uType | MB_SETFOREGROUND | MB_TASKMODAL) & ~MB_SYSTEMMODAL);
-    return ret;
+int ShowMessageBox(LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
+    // MB_TASKMODAL disables all window in this thread if the hwnd of MessageBoxW is null.
+    // Note:
+    // Whenever a modal dialog appears, the main window must be disabled.
+    // DeMic relies on this behavior to prevent the main notification icon's context menu from popping up
+    // while a modal dialog is displayed.
+    return MessageBoxW(nullptr, lpText, lpCaption, (uType | MB_SETFOREGROUND | MB_TASKMODAL) & ~MB_SYSTEMMODAL);
 }
