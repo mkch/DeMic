@@ -7,9 +7,11 @@ The application icon is described as vector geometry in a 256 x 256 design space
     * a white microphone (capsule head, U shaped cradle, stem and base),
     * a red "muted" slash drawn on top of the microphone.
 
-The tray icons reuse exactly the same microphone, stretched horizontally by
-TRAY_STRETCH and scaled so that it fills the canvas, then outlined in black so
-that it stays readable on light desktop themes:
+It also renders the tray notification icons.  They reuse the same microphone,
+stretched horizontally by TRAY_STRETCH and scaled so that it fills the canvas.
+The head ends on a cap that shares its centre with the cradle arc, which keeps
+the gap between the two even, and everything is outlined in black so that it
+stays readable on light desktop themes:
 
     microphone.ico          plain microphone
     microphone_muted.ico    microphone with a red slash
@@ -79,6 +81,12 @@ BLACK = (0, 0, 0)
 # icon wider.
 TRAY_STRETCH = 1.15
 
+# The tray head ends on a cap whose centre coincides with the centre of the
+# cradle arc, so the gap between the head and the cradle is the same all the way
+# round.
+TRAY_HEAD_RADIUS = HEAD_RADIUS
+TRAY_HEAD_BOTTOM = CRADLE_CENTER_Y + TRAY_HEAD_RADIUS
+
 TRAY_NAMES = ('microphone', 'microphone_muted', 'no_microphone', 'update_available')
 TRAY_SIZES = (64, 48, 40, 32, 24, 20, 16)
 TRAY_OUTLINE_LIMIT = 24
@@ -115,17 +123,22 @@ def capsule_distance(x, y, start, end, radius):
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     length_sq = dx * dx + dy * dy
+    if length_sq <= 0.0:
+        return math.hypot(x - start[0], y - start[1]) - radius
     t = ((x - start[0]) * dx + (y - start[1]) * dy) / length_sq
     t = min(1.0, max(0.0, t))
     return math.hypot(x - (start[0] + t * dx), y - (start[1] + t * dy)) - radius
 
 
-def head_distance(x, y):
+def head_distance(x, y, bottom=HEAD_BOTTOM, radius=HEAD_RADIUS):
+    # A head that is shorter than it is wide degenerates into a circle, so the
+    # cap radius can never exceed half the height.
+    radius = min(radius, (bottom - HEAD_TOP) / 2.0)
     return capsule_distance(
         x, y,
-        (HEAD_CENTER_X, HEAD_TOP + HEAD_RADIUS),
-        (HEAD_CENTER_X, HEAD_BOTTOM - HEAD_RADIUS),
-        HEAD_RADIUS)
+        (HEAD_CENTER_X, HEAD_TOP + radius),
+        (HEAD_CENTER_X, bottom - radius),
+        radius)
 
 
 def cradle_distance(x, y):
@@ -140,8 +153,8 @@ def cradle_distance(x, y):
     return max(path - CRADLE_HALF_THICKNESS, ARM_TOP - y)
 
 
-def microphone_distance(x, y):
-    return min(head_distance(x, y),
+def microphone_distance(x, y, head_bottom=HEAD_BOTTOM, head_radius=HEAD_RADIUS):
+    return min(head_distance(x, y, head_bottom, head_radius),
                cradle_distance(x, y),
                rounded_rect_distance(x, y, STEM_LEFT, STEM_TOP, STEM_RIGHT,
                                      STEM_BOTTOM, 0.0),
@@ -296,7 +309,8 @@ def render_tray(size, name):
             x = px + 0.5
             u = HEAD_CENTER_X + (x - size / 2.0) / scale_x
             v = HEAD_TOP + (y - stroke) / scale_y
-            distance = microphone_distance(u, v) * distance_scale
+            distance = microphone_distance(u, v, TRAY_HEAD_BOTTOM,
+                                           TRAY_HEAD_RADIUS) * distance_scale
 
             white = coverage(distance, 1.0)
             alpha = coverage(distance - stroke, 1.0)

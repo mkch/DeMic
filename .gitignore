@@ -43,3 +43,4 @@ x64/
 *.pem
 *.vcxproj.user
 /enc_temp_folder
+/icons/design
