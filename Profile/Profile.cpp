@@ -128,13 +128,16 @@ void ReadConfig() {
     }
     try {
         json config = json::parse(in);
-        json* devices = NULL;
-        auto& profile = config[CONFIG_DEFAULT_PROFILE_NAME];
+        const json* devices = NULL;
+        const auto& profile = config[CONFIG_DEFAULT_PROFILE_NAME];
         if (profile.is_object()) {
-            excludeSelected = profile[CONFIG_EXCLUDE];
-            devices = &profile[CONFIG_DEVICES];
+            excludeSelected = profile.value(CONFIG_EXCLUDE, false);
+            devices = &profile.at(CONFIG_DEVICES);
         } else {
-            devices = &profile; // profile is an array of devices.
+            devices = &profile; // profile should be an array of devices.
+        }
+        if (!devices->is_array()) {
+            throw std::runtime_error("malformed config");
         }
         std::for_each(devices->begin(), devices->end(), [](const json& dev) {
             auto id = dev.at(CONFIG_ID).get<std::string>();
