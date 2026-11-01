@@ -55,6 +55,13 @@ GOLDEN = os.path.join(HERE, 'icon-golden.json')
 
 INSIDE = 0.0
 
+TRAY_STEMS = [stem for stem, _, _ in icon.tray_icons()]
+
+# The previews composite the icons over a mid grey so that the white and the
+# black microphone are both visible.
+SHEET_BACKGROUND = 0x80
+SHEET_PIXEL = bytes((SHEET_BACKGROUND, SHEET_BACKGROUND, SHEET_BACKGROUND, 255))
+
 
 # --- file helpers -------------------------------------------------------------
 
@@ -136,7 +143,7 @@ def dib_to_rgba(payload, size):
 
 def cmd_frames(args):
     files = args.files or [os.path.join(ROOT, 'DeMic.ico')] + [
-        os.path.join(ROOT, name + '.ico') for name in icon.TRAY_NAMES]
+        os.path.join(ROOT, stem + '.ico') for stem in TRAY_STEMS]
     wanted = None
     if args.sizes:
         wanted = {int(s) for s in args.sizes.split(',') if s.strip()}
@@ -195,12 +202,21 @@ def cmd_preview(args):
     print('%dx%d design %g..%g x %g..%g' % (width, height, left, right, top, bottom))
 
 
+def tray_mark(text):
+    """(mark name, microphone colour) of a base name or an icon file name stem."""
+    for stem, name, fill in icon.tray_icons():
+        if text == stem:
+            return name, fill
+    return text, icon.WHITE
+
+
 def cmd_tray(args):
     sizes = [int(s) for s in args.sizes.split(',') if s.strip()]
     names = [n for n in args.names.split(',') if n.strip()]
     for name in names:
+        mark, fill = tray_mark(name)
         for size in sizes:
-            data = icon.png_bytes(size, icon.render_tray(size, name))
+            data = icon.png_bytes(size, icon.render_tray(size, mark, fill))
             path = os.path.join(args.dir, 'tray-%s-%d.png' % (name, size))
             print(write_file(path, data))
 
@@ -213,30 +229,32 @@ def tray_cell(size, name, crop, zoom):
     the mapping the microphone itself uses, so it frames the same part of the
     design at every size.
     """
-    rgba = icon.render_tray(size, name)
+    mark, fill = tray_mark(name)
+    rgba = icon.render_tray(size, mark, fill)
     if crop is None:
         left = top = 0.0
         width = height = float(size)
     else:
-        stroke, scale = icon.tray_mapping(size)
+        scale = icon.tray_mapping(size)
         left = size / 2.0 + (crop[0] - icon.HEAD_CENTER_X) * scale
-        top = stroke + (crop[1] - icon.HEAD_TOP) * scale
+        top = (crop[1] - icon.HEAD_TOP) * scale
         width = (crop[2] - crop[0]) * scale
         height = (crop[3] - crop[1]) * scale
     cell_w = max(1, int(round(width * zoom)))
     cell_h = max(1, int(round(height * zoom)))
-    pixels = bytearray(b'\xff' * (cell_w * cell_h * 4))
+    pixels = bytearray(SHEET_PIXEL * (cell_w * cell_h))
     for py in range(cell_h):
         sy = int(math.floor(top + py / zoom))
         for px in range(cell_w):
             sx = int(math.floor(left + px / zoom))
             if not (0 <= sx < size and 0 <= sy < size):
-                continue                     # outside the canvas stays white
+                continue                     # outside the canvas stays background
             source = (sy * size + sx) * 4
             alpha = rgba[source + 3]
             o = (py * cell_w + px) * 4
             for i in range(3):
-                pixels[o + i] = (255 * (255 - alpha) + rgba[source + i] * alpha) // 255
+                pixels[o + i] = (SHEET_BACKGROUND * (255 - alpha)
+                                 + rgba[source + i] * alpha) // 255
     return cell_w, cell_h, pixels
 
 
@@ -259,7 +277,7 @@ def cmd_sheet(args):
     width = max(sum(cell[0] for cell in row) + gap * (len(row) - 1) for row in grid)
     height = (sum(max(cell[1] for cell in row) for row in grid)
               + gap * (len(grid) - 1))
-    pixels = bytearray(b'\xff' * (width * height * 4))
+    pixels = bytearray(SHEET_PIXEL * (width * height))
     top = 0
     for row in grid:
         left = 0
@@ -490,9 +508,9 @@ def expected_files():
         'DeMic.ico': icon.ico_bytes([(size, icon.render(size)) for size in icon.SIZES]),
         'app-logo.png': icon.png_bytes(icon.APP_LOGO_SIZE, icon.render(icon.APP_LOGO_SIZE)),
     }
-    for name in icon.TRAY_NAMES:
-        files[name + '.ico'] = icon.ico_bytes(
-            [(size, icon.render_tray(size, name)) for size in icon.TRAY_SIZES])
+    for stem, name, fill in icon.tray_icons():
+        files[stem + '.ico'] = icon.ico_bytes(
+            [(size, icon.render_tray(size, name, fill)) for size in icon.TRAY_SIZES])
     return files
 
 
@@ -579,11 +597,11 @@ def cmd_verify(args):
                               icon.png_bytes(width, pixels))
             print('%-10s %4dx%-4d stretch %-5g %-7s %s'
                   % (label, width, height, stretch, mode, path))
-        for name in icon.TRAY_NAMES:
+        for stem, name, fill in icon.tray_icons():
             for size in args.sizes:
                 path = write_file(
-                    os.path.join(args.dir, 'verify-tray-%s-%d.png' % (name, size)),
-                    icon.png_bytes(size, icon.render_tray(size, name)))
+                    os.path.join(args.dir, 'verify-tray-%s-%d.png' % (stem, size)),
+                    icon.png_bytes(size, icon.render_tray(size, name, fill)))
                 print('%-10s %4dx%-4d %s' % ('tray', size, size, path))
 
     print('--- files on disk ---')
@@ -622,12 +640,12 @@ def main(argv=None):
 
     tray = sub.add_parser('tray', help='render tray icons')
     tray.add_argument('--sizes', default='16,24,32,64')
-    tray.add_argument('--names', default=','.join(icon.TRAY_NAMES))
+    tray.add_argument('--names', default=','.join(TRAY_STEMS))
     tray.add_argument('--dir', default=PREVIEW_DIR)
 
     sheet = sub.add_parser('sheet', help='stitch tray icons into one image')
     sheet.add_argument('--sizes', default='16,24,32,64')
-    sheet.add_argument('--names', default=','.join(icon.TRAY_NAMES))
+    sheet.add_argument('--names', default=','.join(TRAY_STEMS))
     sheet.add_argument('--zoom', type=int, default=4,
                        help='integer nearest neighbour upscale factor')
     sheet.add_argument('--crop', default=None,

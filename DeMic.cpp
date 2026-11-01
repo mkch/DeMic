@@ -60,6 +60,12 @@ enum {
 // Registered with RegisterWindowMessageW("TaskbarCreated").
 static UINT wmTaskbarCreated = 0;
 
+static UINT micIconResID = IDI_MICROPHONE;
+static UINT micMutedIconResID = IDI_MICROPHONE_MUTED;
+static UINT updateIconResID = IDI_UPDATE_AVAILABLE;
+static UINT noMicIconResID = IDI_NO_MICROPHONE;
+// The colour mode the icon resource IDs above were chosen for.
+static bool appliedDarkMode = true;
 static const int HOTKEY_ID = 1;
 
 // The updated version information retrieved by update checker.
@@ -82,6 +88,7 @@ const bool processElevated = IsCurrentProcessElevated();
 
 std::unique_ptr <StringRes> strRes;
 
+static UINT MainNotificationIconResID();
 static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed);
 static void RemoveNotification(UINT id);
 static void ShowMainNotificationImpl(const std::wstring& info);
@@ -174,12 +181,47 @@ std::wstring defaultLogFilePath = GetDefaultLogFilePath();
 static void SetPreferredUILanguages();
 static int SchedTask(const std::wstring& action);
 
+// Whether the taskbar uses the dark theme. Default to true if system setting is missing.
+static bool IsSystemDarkMode() {
+    // SystemUsesLightTheme is 1 for the light theme and 0 for the dark one.
+    DWORD lightTheme = 0;
+    DWORD size = sizeof(lightTheme);
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(hKey, L"SystemUsesLightTheme", nullptr, nullptr,
+            reinterpret_cast<LPBYTE>(&lightTheme), &size) != ERROR_SUCCESS) {
+            lightTheme = 0;
+        }
+        RegCloseKey(hKey);
+    }
+    return lightTheme == 0;
+}
+
+static void ChangeIconResIDs(bool darkMode) {
+    if (darkMode) {
+        micIconResID = IDI_MICROPHONE;
+        micMutedIconResID = IDI_MICROPHONE_MUTED;
+        updateIconResID = IDI_UPDATE_AVAILABLE;
+        noMicIconResID = IDI_NO_MICROPHONE;
+    } else {
+        micIconResID = IDI_MICROPHONE_BLACK;
+        micMutedIconResID = IDI_MICROPHONE_MUTED_BLACK;
+        updateIconResID = IDI_UPDATE_AVAILABLE_BLACK;
+        noMicIconResID = IDI_NO_MICROPHONE_BLACK;
+    }
+    appliedDarkMode = darkMode;
+}
+
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPWSTR    lpCmdLine,
                      _In_ int       nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    ChangeIconResIDs(IsSystemDarkMode());
 
     // Read config file.
     configFilePath = moduleFilePath;
@@ -899,6 +941,37 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
     }
 }
 
+// Reapplies the icon of a notification that is currently shown, e.g. after the
+// system switched between the light and the dark theme.
+static void UpdateNotificationIcon(UINT id, UINT iconResID, const wchar_t* name) {
+    NOTIFYICONDATAW data = { 0 };
+    data.cbSize = sizeof data;
+    data.hWnd = mainWindow;
+    data.uID = id;
+    data.uFlags = NIF_ICON;
+    data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(iconResID));
+    if (Shell_NotifyIconW(NIM_MODIFY, &data)) {
+        LOG(Logger::LevelInfo, std::format(L"Updated {} notification icon", name).c_str());
+    } else {
+        // The notification is not shown currently.
+        LOG(Logger::LevelDebug, std::format(L"Update {} notification icon failed", name).c_str());
+    }
+}
+
+// Reapplies the icon resources and the icons of the shown notifications when
+// the system switched between the light and the dark theme.
+static void ApplySystemColorMode() {
+    const bool darkMode = IsSystemDarkMode();
+    if (darkMode == appliedDarkMode) {
+        return;
+    }
+    LOG(Logger::LevelInfo, L"System color mode changed");
+    ChangeIconResIDs(darkMode);
+    UpdateNotificationIcon(MAIN_NOTIFICATION_ID, MainNotificationIconResID(), L"main");
+    UpdateNotificationIcon(MANUAL_UPDATE_NOTIFICATION_ID, updateIconResID, L"manual update");
+    UpdateNotificationIcon(AUTO_UPDATE_NOTIFICATION_ID, updateIconResID, L"auto update");
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case UM_MIC_CMD:
@@ -1094,6 +1167,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CallPluginInitMenuPopupListeners(menu);
             break;
         }
+    case WM_SETTINGCHANGE: {
+        const wchar_t* section = reinterpret_cast<const wchar_t*>(lParam);
+        // ImmersiveColorSet and WindowsThemeElement are the sections the shell
+        // uses for theme changes, but they are undocumented. lParam is NULL or
+        // empty when more than one setting changed, and re-reading the theme is
+        // cheap, so let those through as well.
+        if (section && *section &&
+            wcscmp(section, L"ImmersiveColorSet") != 0 &&
+            wcscmp(section, L"WindowsThemeElement") != 0) {
+            break;
+        }
+        ApplySystemColorMode();
+        break;
+    }
     }
 
     if (message == wmTaskbarCreated) {
@@ -1358,7 +1445,7 @@ static void ShowManualUpdateNotification() {
             data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
             data.dwInfoFlags = NIIF_INFO;
             data.uCallbackMessage = UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY;
-            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_UPDATE_AVAILABLE));
+            data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(updateIconResID));
             StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
             StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
             StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
@@ -1393,7 +1480,7 @@ static void ShowAutoUpdateNotification() {
             data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
             data.dwInfoFlags = NIIF_INFO;
             data.uCallbackMessage = UM_AUTO_UPDATE_NOTIFICATION_NOTIFY;
-            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_UPDATE_AVAILABLE));
+            data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(updateIconResID));
             StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
             StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_AUTO_UPDATE_AVAILABLE_TITLE).c_str());
             StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
@@ -1406,6 +1493,13 @@ static void ShowAutoUpdateNotification() {
 
 static void RemoveAutoUpdateNotification() {
     RemoveNotification(AUTO_UPDATE_NOTIFICATION_ID);
+}
+
+static UINT MainNotificationIconResID() {
+    const auto state = micCtrl->GetMuteState();
+    return
+        state == MicCtrl::Muted ? micMutedIconResID :
+        state == MicCtrl::Unmuted ? micIconResID : noMicIconResID;
 }
 
 // Shows the main notification.
@@ -1425,10 +1519,7 @@ static void ShowMainNotificationImpl(const std::wstring& info) {
                 data.dwInfoFlags = NIIF_INFO;
             }
             data.uCallbackMessage = UM_MAIN_NOTIFICATION_NOTIFY;
-            const auto state = micCtrl->GetMuteState();
-            data.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(
-                state == MicCtrl::Muted ? IDI_MICROPHONE_MUTED :
-                state == MicCtrl::Unmuted ? IDI_MICROPHONE : IDI_NO_MICROPHONE));
+            data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(MainNotificationIconResID()));
             std::wstring version = VERSION;
             if (processElevated) {
                 version += L" *"; // Indicates running with elevated privilege.

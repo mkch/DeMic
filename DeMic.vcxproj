@@ -216,11 +216,15 @@
     <Image Include="Iconsmind-Outline-Microphone-2.ico" />
     <Image Include="micphone.ico" />
     <Image Include="micropho.ico" />
+    <Image Include="microphone_black.ico" />
     <Image Include="microphone_muted.ico" />
+    <Image Include="microphone_muted_black.ico" />
     <Image Include="no_microphone.ico" />
+    <Image Include="no_microphone_black.ico" />
     <Image Include="small.ico" />
     <Image Include="microphone.ico" />
     <Image Include="update_available.ico" />
+    <Image Include="update_available_black.ico" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="manifest.xml" />

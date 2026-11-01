@@ -9,18 +9,22 @@ The application icon is described as vector geometry in a 256 x 256 design space
 
 It also renders the tray notification icons.  They reuse the same microphone,
 widened horizontally by TRAY_STRETCH and scaled uniformly so that it fills the
-canvas, and outlined in black so that it stays readable on light desktop themes:
+canvas.  Each tray icon comes in two versions: a white microphone, which stays
+readable on dark taskbars, and a black one for light taskbars.  The red and blue
+marks keep their colours in both versions:
 
     microphone.ico          plain microphone
     microphone_muted.ico    microphone with a red slash
     no_microphone.ico       microphone with a red cross
     update_available.ico    microphone with a blue update badge
 
+    <name>_black.ico        the same icon with a black microphone
+
 Running this script rewrites:
 
     app-logo.png   the 512 px application icon (solution root)
     DeMic.ico     the icon resource used by DeMic.rc
-    <name>.ico    the tray icon resources
+    <name>.ico    the tray icon resources, white and black versions
 
 Requires only the Python standard library.
 """
@@ -83,9 +87,11 @@ TRAY_STRETCH = 1.15
 
 TRAY_NAMES = ('microphone', 'microphone_muted', 'no_microphone', 'update_available')
 TRAY_SIZES = (64, 48, 40, 32, 24, 20, 16)
-TRAY_OUTLINE_LIMIT = 24
-TRAY_OUTLINE_SMALL = 1.0
-TRAY_OUTLINE_LARGE = 2.0
+
+# Every tray icon exists as a white microphone and as a black one; the black
+# files carry this suffix.
+TRAY_BLACK_SUFFIX = '_black'
+TRAY_VARIANTS = (('', WHITE), (TRAY_BLACK_SUFFIX, BLACK))
 
 # The no-microphone mark is a red cross centred in the microphone head.  The
 # tray microphone is widened by TRAY_STRETCH, which adds to the cap radius and
@@ -106,6 +112,16 @@ BADGE_SHAFT_TOP = -0.58
 BADGE_SHAFT_BOTTOM = 0.03
 BADGE_HEAD_HALF_WIDTH = 0.42
 BADGE_HEAD_TIP = 0.52
+# transparent gap that keeps the badge off the microphone, as a fraction of the
+# canvas, but never thinner than one pixel
+BADGE_GAP = 0.03
+
+
+def tray_icons():
+    """(file name stem, mark name, microphone colour) of every tray icon."""
+    return [(name + suffix, name, fill)
+            for name in TRAY_NAMES
+            for suffix, fill in TRAY_VARIANTS]
 
 
 def rounded_rect_distance(x, y, left, top, right, bottom, radius):
@@ -262,20 +278,14 @@ def render(size):
     return pixels
 
 
-def tray_outline_width(size):
-    return TRAY_OUTLINE_SMALL if size <= TRAY_OUTLINE_LIMIT else TRAY_OUTLINE_LARGE
-
-
 def tray_mapping(size):
-    """Map canvas pixels onto the design space of the application icon.
+    """Pixels per design unit of the tray icon.
 
     The microphone is widened by TRAY_STRETCH in microphone_distance() and then
-    scaled uniformly so that it fills the canvas height, which leaves exactly the
-    outline width free on the top and bottom edges.
+    scaled uniformly so that it fills the canvas height exactly, without any
+    margin around it.
     """
-    stroke = tray_outline_width(size)
-    scale = (size - 2.0 * stroke) / (BASE_BOTTOM - HEAD_TOP)
-    return stroke, scale
+    return size / (BASE_BOTTOM - HEAD_TOP)
 
 
 def overlay(r, g, b, alpha, amount, color):
@@ -288,9 +298,9 @@ def overlay(r, g, b, alpha, amount, color):
     return r, g, b, alpha * (1.0 - amount) + amount
 
 
-def render_tray(size, name):
-    stroke, scale = tray_mapping(size)
-    badge_gap = stroke
+def render_tray(size, name, fill=WHITE):
+    scale = tray_mapping(size)
+    badge_gap = max(1.0, BADGE_GAP * size)
     badge_center = BADGE_CENTER * size
     badge_radius = BADGE_RADIUS * size
     cross_half_width = max(CROSS_HALF_WIDTH, CROSS_MIN_WIDTH / (2.0 * scale))
@@ -302,19 +312,11 @@ def render_tray(size, name):
         for px in range(size):
             x = px + 0.5
             u = HEAD_CENTER_X + (x - size / 2.0) / scale
-            v = HEAD_TOP + (y - stroke) / scale
+            v = HEAD_TOP + y / scale
             distance = microphone_distance(u, v, TRAY_STRETCH) * scale
 
-            white = coverage(distance, 1.0)
-            alpha = coverage(distance - stroke, 1.0)
-            black = alpha - white
-            total = white + black
-            if total > 0.0:
-                r = (WHITE[0] * white + BLACK[0] * black) / total
-                g = (WHITE[1] * white + BLACK[1] * black) / total
-                b = (WHITE[2] * white + BLACK[2] * black) / total
-            else:
-                r = g = b = 0.0
+            r, g, b = fill
+            alpha = coverage(distance, 1.0)
 
             if name == 'microphone_muted':
                 slash = coverage(slash_distance(u, v) * scale, 1.0)
@@ -407,12 +409,12 @@ def main():
     write_png(os.path.join(root_dir, 'app-logo.png'), APP_LOGO_SIZE,
               render(APP_LOGO_SIZE))
 
-    for name in TRAY_NAMES:
+    for stem, name, fill in tray_icons():
         frames = []
         for size in TRAY_SIZES:
-            rgba = render_tray(size, name)
+            rgba = render_tray(size, name, fill)
             frames.append((size, rgba))
-        write_ico(os.path.join(root_dir, name + '.ico'), frames)
+        write_ico(os.path.join(root_dir, stem + '.ico'), frames)
 
 
 def write_png(path, size, rgba):

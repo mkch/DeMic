@@ -1,8 +1,12 @@
 {
   "DeMic.ico": "130d71e3832bc64ce9003152a29f971a",
   "app-logo.png": "4815c9546ac484c10937ff0d1bf81292",
-  "microphone.ico": "cf571f446ed57f25ee6485b27b5cd8cd",
-  "microphone_muted.ico": "9517fdf1b38d9b5d0dadf6f25b938576",
-  "no_microphone.ico": "598cd886dbb0e534d60ef6293b7230b0",
-  "update_available.ico": "3951065530b7ead55a2a9ef70b6eb9e7"
+  "microphone.ico": "02bf079bdbfd68c5ae19dab913131577",
+  "microphone_black.ico": "8f153328784f359a609ba209090af18b",
+  "microphone_muted.ico": "ddbb99e9f6c1431e80b67fa7588ec367",
+  "microphone_muted_black.ico": "c0f52f7837e9fe9825f58cf86ea1b596",
+  "no_microphone.ico": "b694229efc7b756c5c3727d87d8d6e11",
+  "no_microphone_black.ico": "b13bbf982193ae144549074743cb4594",
+  "update_available.ico": "15763b537cfad36c7bf2e5f8e940f796",
+  "update_available_black.ico": "c5ba2a73b2700bd635d51907bef478cb"
 }

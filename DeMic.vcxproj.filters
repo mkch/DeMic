@@ -132,6 +132,18 @@
     <Image Include="update_available.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="microphone_black.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="microphone_muted_black.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="no_microphone_black.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="update_available_black.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <Xml Include="manifest.xml" />
