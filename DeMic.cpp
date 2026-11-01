@@ -78,7 +78,7 @@ struct AvailableUpdate {
     const WSemVer Version;
     const std::wstring Url;
 };
-static std::optional<AvailableUpdate> availableUpdate;
+static std::optional<AvailableUpdate> availableManualUpdate, availableAutoUpdate;
 
 static const wchar_t* const CONFIG_FILE_NAME = L"DeMic.ini";
 const static wchar_t* const LOG_FILE_NAME = L"Log.txt";
@@ -92,17 +92,17 @@ const bool processElevated = IsCurrentProcessElevated();
 std::unique_ptr <StringRes> strRes;
 
 static UINT MainNotificationIconResID();
-static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed);
+static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData);
 static void RemoveNotification(UINT id);
 static void ShowMainNotificationImpl(const std::wstring& info);
 static void ShowMainNotification(bool silent);
 static void UpdateMainNotification();
 static void RemoveMainNotification();
-static void ShowManualUpdateNotification();
+static void ShowManualUpdateNotification(bool silent);
 static void ShowNoUpdateNotification();
 static void RemoveNoUpdateNotification();
 static void RemoveManualUpdateNotification();
-static void ShowAutoUpdateNotification();
+static void ShowAutoUpdateNotification(bool silent);
 static void RemoveAutoUpdateNotification();
 void ReadConfig();
 void WriteConfig();
@@ -140,7 +140,6 @@ Logger::Level logLevel = Logger::LevelError; // The log level for logging.
 BOOL simulateNoMicrophone = FALSE; // Simulate no microphone for testing.
 std::wstring preferredUILanguages; // Comma separated list or empty.
 bool waitForDebugger = false; // Show a message box when starting, giving a chance to attach a debugger.
-bool simulateAddNotifIconFailure = false; // Simulate failure of adding notification icon for testing.
 std::wstring simulateVersionForUpdateCheck; // Simulate a version for update check, for testing.
 bool autoCheckForUpdates = false; // Automatically check for updates on startup.
 
@@ -215,6 +214,27 @@ static void ChangeIconResIDs(bool darkMode) {
         noMicIconResID = IDI_NO_MICROPHONE_BLACK;
     }
     appliedDarkMode = darkMode;
+}
+
+// Retries a function until it returns true or GetLastError() is not ERROR_TIMEOUT.
+// The return value is 0 if the function returns true, or the last error code otherwise.
+template<typename F>
+DWORD RetryWhileTimeout(const F& f, UINT intervalMs = 200) {
+    // A infinite loop is used here to wait for a busy system to become responsive.
+    // i.e. If the shell is busy Shell_NotifyIconW() returns ERROR_TIMEOUT, my app
+    // hangs. A laggy shell results in a laggy application, fair enough.
+    // Further more, the shell can't always timeout in a living OS.
+    while (1) {
+        SetLastError(0);
+        if (f()) {
+            return 0;
+        }
+        const DWORD error = GetLastError();
+        if (error != ERROR_TIMEOUT) {
+            return error;
+        }
+        Sleep(intervalMs);
+    }
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -772,8 +792,6 @@ static TimeDebouncer<> mutedStatedChangedDebouncer(
     },
 lastErrorLogger);
 
-extern TimeDebouncer<>mainNotifyIconRetryDebouncer;
-
 static void prepareTaskbarCreatedNotification() {
     // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
     wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
@@ -883,11 +901,11 @@ void ProcessManualUpdateNotificationEvent(HWND hwnd, WORD event) {
             break; 
         }
         RemoveManualUpdateNotification();
-        if (availableUpdate) {
+        if (availableManualUpdate) {
             // New version available.
-            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + availableUpdate->Version.str() + strRes->Load(IDS_UPDATE_OR_NOT);
+            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + availableManualUpdate->Version.str() + strRes->Load(IDS_UPDATE_OR_NOT);
             if (ShowMessageBox(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                if (!NavigateURL(availableUpdate->Url.c_str())) {
+                if (!NavigateURL(availableManualUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
                 }
             }
@@ -911,13 +929,13 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
             break;
         }
         RemoveAutoUpdateNotification();
-        if (availableUpdate) {
+        if (availableAutoUpdate) {
             // New version available.
-            const auto version = availableUpdate->Version.str();
+            const auto version = availableAutoUpdate->Version.str();
             auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + version + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
             switch (ShowMessageBox(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
             case IDYES:
-                if (!NavigateURL(availableUpdate->Url.c_str())) {
+                if (!NavigateURL(availableAutoUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
                 }
                 break;
@@ -953,11 +971,11 @@ static void UpdateNotificationIcon(UINT id, UINT iconResID, const wchar_t* name)
     data.uID = id;
     data.uFlags = NIF_ICON;
     data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(iconResID));
-    if (Shell_NotifyIconW(NIM_MODIFY, &data)) {
+    const auto err = RetryWhileTimeout([&] {
+        return Shell_NotifyIconW(NIM_MODIFY, &data);
+	});
+    if (err == 0) {
         LOG(Logger::LevelInfo, std::format(L"Updated {} notification icon", name).c_str());
-    } else {
-        // The notification is not shown currently.
-        LOG(Logger::LevelDebug, std::format(L"Update {} notification icon failed", name).c_str());
     }
 }
 
@@ -974,6 +992,8 @@ static void ApplySystemColorMode() {
     UpdateNotificationIcon(MANUAL_UPDATE_NOTIFICATION_ID, updateIconResID, L"manual update");
     UpdateNotificationIcon(AUTO_UPDATE_NOTIFICATION_ID, updateIconResID, L"auto update");
 }
+
+static TimeDebouncer<> applySystemColorModeDebouncer(500, ApplySystemColorMode, lastErrorLogger);
 
 // The colour mode is decided by this registry value, so watching the value
 // itself is the primary way to notice colour mode changes.
@@ -1111,18 +1131,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         ProcessAutoUpdateNotificationEvent(hWnd, LOWORD(lParam));
         return 0;
     case UM_SYSTEM_COLOR_MODE_CHANGED:
-        ApplySystemColorMode();
+        applySystemColorModeDebouncer.Emit();
         return 0;
     case UM_MANUAL_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
             [](const WSemVer& current, const WSemVer& remote, const std::wstring& url) {
+                availableAutoUpdate.reset();
                 if (remote > current) {
                     // New version available.
-                    availableUpdate.emplace(remote, url);
+                    availableManualUpdate.emplace(remote, url);
                 } else {
-                    availableUpdate.reset();
+                    availableManualUpdate.reset();
                 }
-                ShowManualUpdateNotification();
+                ShowManualUpdateNotification(false);
             }, 
             [] { LOG(Logger::LevelDebug, L"Update pending"); },
             []{
@@ -1148,6 +1169,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     LOG(Logger::LevelError, L"Failed to write auto update last success time");
                 }
 
+                availableManualUpdate.reset();
+
                 if (remote > current) {
                     // New version available.
                     std::unique_ptr<WSemVer> ignored;
@@ -1166,13 +1189,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         }
                     }
                     if (ignored && *ignored >= remote) {
-                        availableUpdate.reset();
+                        availableAutoUpdate.reset();
                         return; // Ignore this version.
                     }
-                    availableUpdate.emplace(remote, url);
-                    ShowAutoUpdateNotification();
+                    availableAutoUpdate.emplace(remote, url);
+                    ShowAutoUpdateNotification(false);
                 } else {
-                    availableUpdate.reset();
+                    availableAutoUpdate.reset();
                 }
             },
             [] { LOG(Logger::LevelDebug, L"Update pending when auto update"); },
@@ -1188,13 +1211,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_DESTROY:
         StopThemeWatcher();
+        applySystemColorModeDebouncer.Cancel();
         autoUpdateStartupDebouncer.Cancel();
         CancelUpdateCheck();
         WriteConfig();
         deviceStateChangedDebouncer.Cancel();
         defaultDeviceChangedDebouncer.Cancel();
         mutedStatedChangedDebouncer.Cancel();
-        mainNotifyIconRetryDebouncer.Cancel();
         RemoveMainNotification();
         RemoveManualUpdateNotification();
         RemoveAutoUpdateNotification();
@@ -1254,7 +1277,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             wcscmp(section, L"WindowsThemeElement") != 0) {
             break;
         }
-        ApplySystemColorMode();
+        applySystemColorModeDebouncer.Emit();
         break;
     }
     }
@@ -1263,11 +1286,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		// Taskbar created/recreated, add the notification icon again.
         //
         // https://learn.microsoft.com/en-us/windows/win32/shell/taskbar#taskbar-creation-notification
-        // When your taskbar application receives this message, it should assume that 
-        // any taskbar icons it added have been removed and add them again. 
 
-        ShowMainNotification(true); // silently add the notification icon.
-        LOG(Logger::LevelDebug, L"Add notification icon after the taskbar is created");
+        // Silently add notification icons.
+        ShowMainNotification(true);
+		ShowManualUpdateNotification(true);
+		ShowAutoUpdateNotification(true);
+        LOG(Logger::LevelDebug, L"Add notification icons after the taskbar is created");
         return 0;
     }
     return DefWindowProc(hWnd, message, wParam, lParam);
@@ -1460,29 +1484,7 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     return (INT_PTR)FALSE;
 }
 
-// Whether the last notification is shown in silent mode.
-// Used for retrying.
-static bool lastShowMainNotificationSilent = false; 
-
-// Retry interval for Shell_NotifyIconW(NIM_MODIFY or NIM_ADD).
-static const UINT SHELL_NOTIFY_ICON_RETRY_INTERVAL = 5000;
-
-static TimeDebouncer<>mainNotifyIconRetryDebouncer(
-	SHELL_NOTIFY_ICON_RETRY_INTERVAL, 
-	[]() {
-		LOG(Logger::LevelDebug, L"Retry showing notification icon");
-		const bool simulatedFailure = simulateAddNotifIconFailure;
-		if (simulateAddNotifIconFailure) {
-			simulateAddNotifIconFailure = false; // Let the retry succeed.
-		}
-		ShowMainNotification(lastShowMainNotificationSilent);
-		if (simulatedFailure) {
-			simulateAddNotifIconFailure = true; // Restore the simulated failure.
-		}
-	},
-	lastErrorLogger);
-
-static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData, std::function<void()>onFailed) {
+static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPrepareData) {
     NOTIFYICONDATAW data = { 0 };
     data.cbSize = sizeof data;
     data.uVersion = NOTIFYICON_VERSION_4;
@@ -1491,43 +1493,56 @@ static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPr
     onPrepareData(data);
 
     // Try to modify.
-    bool succeeded = false;
-    if (!(succeeded = Shell_NotifyIconW(NIM_MODIFY, &data))) {
-        // Not shown yet, try to add it.
-        if (succeeded = Shell_NotifyIconW(NIM_ADD, &data) && Shell_NotifyIconW(NIM_SETVERSION, &data)) {
-            // Check whether the notification is shown successfully.
-            // Notification icon will not be added due to QUNS_QUIET_TIME.
-            // If Shell_NotifyIconW is discarded, the following silent NIM_MODIFY will fail.
-            data.uFlags &= ~NIF_INFO; // Do not show balloon on success.
-            succeeded = Shell_NotifyIconW(NIM_MODIFY, &data);
-        }
+    auto err = RetryWhileTimeout([&data]() {
+            return Shell_NotifyIconW(NIM_MODIFY, &data);
+        });
+    if (err == 0) {
+        return;
     }
-    if (!succeeded) {
-        LOG_LAST_ERROR();
-        onFailed();
+    // Try to add it.
+    err = RetryWhileTimeout([&data]() {
+        return Shell_NotifyIconW(NIM_ADD, &data);
+    });
+    if (err != 0) {
+        LOG_ERROR(err);
+        return;
+    }
+	// Set version.
+    err = RetryWhileTimeout([&data]() {
+        return Shell_NotifyIconW(NIM_SETVERSION, &data);
+	});
+    if (err != 0) {
+        LOG_ERROR(err);
     }
 }
 
-static void ShowManualUpdateNotification() {
-    RemoveNoUpdateNotification();
-    RemoveAutoUpdateNotification(); // Mutual exclusion
-    if (!availableUpdate) {
-        RemoveManualUpdateNotification();
-        ShowNoUpdateNotification();
+static void ShowManualUpdateNotification(bool silent) {
+    // Mutual exclusion
+    if (!availableManualUpdate) {
+        if (!silent) {
+            RemoveManualUpdateNotification();
+            RemoveAutoUpdateNotification();
+            ShowNoUpdateNotification();
+        }
         return;
     }
+
+    RemoveNoUpdateNotification();
+    RemoveAutoUpdateNotification();
+
     ShowNotification(MANUAL_UPDATE_NOTIFICATION_ID, 
-        [](NOTIFYICONDATAW& data) {
-            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
-            data.dwInfoFlags = NIIF_INFO;
+        [silent](NOTIFYICONDATAW& data) {
             data.uCallbackMessage = UM_MANUAL_UPDATE_NOTIFICATION_NOTIFY;
             data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(updateIconResID));
-            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
-            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
+            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
             StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
-        },
-        []() {
-            // Transitional notificaton. No need to retry.
+            if (!silent) {
+                data.uFlags |= NIF_INFO;
+                data.dwInfoFlags = NIIF_INFO;
+                StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
+                StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_UPDATE_AVAILABLE_TITLE).c_str());
+            }
+           
         }
     );
 }
@@ -1548,21 +1563,32 @@ static void RemoveManualUpdateNotification() {
     RemoveNotification(MANUAL_UPDATE_NOTIFICATION_ID);
 }
 
-static void ShowAutoUpdateNotification() {
+static void ShowAutoUpdateNotification(bool silent) {
+    if (!availableAutoUpdate) {
+        if (!silent) {
+            RemoveManualUpdateNotification();
+            RemoveAutoUpdateNotification();
+            ShowNoUpdateNotification();
+        }
+        return;
+    }
+
     RemoveNoUpdateNotification();
-    RemoveManualUpdateNotification(); // Mutual exclusion
+    RemoveManualUpdateNotification();
+
     ShowNotification(AUTO_UPDATE_NOTIFICATION_ID,
-        [](NOTIFYICONDATAW& data) {
-            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_INFO | NIF_TIP | NIF_SHOWTIP;
-            data.dwInfoFlags = NIIF_INFO;
+        [silent](NOTIFYICONDATAW& data) {
             data.uCallbackMessage = UM_AUTO_UPDATE_NOTIFICATION_NOTIFY;
             data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(updateIconResID));
-            StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
-            StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_AUTO_UPDATE_AVAILABLE_TITLE).c_str());
+            data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
             StringCbCopyW(data.szTip, sizeof data.szTip / sizeof data.szTip[0], strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
-        },
-        []() {
-            // Transitional notificaton. No need to retry.
+            if (!silent) {
+                data.uFlags |= NIF_INFO;
+                data.dwInfoFlags = NIIF_INFO | NIIF_RESPECT_QUIET_TIME;
+                StringCbCopyW(data.szInfoTitle, sizeof(data.szInfoTitle), strRes->Load(IDS_DEMIC_UPDATE_AVAILABLE).c_str());
+                StringCbCopyW(data.szInfo, sizeof(data.szInfo), strRes->Load(IDS_AUTO_UPDATE_AVAILABLE_TITLE).c_str());
+            }
+           
         }
     );
 }
@@ -1581,12 +1607,8 @@ static UINT MainNotificationIconResID() {
 // Shows the main notification.
 // Parameter info is the balloon text; empty means silent.
 static void ShowMainNotificationImpl(const std::wstring& info) {
-    bool failed = false;
     ShowNotification(MAIN_NOTIFICATION_ID,
         [&info](NOTIFYICONDATAW& data) {
-            mainNotifyIconRetryDebouncer.Cancel();
-            lastShowMainNotificationSilent = info.empty();
-
             data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
             if (!info.empty()) {
                 data.uFlags |= NIF_INFO;
@@ -1609,19 +1631,8 @@ static void ShowMainNotificationImpl(const std::wstring& info) {
                     strRes->Load(IDS_NOTIFICATION_TIP_HOTKEY).c_str(),
                     version.c_str(), hotKeyInfo.GetStr().c_str());
             }
-        },
-        [&failed] {
-            failed = true;
-            // Retry.
-            mainNotifyIconRetryDebouncer.Emit();
-        });
-
-    if (!failed && simulateAddNotifIconFailure) {
-        LOG(Logger::LevelDebug, L"Simulating Shell_NotifyIconW failure");
-        RemoveMainNotification();
-        // Retry.
-        mainNotifyIconRetryDebouncer.Emit();
-    }
+        }
+    );
 }
 
 static void ShowMainNotification(bool silent) {
@@ -1637,10 +1648,7 @@ static void RemoveNotification(UINT id) {
     data.cbSize = sizeof data;
     data.hWnd = mainWindow;
     data.uID = id;
-    if (!Shell_NotifyIconW(NIM_DELETE, &data)) {
-        LOG(Logger::LevelDebug, L"Failed to remove notification");
-        return;
-    }
+    Shell_NotifyIconW(NIM_DELETE, &data);
 }
 
 static void RemoveMainNotification() {
@@ -1674,7 +1682,6 @@ static const auto CONFIG_DEBUG = L"Debug";
 static const auto CONFIG_SIMULATE_NO_MICROPHONE = L"SimulateNoMicrophone";
 static const auto CONFIG_PREFERRED_UI_LANGUAGES = L"PreferredUILanguages";
 static const auto CONFIG_WAIT_FOR_DEBUGGER = L"WaitForDebugger";
-static const auto CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE = L"SimulateAddNotificationFailure";
 static const auto CONFIG_SIMULATE_VERSION_FOR_UPDATE = L"SimulateVersionForUpdate";
 static const auto CONFIG_UPDATES = L"Updates";
 static const auto CONFIG_AUTO_CHECK_FOR_UPDATES = L"AutoCheckForUpdates";
@@ -1718,8 +1725,6 @@ void ReadConfig() {
 	preferredUILanguages = buf;
     
     waitForDebugger = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_WAIT_FOR_DEBUGGER, 0, configFilePath.c_str()) != 0;
-
-	simulateAddNotifIconFailure = GetPrivateProfileIntW(CONFIG_DEBUG, CONFIG_SIMULATE_ADD_NOTIFICATION_FAILURE, 0, configFilePath.c_str()) != 0;
 
     buf[0] = 0;
     GetPrivateProfileStringW(CONFIG_DEBUG, CONFIG_SIMULATE_VERSION_FOR_UPDATE, L"", buf, sizeof(buf) / sizeof(buf[0]), configFilePath.c_str());
