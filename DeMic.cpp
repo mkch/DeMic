@@ -14,6 +14,7 @@
 #include <windowsx.h>
 #include <shlobj.h>
 #include <filesystem>
+#include <thread>
 
 #include "Plugin.h"
 #include "TimeDebouncer.h"
@@ -55,6 +56,8 @@ enum {
     UM_MANUAL_UPDATE_CHECK_DONE,
     // Done message used by UpdateChecker for automatic checking.
     UM_AUTO_UPDATE_CHECK_DONE,
+    // Posted by the watcher of the system colour mode registry value.
+    UM_SYSTEM_COLOR_MODE_CHANGED,
 };
 // Message used by Shell to notify the app that the taskbar is created.
 // Registered with RegisterWindowMessageW("TaskbarCreated").
@@ -972,6 +975,70 @@ static void ApplySystemColorMode() {
     UpdateNotificationIcon(AUTO_UPDATE_NOTIFICATION_ID, updateIconResID, L"auto update");
 }
 
+// The colour mode is decided by this registry value, so watching the value
+// itself is the primary way to notice colour mode changes.
+// WM_SETTINGCHANGE is used as a fallback.
+static constexpr wchar_t PERSONALIZE_REG_KEY[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+
+static std::thread* themeWatchThread = nullptr;
+static HANDLE themeWatchStopEvent = nullptr;
+
+// Must be called before the window is destroyed, because the watcher posts
+// messages to it.
+static void StopThemeWatcher() {
+    if (themeWatchThread) {
+        SetEvent(themeWatchStopEvent);
+        themeWatchThread->join();
+        delete themeWatchThread;
+        themeWatchThread = nullptr;
+    }
+    if (themeWatchStopEvent) {
+        CloseHandle(themeWatchStopEvent);
+        themeWatchStopEvent = nullptr;
+    }
+}
+
+// Watches PERSONALIZE_REG_KEY and posts changedMessage on every change.
+static void StartThemeWatcher(HWND hwnd, UINT changedMessage) {
+    StopThemeWatcher();
+    HANDLE stopEvent = themeWatchStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!stopEvent) {
+        LOG_LAST_ERROR();
+        return;
+    }
+    themeWatchThread = new std::thread([hwnd, changedMessage, stopEvent] {
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, PERSONALIZE_REG_KEY, 0, KEY_NOTIFY, &key)
+            != ERROR_SUCCESS) {
+            LOG_LAST_ERROR();
+            return;
+        }
+        HANDLE changeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!changeEvent) {
+            LOG_LAST_ERROR();
+            RegCloseKey(key);
+            return;
+        }
+        const HANDLE handles[] = { stopEvent, changeEvent };
+        for (;;) {
+            // Asynchronous: arm and return, changeEvent is signalled on a change.
+            if (RegNotifyChangeKeyValue(key, TRUE, REG_NOTIFY_CHANGE_LAST_SET,
+                changeEvent, TRUE) != ERROR_SUCCESS) {
+                LOG_LAST_ERROR();
+                break;
+            }
+            if (WaitForMultipleObjects(_countof(handles), handles, FALSE, INFINITE)
+                != WAIT_OBJECT_0 + 1) {
+                break; // Stopped.
+            }
+            PostMessageW(hwnd, changedMessage, 0, 0);
+        }
+        CloseHandle(changeEvent);
+        RegCloseKey(key);
+    });
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case UM_MIC_CMD:
@@ -990,6 +1057,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CREATE:
         mainWindow = hWnd;
         prepareTaskbarCreatedNotification();
+        StartThemeWatcher(hWnd, UM_SYSTEM_COLOR_MODE_CHANGED);
+        // Catch a colour mode change that happened between reading the mode and
+        // arming the watcher.
+        ApplySystemColorMode();
         if (processElevated) {
 			// Allow UM_MIC_CMD message to be sent from non-elevated process.
             if (!ChangeWindowMessageFilterEx(hWnd, UM_MIC_CMD, MSGFLT_ALLOW, NULL)) {
@@ -1038,6 +1109,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case UM_AUTO_UPDATE_NOTIFICATION_NOTIFY:
         // Note that NOTIFYICON_VERSION_4 is used.
         ProcessAutoUpdateNotificationEvent(hWnd, LOWORD(lParam));
+        return 0;
+    case UM_SYSTEM_COLOR_MODE_CHANGED:
+        ApplySystemColorMode();
         return 0;
     case UM_MANUAL_UPDATE_CHECK_DONE:
         OnUpdateCheckDone(wParam, lParam,
@@ -1113,6 +1187,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     case WM_DESTROY:
+        StopThemeWatcher();
         autoUpdateStartupDebouncer.Cancel();
         CancelUpdateCheck();
         WriteConfig();
@@ -1168,11 +1243,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         }
     case WM_SETTINGCHANGE: {
+        // Fallback for when the theme watcher could not open the registry key:
+        // the shell broadcasts this message on colour mode changes. It only
+        // names the settings area, so ApplySystemColorMode() still re-reads the
+        // registry. The section names are undocumented, and lParam is NULL or
+        // empty when more than one setting changed, so those are candidates too.
         const wchar_t* section = reinterpret_cast<const wchar_t*>(lParam);
-        // ImmersiveColorSet and WindowsThemeElement are the sections the shell
-        // uses for theme changes, but they are undocumented. lParam is NULL or
-        // empty when more than one setting changed, and re-reading the theme is
-        // cheap, so let those through as well.
         if (section && *section &&
             wcscmp(section, L"ImmersiveColorSet") != 0 &&
             wcscmp(section, L"WindowsThemeElement") != 0) {
