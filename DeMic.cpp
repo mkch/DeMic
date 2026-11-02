@@ -15,6 +15,7 @@
 #include <shlobj.h>
 #include <filesystem>
 #include <thread>
+#include <exception>
 
 #include "Plugin.h"
 #include "TimeDebouncer.h"
@@ -216,15 +217,17 @@ static void ChangeIconResIDs(bool darkMode) {
     appliedDarkMode = darkMode;
 }
 
+
 // Retries a function until it returns true or GetLastError() is not ERROR_TIMEOUT.
 // The return value is 0 if the function returns true, or the last error code otherwise.
 template<typename F>
-DWORD RetryWhileTimeout(const F& f, UINT intervalMs = 200) {
+DWORD RetryWhileTimeout(const F& f, const wchar_t* op) {
     // A infinite loop is used here to wait for a busy system to become responsive.
     // i.e. If the shell is busy Shell_NotifyIconW() returns ERROR_TIMEOUT, my app
     // hangs. A laggy shell results in a laggy application, fair enough.
     // Further more, the shell can't always timeout in a living OS.
-    while (1) {
+    DWORD delay = 100; // 100ms
+    for(int i = 0; i < 10; i++) {
         SetLastError(0);
         if (f()) {
             return 0;
@@ -233,8 +236,13 @@ DWORD RetryWhileTimeout(const F& f, UINT intervalMs = 200) {
         if (error != ERROR_TIMEOUT) {
             return error;
         }
-        Sleep(intervalMs);
+        Sleep(delay);
+        delay = delay * 3 / 2; // 1.5x
     }
+    LOG(Logger::LevelError, std::format(L"Operation timed out: {}", op).c_str());
+    ShowMessageBox(strRes->Load(IDS_TIMEOUT_ERROR).c_str(), appTitle.c_str(), MB_ICONERROR);
+	TerminateProcess(GetCurrentProcess(), 1);
+    return 0; // Make compiler happy.
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -971,9 +979,9 @@ static void UpdateNotificationIcon(UINT id, UINT iconResID, const wchar_t* name)
     data.uID = id;
     data.uFlags = NIF_ICON;
     data.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(iconResID));
-    const auto err = RetryWhileTimeout([&] {
+    const auto err = RetryWhileTimeout([&data] {
         return Shell_NotifyIconW(NIM_MODIFY, &data);
-	});
+	}, L"NIM_MODIFY");
     if (err == 0) {
         LOG(Logger::LevelInfo, std::format(L"Updated {} notification icon", name).c_str());
     }
@@ -1495,14 +1503,14 @@ static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPr
     // Try to modify.
     auto err = RetryWhileTimeout([&data]() {
             return Shell_NotifyIconW(NIM_MODIFY, &data);
-        });
+        }, L"NIM_MODIFY");
     if (err == 0) {
         return;
     }
     // Try to add it.
     err = RetryWhileTimeout([&data]() {
         return Shell_NotifyIconW(NIM_ADD, &data);
-    });
+    }, L"NIM_ADD");
     if (err != 0) {
         LOG_ERROR(err);
         return;
@@ -1510,7 +1518,7 @@ static void ShowNotification(UINT id, std::function<void(NOTIFYICONDATAW&)> onPr
 	// Set version.
     err = RetryWhileTimeout([&data]() {
         return Shell_NotifyIconW(NIM_SETVERSION, &data);
-	});
+	}, L"NIM_SETVERSION");
     if (err != 0) {
         LOG_ERROR(err);
     }
