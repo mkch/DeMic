@@ -178,6 +178,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AutoUpdateMessageBox.h" />
     <ClInclude Include="JSONState.h" />
     <ClInclude Include="DeMic.h" />
     <ClInclude Include="framework.h" />
@@ -197,6 +198,7 @@
     <ClInclude Include="Util.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AutoUpdateMessageBox.cpp" />
     <ClCompile Include="DeMic.cpp" />
     <ClCompile Include="JSONState.cpp" />
     <ClCompile Include="Log.cpp" />

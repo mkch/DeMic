@@ -20,6 +20,7 @@
 #include "Plugin.h"
 #include "TimeDebouncer.h"
 #include "Log.h"
+#include "AutoUpdateMessageBox.h"
 
 #include "UpdateChecker.h"
 #include "HotKeyControlInfo.h"
@@ -940,14 +941,13 @@ void ProcessAutoUpdateNotificationEvent(HWND hwnd, WORD event) {
         if (availableAutoUpdate) {
             // New version available.
             const auto version = availableAutoUpdate->Version.str();
-            auto message = strRes->Load(IDS_UPDATE_AVAILABLE) + version + strRes->Load(IDS_AUTO_UPDATE_OR_NOT);
-            switch (ShowMessageBox(message.c_str(), strRes->Load(IDS_APP_TITLE).c_str(), MB_ICONQUESTION | MB_YESNOCANCEL)) {
+            switch (AutoUpdateMessageBox(version)) {
             case IDYES:
                 if (!NavigateURL(availableAutoUpdate->Url.c_str())) {
                     LOG_LAST_ERROR();
                 }
                 break;
-            case IDCANCEL: {
+			case IDNO: { // No and Cancel button are swapped positions to make No the default button. So IDNO means "Ignore this version".
                 // Save ignored version.
                 try {
                     auto& state = appState->GetState();

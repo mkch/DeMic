@@ -23,8 +23,8 @@
 #define IDS_RELAUNCH_FAILED             118
 #define IDS_RUN_AS_ADMIN_OR_NOT         119
 #define IDS_CHANGE_SETTING_FAILED       120
-#define IDS_AUTO_UPDATE_OR_NOT          121
 #define IDS_TIMEOUT_ERROR               122
+#define IDS_SKIP_THIS_VERSION           123
 #define IDI_MICROPHONE                  138
 #define IDI_MICROPHONE_MUTED            141
 #define IDI_NO_MICROPHONE               142
