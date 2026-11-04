@@ -12,24 +12,40 @@
 #include "WebRemote.h"
 #include "NetUtil.h"
 #include "Server.h"
+#include "../UiFont.h"
 
 
 static HWND dialog = NULL;
+static HFONT uiFont = NULL;
 
 // Whetehr the HTTP server is running when launching the dialog.
 // Used to determine whether to start the server when user cancels the dialog.
 static bool serverRunnintWhenLuanch = false;
 
-static void SetComboHeight(HWND combo, int dpi) {
-	int height = MulDiv(100, dpi, 72);
-	RECT hostComboRect = {};
-	GetWindowRect(combo, &hostComboRect);
-	ScreenToClient(dialog, (POINT*)&hostComboRect.left);
-	ScreenToClient(dialog, (POINT*)&hostComboRect.right);
-	SetWindowPos(combo, nullptr,
-		hostComboRect.left, hostComboRect.top,
-		hostComboRect.right - hostComboRect.left, height,
+// The host combo box uses the CBS_NOINTEGRALHEIGHT style, so the dialog manager does not
+// size its drop-down list. This height covers both the edit box and the list.
+static const int HOST_COMBO_HEIGHT_PT = 100;
+
+static void SetComboHeight(HWND combo, UINT dpi) {
+	RECT rc = {};
+	GetWindowRect(combo, &rc);
+	SetWindowPos(combo, nullptr, 0, 0,
+		rc.right - rc.left, ui_font::PtToPx(HOST_COMBO_HEIGHT_PT, dpi),
 		SWP_NOMOVE | SWP_NOZORDER);
+}
+
+// Applies the fonts, and the part of the layout that depends on the font size,
+// for the current DPI of the dialog.
+static void ApplyFonts(HWND hwnd) {
+	if (uiFont) {
+		DeleteObject(uiFont);
+		uiFont = NULL;
+	}
+	uiFont = ui_font::CreateMessageBoxFont(hwnd);
+	if (uiFont) {
+		ui_font::ApplyChildFonts(hwnd, uiFont);
+	}
+	SetComboHeight(GetDlgItem(hwnd, IDC_LISTEN_HOST_COMBO), ui_font::WindowDpi(hwnd));
 }
 
 static bool SelectPemFile(HWND owner, const std::wstring& initDir, std::wstring& path) {
@@ -69,9 +85,11 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
 			SetDlgItemTextW(hwnd, IDC_LISTEN_ADDR_CONFIG_TIP_STATIC, strRes->Load(IDS_LISTEN_ADDR_CONFIG_TIP).c_str());
 
-			dialog = hwnd;
+			// Keep our fonts when the dialog manager updates fonts on DPI changes.
+			ui_font::DisableDpiFontUpdate(hwnd);
+			ApplyFonts(hwnd);
+
 			HWND hostCombo = GetDlgItem(hwnd, IDC_LISTEN_HOST_COMBO);
-			SetComboHeight(hostCombo, GetDpiForWindow(hwnd));
 			// Set current listen host.
 			SetWindowTextA(hostCombo, config.ServerListenHost.c_str());
 			// Config comobo list.
@@ -178,21 +196,20 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			}
 			break;
 		case WM_DPICHANGED: {
-			UINT dpiX = LOWORD(wParam);
-
-			RECT* prc = (RECT*)lParam;
-
-			SetWindowPos(hwnd, NULL,
-				prc->left, prc->top,
-				prc->right - prc->left,
-				prc->bottom - prc->top,
-				SWP_NOZORDER | SWP_NOACTIVATE);
-
-			HWND hostCombo = GetDlgItem(hwnd, IDC_LISTEN_HOST_COMBO);
-			SetComboHeight(hostCombo, LOWORD(wParam));
-			return TRUE;
+			// The dialog manager resizes the dialog and re-lays out its controls.
+			// Only the fonts and the combo box height need to be updated.
+			ApplyFonts(hwnd);
+			break;
 		}
-		
+		case WM_NCDESTROY:
+			// Child controls are gone, so the font is no longer in use.
+			if (uiFont) {
+				DeleteObject(uiFont);
+				uiFont = NULL;
+			}
+			dialog = NULL;
+			return TRUE;
+
 	}
 	return FALSE;
 }
