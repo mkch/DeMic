@@ -60,4 +60,23 @@ inline void ApplyChildFonts(HWND hDlg, HFONT font) {
 	}
 }
 
+// Deletes a font owned by a dialog procedure (see RefreshDialogFont) and clears the handle.
+inline void ReleaseDialogFont(HFONT& font) {
+	if (font) {
+		DeleteObject(font);
+		font = NULL;
+	}
+}
+
+// Re-creates the message box font for the current DPI of hDlg and applies it to the controls
+// of hDlg. Must be called in WM_INITDIALOG and WM_DPICHANGED of the dialog procedure.
+// font holds the current font and must be released with ReleaseDialogFont().
+inline void RefreshDialogFont(HWND hDlg, HFONT& font) {
+	ReleaseDialogFont(font);
+	font = CreateMessageBoxFont(hDlg);
+	if (font) {
+		ApplyChildFonts(hDlg, font);
+	}
+}
+
 } // namespace ui_font

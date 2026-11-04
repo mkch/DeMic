@@ -27,6 +27,7 @@
 #include "TaskScheduler.h"
 #include "InstanceLock.h"
 #include "JSONState.h"
+#include "UiFont.h"
 
 
 // IDs of Shell_NotifyIconW.
@@ -1323,6 +1324,8 @@ bool ResetHotKey(HWND hwnd) {
     return true;
 }
 
+static HFONT hotKeySettingsFont = NULL;
+
 // Message handler for hotkey settings box.
 INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -1330,9 +1333,21 @@ INT_PTR CALLBACK HotKeySettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     switch (message)
     {
     case WM_INITDIALOG:
+        // Keep our font when the dialog manager updates fonts on DPI changes.
+        ui_font::DisableDpiFontUpdate(hDlg);
+        ui_font::RefreshDialogFont(hDlg, hotKeySettingsFont);
         hotKeyInfo.SetToCtrl(GetDlgItem(hDlg, IDC_HOTKEY));
         hotKeySettingWindow = hDlg;
         return TRUE;
+    case WM_DPICHANGED:
+        // The dialog manager resizes the dialog and re-lays out its controls.
+        // Only the font needs to be re-created for the new DPI.
+        ui_font::RefreshDialogFont(hDlg, hotKeySettingsFont);
+        break;
+    case WM_NCDESTROY:
+        // Child controls are gone, so the font is no longer in use.
+        ui_font::ReleaseDialogFont(hotKeySettingsFont);
+        break;
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDOK: {
@@ -1411,6 +1426,8 @@ void PlayOffSound(const std::wstring& path) {
     }
 }
 
+static HFONT soundSettingsFont = NULL;
+
 // Message handler for sound settings box.
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -1418,6 +1435,9 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     switch (message)
     {
     case WM_INITDIALOG:
+        // Keep our font when the dialog manager updates fonts on DPI changes.
+        ui_font::DisableDpiFontUpdate(hDlg);
+        ui_font::RefreshDialogFont(hDlg, soundSettingsFont);
         Button_SetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND), enableOnSound);
         SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), onSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : onSoundPath.c_str());
         SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), offSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : offSoundPath.c_str());
@@ -1487,6 +1507,15 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
 			soundSettingsWindow = NULL;
             return (INT_PTR)TRUE;
         }
+        break;
+    case WM_DPICHANGED:
+        // The dialog manager resizes the dialog and re-lays out its controls.
+        // Only the font needs to be re-created for the new DPI.
+        ui_font::RefreshDialogFont(hDlg, soundSettingsFont);
+        break;
+    case WM_NCDESTROY:
+        // Child controls are gone, so the font is no longer in use.
+        ui_font::ReleaseDialogFont(soundSettingsFont);
         break;
     }
     return (INT_PTR)FALSE;
