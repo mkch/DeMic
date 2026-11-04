@@ -39,6 +39,9 @@
     <ClInclude Include="..\Util.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\UiFont.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="MessageWindow.h">
       <Filter>头文件</Filter>
     </ClInclude>

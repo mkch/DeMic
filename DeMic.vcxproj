@@ -196,6 +196,7 @@
     <ClInclude Include="TimeDebouncer.h" />
     <ClInclude Include="UpdateChecker.h" />
     <ClInclude Include="Util.h" />
+    <ClInclude Include="UiFont.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AutoUpdateMessageBox.cpp" />

@@ -195,6 +195,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\Util.h" />
+    <ClInclude Include="..\UiFont.h" />
     <ClInclude Include="CoEvent.h" />
     <ClInclude Include="ConfigListenAddr.h" />
     <ClInclude Include="CryptoUtil.h" />

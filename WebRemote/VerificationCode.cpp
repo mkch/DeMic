@@ -6,6 +6,7 @@
 #include "resource.h"
 #include "WebRemote.h"
 #include "CryptoUtil.h"
+#include "../UiFont.h"
 
 static std::mutex codeMutex;
 static HWND dialog = NULL;
@@ -53,37 +54,31 @@ enum {
 	UM_CODE_USED = WM_USER + 1,
 };
 
-static HFONT codeFont = NULL;
+static HFONT uiFont = NULL;   // Font of the dialog, same as message boxes.
+static HFONT codeFont = NULL; // Font of the verification code.
 
-static void ApplyFont(HWND hwnd, UINT dpi) {
-	static const int FONT_SIZE = 25; // in points
+// Applies the fonts for the current DPI of the dialog.
+static void ApplyFonts(HWND hwnd) {
+	static const int CODE_FONT_POINT_SIZE = 25;
 
-	HWND hCtrl = GetDlgItem(hwnd, IDC_VERIFICATION_CODE_STATIC);
-
-	if (codeFont)
-		DeleteObject(codeFont);
-
-	int height = -MulDiv(FONT_SIZE, dpi, 72);
-
-	codeFont = CreateFontW(
-		height, 0, 0, 0,
-		FW_NORMAL,
-		FALSE, FALSE, FALSE,
-		DEFAULT_CHARSET,
-		OUT_DEFAULT_PRECIS,
-		CLIP_DEFAULT_PRECIS,
-		CLEARTYPE_QUALITY,
-		DEFAULT_PITCH,
-		L"Consolas");
-
-	if (codeFont == NULL) {
-		HFONT hOldFont = (HFONT)SendMessage(hCtrl, WM_GETFONT, 0, 0);
-		LOGFONT lf{};
-		GetObject(hOldFont, sizeof(lf), &lf);
-		lf.lfHeight *= 2;
-		codeFont = CreateFontIndirect(&lf);
+	if (uiFont) {
+		DeleteObject(uiFont);
+		uiFont = NULL;
 	}
-	SendMessage(hCtrl, WM_SETFONT, (WPARAM)codeFont, TRUE);
+	if (codeFont) {
+		DeleteObject(codeFont);
+		codeFont = NULL;
+	}
+
+	uiFont = ui_font::CreateMessageBoxFont(hwnd);
+	if (uiFont) {
+		ui_font::ApplyChildFonts(hwnd, uiFont);
+	}
+
+	// Falls back to the UI font if the monospace font is unavailable.
+	codeFont = ui_font::CreatePointFont(hwnd, CODE_FONT_POINT_SIZE, L"Consolas");
+	SendMessageW(GetDlgItem(hwnd, IDC_VERIFICATION_CODE_STATIC), WM_SETFONT,
+		(WPARAM)(codeFont ? codeFont : uiFont), TRUE);
 }
 
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -95,24 +90,18 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_VERIFICATION_CODE));
 			SetWindowTextW(hwnd, title.c_str());
 
-			ApplyFont(hwnd, GetDpiForWindow(hwnd));
+			// Keep our fonts when the dialog manager updates fonts on DPI changes.
+			ui_font::DisableDpiFontUpdate(hwnd);
+			ApplyFonts(hwnd);
 
 			GenerateNewCode(hwnd);
 			return TRUE;
 		}
 		case WM_DPICHANGED: {
-			UINT dpiX = LOWORD(wParam);
-
-			RECT* prc = (RECT*)lParam;
-
-			SetWindowPos(hwnd, NULL,
-				prc->left, prc->top,
-				prc->right - prc->left,
-				prc->bottom - prc->top,
-				SWP_NOZORDER | SWP_NOACTIVATE);
-
-			ApplyFont(hwnd, dpiX);
-			return TRUE;
+			// The dialog manager resizes the dialog and re-lays out its controls.
+			// Only the fonts need to be re-created for the new DPI.
+			ApplyFonts(hwnd);
+			break;
 		}
 		case WM_COMMAND:
 			switch (wParam) {
@@ -141,12 +130,20 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 		case WM_DESTROY: {
 			std::lock_guard<std::mutex> guard(codeMutex);
 			verificationCode.clear();
-			DeleteObject(codeFont);
 			dialog = NULL;
 			return TRUE;
 		}
 		case WM_NCDESTROY:
 			dialog = NULL;
+			// Child controls are gone, so the fonts are no longer in use.
+			if (uiFont) {
+				DeleteObject(uiFont);
+				uiFont = NULL;
+			}
+			if (codeFont) {
+				DeleteObject(codeFont);
+				codeFont = NULL;
+			}
 			return TRUE;
 	}
 	return FALSE;
