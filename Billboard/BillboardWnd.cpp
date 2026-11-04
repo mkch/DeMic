@@ -32,7 +32,7 @@ void SyncTopMost(HWND hwnd);
 void SyncHideCaption(HWND hwnd);
 void RestoreLastWindowRect(HWND hwnd);
 
-static RECT rcBeforeMinized = { 0 };
+static RECT rcBeforeMinimized = { 0 };
 
 // Start simulating window dragging.
 static void startDrag(HWND hWnd) {
@@ -246,7 +246,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
     case WM_SYSCOMMAND:{
         if (wParam == SC_MINIMIZE) {
-           GetWindowRect(hWnd, &rcBeforeMinized); // Save the winddow RECT before minizing.
+           GetWindowRect(hWnd, &rcBeforeMinimized); // Save the window RECT before minimizing.
         }
         break;
     }
@@ -482,7 +482,7 @@ void InvalidateBillboardWnd() {
 void GetBillboardWndLogicalRect(LPRECT pRect) {
     RECT rc = { 0 };
     if (IsIconic(BillboardWnd)) {
-        rc = rcBeforeMinized;
+        rc = rcBeforeMinimized;
     } else {
         GetWindowRect(BillboardWnd, &rc);
     }
