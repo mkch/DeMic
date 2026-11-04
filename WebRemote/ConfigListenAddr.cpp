@@ -18,9 +18,9 @@
 static HWND dialog = NULL;
 static HFONT uiFont = NULL;
 
-// Whetehr the HTTP server is running when launching the dialog.
+// Whether the HTTP server is running when launching the dialog.
 // Used to determine whether to start the server when user cancels the dialog.
-static bool serverRunnintWhenLuanch = false;
+static bool serverRunningWhenLaunch = false;
 
 // The host combo box uses the CBS_NOINTEGRALHEIGHT style, so the dialog manager does not
 // size its drop-down list. This height covers both the edit box and the list.
@@ -79,7 +79,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 	switch (message) {
 		case WM_INITDIALOG: {
 			dialog = hwnd;
-			serverRunnintWhenLuanch = HTTPServerRunning();
+			serverRunningWhenLaunch = HTTPServerRunning();
 			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_LISTEN_ADDR));
 			SetWindowTextW(hwnd, title.c_str());
 
@@ -154,7 +154,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 					return TRUE;
 				}
 				case IDCANCEL: {
-					if (!HTTPServerRunning() && serverRunnintWhenLuanch) {
+					if (!HTTPServerRunning() && serverRunningWhenLaunch) {
 						// No configuration saved. Starts server with the old configuration.
 						StartHTTPServerWithPrompt(config, hwnd);
 					}
