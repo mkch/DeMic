@@ -26,13 +26,11 @@ static void startDrag(HWND hWnd) {
     SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
 }
 
-// Client area padding for clickable region.
-static const int PADDING = 4;
-
 static bool leftButtonDown = false;
 static bool inDragging = false;
 
-// Thickness of the border that responds to resizing.
+// Thickness of the border that responds to resizing. It is also excluded from the
+// clickable region, so that clicks meant to resize the window do not toggle the mute state.
 static int ResizeBorderThickness(HWND hWnd) {
     const UINT dpi = GetDpiForWindow(hWnd);
     return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
@@ -123,7 +121,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         leftButtonDown = false;
         RECT rect = { 0 };
         GetClientRect(hWnd, &rect);
-        InflateRect(&rect, -PADDING * 2, -PADDING * 2);
+        const int border = ResizeBorderThickness(hWnd);
+        InflateRect(&rect, -border, -border);
         POINT pt = { 0 };
         pt.x = LOWORD(lParam);
         pt.y = HIWORD(lParam);
