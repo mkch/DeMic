@@ -31,6 +31,50 @@ static const int PADDING = 4;
 
 static bool leftButtonDown = false;
 static bool inDragging = false;
+
+// Thickness of the border that responds to resizing.
+static int ResizeBorderThickness(HWND hWnd) {
+    const UINT dpi = GetDpiForWindow(hWnd);
+    return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+// Hit-tests the resizing border. Needed because the non-client area of a window with
+// hidden caption is empty, so DefWindowProc no longer reports the border hit-test codes.
+static LRESULT HitTestResizeBorder(HWND hWnd, LPARAM lParam) {
+    RECT rcWnd = { 0 };
+    GetWindowRect(hWnd, &rcWnd);
+    const POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+    const int border = ResizeBorderThickness(hWnd);
+    const bool left = pt.x < rcWnd.left + border;
+    const bool right = pt.x >= rcWnd.right - border;
+    const bool top = pt.y < rcWnd.top + border;
+    const bool bottom = pt.y >= rcWnd.bottom - border;
+    if (top && left) {
+        return HTTOPLEFT;
+    }
+    if (top && right) {
+        return HTTOPRIGHT;
+    }
+    if (bottom && left) {
+        return HTBOTTOMLEFT;
+    }
+    if (bottom && right) {
+        return HTBOTTOMRIGHT;
+    }
+    if (top) {
+        return HTTOP;
+    }
+    if (bottom) {
+        return HTBOTTOM;
+    }
+    if (left) {
+        return HTLEFT;
+    }
+    if (right) {
+        return HTRIGHT;
+    }
+    return HTCLIENT;
+}
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
@@ -49,11 +93,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         const static int CLIENT_MIN_SIZE = 100;
         RECT rc = { 0, 0, CLIENT_MIN_SIZE, CLIENT_MIN_SIZE };
 
-        AdjustWindowRectExForDpi(&rc,
-            GetWindowLong(hWnd, GWL_STYLE),
-            GetMenu(hWnd) != NULL,
-            GetWindowLong(hWnd, GWL_EXSTYLE),
-            GetDpiForWindow(hWnd));
+        if (!hideCaption) {
+            // The client area covers the whole window when the caption is hidden.
+            AdjustWindowRectExForDpi(&rc,
+                GetWindowLong(hWnd, GWL_STYLE),
+                GetMenu(hWnd) != NULL,
+                GetWindowLong(hWnd, GWL_EXSTYLE),
+                GetDpiForWindow(hWnd));
+        }
 
         lpMinMaxInfo->ptMinTrackSize.x = rc.right - rc.left;
         lpMinMaxInfo->ptMinTrackSize.y = rc.bottom - rc.top;
@@ -92,10 +139,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
 		}
         break;
+    case WM_NCCALCSIZE:
+        if (hideCaption && wParam) {
+            if (IsZoomed(hWnd)) {
+                // A maximized window is inflated over the work area by the frame thickness.
+                LPRECT rc = &((LPNCCALCSIZE_PARAMS)lParam)->rgrc[0];
+                const int border = ResizeBorderThickness(hWnd);
+                InflateRect(rc, -border, -border);
+            }
+            // Make the client area cover the whole window, so that there is no
+            // non-client area left for DefWindowProc to paint as a dark frame.
+            return 0;
+        }
+        break;
     case WM_NCHITTEST:
-        if (hideCaption && inDragging) {
-            // The WM_NCHITTEST message right after the last dragging WM_MOUSEMOVE.
-            inDragging = leftButtonDown = false;
+        if (hideCaption) {
+            if (inDragging) {
+                // The WM_NCHITTEST message right after the last dragging WM_MOUSEMOVE.
+                inDragging = leftButtonDown = false;
+                break;
+            }
+            return HitTestResizeBorder(hWnd, lParam);
         }
         break;
     case WM_KILLFOCUS:
