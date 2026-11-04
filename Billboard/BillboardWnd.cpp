@@ -294,8 +294,8 @@ void RestoreLastWindowRect(HWND hwnd) {
     if (lastWindowRect.right - lastWindowRect.left <= 0 || lastWindowRect.bottom - lastWindowRect.top <= 0) {
         return;
     }
-    // lastWindowRect is saved in logical pixels (96 DPI).
-    const RECT rc = ScaleRect(lastWindowRect, USER_DEFAULT_SCREEN_DPI, WindowDpi(hwnd));
+    // lastWindowRect is saved in logical pixels (96 DPI) from version 1.
+    const RECT rc = configVersion ? ScaleRect(lastWindowRect, USER_DEFAULT_SCREEN_DPI, WindowDpi(hwnd)) : lastWindowRect;
     MoveWindow(hwnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, FALSE);
 }
 

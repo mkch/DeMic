@@ -6,6 +6,7 @@ extern HINSTANCE hInstance;
 extern std::unique_ptr<StringRes> strRes;
 extern DeMic_Host* host;
 extern void* state;
+extern unsigned int configVersion;
 extern bool alwaysOnTop;
 extern bool hideCaption;
 extern RECT lastWindowRect;

@@ -18,6 +18,8 @@ std::vector<wchar_t> pluginName;
 static const wchar_t* const CONFIG_FILE_NAME = L"Billboard.json";
 std::wstring configFilePath;
 
+unsigned int configVersion = 0;
+static const decltype(configVersion) CURRENT_CONFIG_VERSION = 1;
 bool alwaysOnTop = false;
 bool hideCaption = false;
 RECT lastWindowRect = { 0 };
@@ -45,6 +47,7 @@ BOOL WINAPI DllMain(
     return TRUE;
 }
 
+const static char* const CONFIG_VERSION = "Version";
 const static char* const CONFIG_ALWAYS_ON_TOP = "AlwaysOnTop";
 const static char* const CONFIG_LAST_RECT = "LastRect";
 const static char* const CONFIG_LEFT = "left";
@@ -62,6 +65,10 @@ void ReadConfig() {
 	}
 	try {
 		const auto config = json::parse(in);
+		const auto version = config.find(CONFIG_VERSION);
+		if(version != config.end()) {
+			configVersion = version->get<decltype(configVersion)>();
+		}
 		alwaysOnTop = config.at(CONFIG_ALWAYS_ON_TOP);
 		const auto lastRect = config.at(CONFIG_LAST_RECT);
 		// The rect is stored in logical pixels (96 DPI), see WriteConfig().
@@ -73,9 +80,11 @@ void ReadConfig() {
 }
 
 void WriteConfig() {
-	// Save the rect in logical pixels (96 DPI), so that it is independent of the current DPI.
+	// Save the rect in logical pixels (96 DPI) starting form version 1.
 	GetBillboardWndLogicalRect(&lastWindowRect);
-	json config = { {CONFIG_ALWAYS_ON_TOP, alwaysOnTop},
+	json config = { 
+		{CONFIG_VERSION, CURRENT_CONFIG_VERSION},
+		{CONFIG_ALWAYS_ON_TOP, alwaysOnTop},
 		{CONFIG_LAST_RECT, {
 				{CONFIG_LEFT, lastWindowRect.left},
 				{CONFIG_TOP, lastWindowRect.top}, 
