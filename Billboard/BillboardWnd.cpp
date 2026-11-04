@@ -178,6 +178,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
         break;
+    case WM_NCACTIVATE:
+        if (hideCaption) {
+            // DefWindowProc paints the default caption when the window is deactivated, without
+            // honoring the empty non-client area. Skip it to keep the window borderless.
+            return TRUE;
+        }
+        break;
     case WM_NCHITTEST:
         if (hideCaption) {
             if (inDragging) {
