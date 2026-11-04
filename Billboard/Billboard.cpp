@@ -22,7 +22,7 @@ unsigned int configVersion = 0;
 static const decltype(configVersion) CURRENT_CONFIG_VERSION = 1;
 bool alwaysOnTop = false;
 bool hideCaption = false;
-RECT lastWindowRect = { 0 };
+WindowRectRatio lastWindowRect = { 0 };
 
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,		// handle to DLL module
@@ -71,8 +71,13 @@ void ReadConfig() {
 		}
 		alwaysOnTop = config.at(CONFIG_ALWAYS_ON_TOP);
 		const auto lastRect = config.at(CONFIG_LAST_RECT);
-		// The rect is stored in logical pixels (96 DPI), see WriteConfig().
-		lastWindowRect = {lastRect.at(CONFIG_LEFT), lastRect.at(CONFIG_TOP), lastRect.at(CONFIG_RIGHT), lastRect.at(CONFIG_BOTTOM)};
+		// The rect is stored as ratios of the virtual screen since version 1, see WriteConfig().
+		// Older versions store physical pixels.
+		lastWindowRect = {
+			lastRect.at(CONFIG_LEFT).get<double>(),
+			lastRect.at(CONFIG_TOP).get<double>(),
+			lastRect.at(CONFIG_RIGHT).get<double>(),
+			lastRect.at(CONFIG_BOTTOM).get<double>() };
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
 		ShowError(host, state, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
@@ -80,8 +85,8 @@ void ReadConfig() {
 }
 
 void WriteConfig() {
-	// Save the rect in logical pixels (96 DPI) starting form version 1.
-	GetBillboardWndLogicalRect(&lastWindowRect);
+	// Save the rect as ratios of the virtual screen, see GetBillboardWndRelativeRect().
+	GetBillboardWndRelativeRect(lastWindowRect);
 	json config = { 
 		{CONFIG_VERSION, CURRENT_CONFIG_VERSION},
 		{CONFIG_ALWAYS_ON_TOP, alwaysOnTop},

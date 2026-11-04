@@ -3,6 +3,7 @@
 #include "Billboard.h"
 #include "BillboardWnd.h"
 #include <commctrl.h>
+#include <cmath>
 
 static HWND BillboardWnd = NULL;
 
@@ -61,6 +62,10 @@ void RestoreLastWindowRect(HWND hwnd);
 
 static RECT rcBeforeMinimized = { 0 };
 
+// The window rect restored from the config, if it is still the current one.
+static RECT restoredRect = { 0 };
+static bool restoredRectValid = false;
+
 // Start simulating window dragging.
 static void startDrag(HWND hWnd) {
     SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
@@ -82,17 +87,34 @@ static int ResizeBorderThickness(HWND hWnd) {
     return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 }
 
-// Converts a RECT between logical pixels (96 DPI) and physical pixels of the given DPI.
-static RECT ScaleRect(const RECT& rc, int fromDpi, int toDpi) {
-    return { MulDiv(rc.left, toDpi, fromDpi),
-             MulDiv(rc.top, toDpi, fromDpi),
-             MulDiv(rc.right, toDpi, fromDpi),
-             MulDiv(rc.bottom, toDpi, fromDpi) };
-}
-
 // Converts logical pixels (96 DPI) to physical pixels of the given DPI.
 static int DipToPx(int dip, int dpi) {
     return MulDiv(dip, dpi, USER_DEFAULT_SCREEN_DPI);
+}
+
+// The bounding box of all displays, in physical pixels.
+static RECT VirtualScreenRect() {
+    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    return { x, y,
+             x + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+             y + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+}
+
+// The minimum size of the window, in physical pixels.
+static SIZE MinWindowSize(HWND hWnd) {
+    const int dpi = WindowDpi(hWnd);
+    const int clientMinSize = DipToPx(CLIENT_MIN_SIZE, dpi);
+    RECT rc = { 0, 0, clientMinSize, clientMinSize };
+    if (!hideCaption) {
+        // The client area covers the whole window when the caption is hidden.
+        AdjustWindowRectExForDpi(&rc,
+            GetWindowLong(hWnd, GWL_STYLE),
+            GetMenu(hWnd) != NULL,
+            GetWindowLong(hWnd, GWL_EXSTYLE),
+            (UINT)dpi);
+    }
+    return { rc.right - rc.left, rc.bottom - rc.top };
 }
 
 // Hit-tests the resizing border. Needed because the non-client area of a window with
@@ -146,25 +168,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_GETMINMAXINFO: {
         LPMINMAXINFO lpMinMaxInfo = (LPMINMAXINFO)lParam;
-
-        const int dpi = WindowDpi(hWnd);
-        const int clientMinSize = DipToPx(CLIENT_MIN_SIZE, dpi);
-        RECT rc = { 0, 0, clientMinSize, clientMinSize };
-
-        if (!hideCaption) {
-            // The client area covers the whole window when the caption is hidden.
-            AdjustWindowRectExForDpi(&rc,
-                GetWindowLong(hWnd, GWL_STYLE),
-                GetMenu(hWnd) != NULL,
-                GetWindowLong(hWnd, GWL_EXSTYLE),
-                dpi);
-        }
-
-        lpMinMaxInfo->ptMinTrackSize.x = rc.right - rc.left;
-        lpMinMaxInfo->ptMinTrackSize.y = rc.bottom - rc.top;
+        const SIZE minSize = MinWindowSize(hWnd);
+        lpMinMaxInfo->ptMinTrackSize.x = minSize.cx;
+        lpMinMaxInfo->ptMinTrackSize.y = minSize.cy;
         break;
     }
     case WM_DPICHANGED: {
+        RECT current = { 0 };
+        GetWindowRect(hWnd, &current);
+        if (restoredRectValid && EqualRect(&current, &restoredRect)) {
+            // The rect was just restored from the config and is already the final one.
+            // The suggested rect would scale it again for the new DPI.
+            restoredRectValid = false;
+            return 0;
+        }
         const RECT* prc = (const RECT*)lParam;
         // The suggested rect is the current rect scaled linearly for the new DPI.
         // Windows does not apply it automatically.
@@ -187,6 +204,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
         RestoreTaskbarButtonState();
+        WriteConfig();
         return 0;
     case WM_LBUTTONDOWN:
         leftButtonDown = true;
@@ -304,12 +322,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 void RestoreLastWindowRect(HWND hwnd) {
-    if (lastWindowRect.right - lastWindowRect.left <= 0 || lastWindowRect.bottom - lastWindowRect.top <= 0) {
+    if (!std::isfinite(lastWindowRect.left) || !std::isfinite(lastWindowRect.top)
+        || !std::isfinite(lastWindowRect.right) || !std::isfinite(lastWindowRect.bottom)
+        || lastWindowRect.right <= lastWindowRect.left || lastWindowRect.bottom <= lastWindowRect.top) {
         return;
     }
-    // lastWindowRect is saved in logical pixels (96 DPI) from version 1.
-    const RECT rc = configVersion ? ScaleRect(lastWindowRect, USER_DEFAULT_SCREEN_DPI, WindowDpi(hwnd)) : lastWindowRect;
-    MoveWindow(hwnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, FALSE);
+    RECT rc = { 0 };
+    if (configVersion) {
+        // lastWindowRect is stored as ratios of the virtual screen since version 1.
+        const RECT vs = VirtualScreenRect();
+        const double width = vs.right - vs.left;
+        const double height = vs.bottom - vs.top;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        rc = { vs.left + (LONG)std::llround(lastWindowRect.left * width),
+               vs.top + (LONG)std::llround(lastWindowRect.top * height),
+               vs.left + (LONG)std::llround(lastWindowRect.right * width),
+               vs.top + (LONG)std::llround(lastWindowRect.bottom * height) };
+    } else {
+        // Physical pixels, stored by versions without the config version.
+        rc = { (LONG)lastWindowRect.left, (LONG)lastWindowRect.top,
+               (LONG)lastWindowRect.right, (LONG)lastWindowRect.bottom };
+    }
+    int cx = rc.right - rc.left;
+    int cy = rc.bottom - rc.top;
+    if (cx <= 0 || cy <= 0) {
+        return;
+    }
+    // Keep the size between the minimum size of the window and the work area of the
+    // nearest display.
+    const SIZE minSize = MinWindowSize(hwnd);
+    MONITORINFO monitorInfo = { sizeof(monitorInfo), 0 };
+    if (GetMonitorInfo(MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+        cx = min(cx, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
+        cy = min(cy, (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top));
+    }
+    cx = max(cx, (int)minSize.cx);
+    cy = max(cy, (int)minSize.cy);
+    restoredRect = { rc.left, rc.top, rc.left + cx, rc.top + cy };
+    restoredRectValid = true;
+    MoveWindow(hwnd, restoredRect.left, restoredRect.top, cx, cy, FALSE);
 }
 
 // Sync the top most state with alwyasOnTop flag.
@@ -497,13 +550,20 @@ void InvalidateBillboardWnd() {
     InvalidateRect(BillboardWnd, NULL, TRUE);
 }
 
-// Gets the window rect in logical pixels (96 DPI).
-void GetBillboardWndLogicalRect(LPRECT pRect) {
+// Gets the window rect as ratios of the virtual screen.
+void GetBillboardWndRelativeRect(WindowRectRatio& rect) {
     RECT rc = { 0 };
     if (IsIconic(BillboardWnd)) {
         rc = rcBeforeMinimized;
     } else {
         GetWindowRect(BillboardWnd, &rc);
     }
-    *pRect = ScaleRect(rc, WindowDpi(BillboardWnd), USER_DEFAULT_SCREEN_DPI);
+    const RECT vs = VirtualScreenRect();
+    const double width = vs.right - vs.left;
+    const double height = vs.bottom - vs.top;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    rect = { (rc.left - vs.left) / width, (rc.top - vs.top) / height,
+             (rc.right - vs.left) / width, (rc.bottom - vs.top) / height };
 }

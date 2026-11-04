@@ -9,7 +9,16 @@ extern void* state;
 extern unsigned int configVersion;
 extern bool alwaysOnTop;
 extern bool hideCaption;
-extern RECT lastWindowRect;
+
+// Position and size of the Billboard window relative to the virtual screen, which is the
+// bounding box of all displays. 0.0 is the left/top edge, 1.0 is the right/bottom edge.
+struct WindowRectRatio {
+	double left;
+	double top;
+	double right;
+	double bottom;
+};
+extern WindowRectRatio lastWindowRect;
 
 void ReadConfig();
 void WriteConfig();
