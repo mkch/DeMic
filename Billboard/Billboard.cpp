@@ -64,6 +64,7 @@ void ReadConfig() {
 		const auto config = json::parse(in);
 		alwaysOnTop = config.at(CONFIG_ALWAYS_ON_TOP);
 		const auto lastRect = config.at(CONFIG_LAST_RECT);
+		// The rect is stored in logical pixels (96 DPI), see WriteConfig().
 		lastWindowRect = {lastRect.at(CONFIG_LEFT), lastRect.at(CONFIG_TOP), lastRect.at(CONFIG_RIGHT), lastRect.at(CONFIG_BOTTOM)};
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
@@ -72,7 +73,8 @@ void ReadConfig() {
 }
 
 void WriteConfig() {
-	GetBillboardWndRect(&lastWindowRect);
+	// Save the rect in logical pixels (96 DPI), so that it is independent of the current DPI.
+	GetBillboardWndLogicalRect(&lastWindowRect);
 	json config = { {CONFIG_ALWAYS_ON_TOP, alwaysOnTop},
 		{CONFIG_LAST_RECT, {
 				{CONFIG_LEFT, lastWindowRect.left},

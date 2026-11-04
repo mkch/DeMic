@@ -14,6 +14,14 @@ static HBITMAP hBmpNoMicrophone = NULL;
 static const int IMAGE_SIZE = 512;
 static HBRUSH hWndBkBrush = NULL;
 
+// The following layout constants are in logical pixels (96 DPI) and are scaled by DPI when used.
+static const int CLIENT_MIN_SIZE = 100;
+static const int WND_DEFAULT_WIDTH = 550;
+static const int WND_DEFAULT_HEIGHT = 400;
+static const int DRAWING_PADDING = 40;
+static const int DRAWING_MARGIN = 60;
+static const int MIN_DRAWING_SIZE = 100;
+
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
 void SyncHideCaption(HWND hwnd);
@@ -34,6 +42,24 @@ static bool inDragging = false;
 static int ResizeBorderThickness(HWND hWnd) {
     const UINT dpi = GetDpiForWindow(hWnd);
     return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+// Converts a RECT between logical pixels (96 DPI) and physical pixels of the given DPI.
+static RECT ScaleRect(const RECT& rc, int fromDpi, int toDpi) {
+    return { MulDiv(rc.left, toDpi, fromDpi),
+             MulDiv(rc.top, toDpi, fromDpi),
+             MulDiv(rc.right, toDpi, fromDpi),
+             MulDiv(rc.bottom, toDpi, fromDpi) };
+}
+
+static int WindowDpi(HWND hWnd) {
+    const UINT dpi = GetDpiForWindow(hWnd);
+    return dpi == 0 ? USER_DEFAULT_SCREEN_DPI : (int)dpi;
+}
+
+// Converts logical pixels (96 DPI) to physical pixels of the given DPI.
+static int DipToPx(int dip, int dpi) {
+    return MulDiv(dip, dpi, USER_DEFAULT_SCREEN_DPI);
 }
 
 // Hit-tests the resizing border. Needed because the non-client area of a window with
@@ -88,8 +114,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_GETMINMAXINFO: {
         LPMINMAXINFO lpMinMaxInfo = (LPMINMAXINFO)lParam;
 
-        const static int CLIENT_MIN_SIZE = 100;
-        RECT rc = { 0, 0, CLIENT_MIN_SIZE, CLIENT_MIN_SIZE };
+        const int dpi = WindowDpi(hWnd);
+        const int clientMinSize = DipToPx(CLIENT_MIN_SIZE, dpi);
+        RECT rc = { 0, 0, clientMinSize, clientMinSize };
 
         if (!hideCaption) {
             // The client area covers the whole window when the caption is hidden.
@@ -97,7 +124,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 GetWindowLong(hWnd, GWL_STYLE),
                 GetMenu(hWnd) != NULL,
                 GetWindowLong(hWnd, GWL_EXSTYLE),
-                GetDpiForWindow(hWnd));
+                dpi);
         }
 
         lpMinMaxInfo->ptMinTrackSize.x = rc.right - rc.left;
@@ -226,9 +253,9 @@ void RestoreLastWindowRect(HWND hwnd) {
     if (lastWindowRect.right - lastWindowRect.left <= 0 || lastWindowRect.bottom - lastWindowRect.top <= 0) {
         return;
     }
-    MoveWindow(hwnd, lastWindowRect.left, lastWindowRect.top, 
-        lastWindowRect.right - lastWindowRect.left, 
-        lastWindowRect.bottom - lastWindowRect.top, FALSE);
+    // lastWindowRect is saved in logical pixels (96 DPI).
+    const RECT rc = ScaleRect(lastWindowRect, USER_DEFAULT_SCREEN_DPI, WindowDpi(hwnd));
+    MoveWindow(hwnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, FALSE);
 }
 
 // Sync the top most state with alwyasOnTop flag.
@@ -269,14 +296,19 @@ void SyncHideCaption(HWND hwnd) {
 
 // Paints the window.
 static void Paint(HWND hWnd, HDC hDC) {
-    static const int PADDING = 40;
+    const int dpi = WindowDpi(hWnd);
+    const int padding = DipToPx(DRAWING_PADDING, dpi);
+    const int margin = DipToPx(DRAWING_MARGIN, dpi);
+    const int minDrawingSize = DipToPx(MIN_DRAWING_SIZE, dpi);
+    const int maxDrawingSize = DipToPx(IMAGE_SIZE, dpi);
+
     RECT rect = { 0 };
     GetClientRect(hWnd, &rect);
-    const int cx = rect.right - rect.left - PADDING * 2;
-    const int cy = rect.bottom - rect.top - PADDING * 2;
-    const int drawingSize = max(100, min(IMAGE_SIZE, min(cx - 60, cy - 60)));
-    const int drawingX = PADDING + (cx - drawingSize) / 2;
-    const int drawingY = PADDING + (cy - drawingSize) / 2;
+    const int cx = rect.right - rect.left - padding * 2;
+    const int cy = rect.bottom - rect.top - padding * 2;
+    const int drawingSize = max(minDrawingSize, min(maxDrawingSize, min(cx - margin, cy - margin)));
+    const int drawingX = padding + (cx - drawingSize) / 2;
+    const int drawingY = padding + (cy - drawingSize) / 2;
 
     HDC hMemDC = CreateCompatibleDC(hDC);
     const auto state = host->GetMuteState();
@@ -329,8 +361,12 @@ BOOL CreateBillboardWnd() {
         LOG_LAST_ERROR(host, state);
         return FALSE;
     }
+    const HWND owner = host->GetMainWindow(state);
+    const int dpi = owner ? WindowDpi(owner) : (int)GetDpiForSystem();
     BillboardWnd = CreateWindowW(szWindowClass, strRes->Load(IDS_BILLBOARD).c_str(), WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 550, 400, host->GetMainWindow(state), nullptr, hInstance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        DipToPx(WND_DEFAULT_WIDTH, dpi), DipToPx(WND_DEFAULT_HEIGHT, dpi),
+        owner, nullptr, hInstance, nullptr);
 
     if (!BillboardWnd) {
         LOG_LAST_ERROR(host, state);
@@ -397,10 +433,13 @@ void InvalidateBillboardWnd() {
     InvalidateRect(BillboardWnd, NULL, TRUE);
 }
 
-void GetBillboardWndRect(LPRECT pRect) {
+// Gets the window rect in logical pixels (96 DPI).
+void GetBillboardWndLogicalRect(LPRECT pRect) {
+    RECT rc = { 0 };
     if (IsIconic(BillboardWnd)) {
-        CopyRect(pRect, &rcBeforeMinized);
-        return;
+        rc = rcBeforeMinized;
+    } else {
+        GetWindowRect(BillboardWnd, &rc);
     }
-    GetWindowRect(BillboardWnd, pRect);
+    *pRect = ScaleRect(rc, WindowDpi(BillboardWnd), USER_DEFAULT_SCREEN_DPI);
 }
