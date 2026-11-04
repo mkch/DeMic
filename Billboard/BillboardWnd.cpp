@@ -69,10 +69,16 @@ static void startDrag(HWND hWnd) {
 static bool leftButtonDown = false;
 static bool inDragging = false;
 
+// Returns the DPI of the display that hWnd is on.
+static int WindowDpi(HWND hWnd) {
+    const UINT dpi = GetDpiForWindow(hWnd);
+    return dpi == 0 ? USER_DEFAULT_SCREEN_DPI : (int)dpi;
+}
+
 // Thickness of the border that responds to resizing. It is also excluded from the
 // clickable region, so that clicks meant to resize the window do not toggle the mute state.
 static int ResizeBorderThickness(HWND hWnd) {
-    const UINT dpi = GetDpiForWindow(hWnd);
+    const UINT dpi = (UINT)WindowDpi(hWnd);
     return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 }
 
@@ -82,11 +88,6 @@ static RECT ScaleRect(const RECT& rc, int fromDpi, int toDpi) {
              MulDiv(rc.top, toDpi, fromDpi),
              MulDiv(rc.right, toDpi, fromDpi),
              MulDiv(rc.bottom, toDpi, fromDpi) };
-}
-
-static int WindowDpi(HWND hWnd) {
-    const UINT dpi = GetDpiForWindow(hWnd);
-    return dpi == 0 ? USER_DEFAULT_SCREEN_DPI : (int)dpi;
 }
 
 // Converts logical pixels (96 DPI) to physical pixels of the given DPI.
@@ -162,6 +163,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         lpMinMaxInfo->ptMinTrackSize.x = rc.right - rc.left;
         lpMinMaxInfo->ptMinTrackSize.y = rc.bottom - rc.top;
         break;
+    }
+    case WM_DPICHANGED: {
+        const RECT* prc = (const RECT*)lParam;
+        // The suggested rect is the current rect scaled linearly for the new DPI.
+        // Windows does not apply it automatically.
+        SetWindowPos(hWnd, nullptr,
+            prc->left, prc->top,
+            prc->right - prc->left, prc->bottom - prc->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        // Everything is painted relative to the window size and DPI.
+        InvalidateRect(hWnd, nullptr, TRUE);
+        return 0;
     }
     case WM_DESTROY:
         CancelHideTaskbarButtonTimer();
@@ -325,7 +338,7 @@ static void ShowWindowCaption(HWND hWnd) {
             GetWindowLong(hWnd, GWL_STYLE), 
             GetMenu(hWnd) != NULL,
             GetWindowLong(hWnd, GWL_EXSTYLE),
-            GetDpiForWindow(hWnd));
+            (UINT)WindowDpi(hWnd));
 		MoveWindow(hWnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, TRUE);
     }
 }
@@ -341,7 +354,9 @@ static void Paint(HWND hWnd, HDC hDC) {
     const int padding = DipToPx(DRAWING_PADDING, dpi);
     const int margin = DipToPx(DRAWING_MARGIN, dpi);
     const int minDrawingSize = DipToPx(MIN_DRAWING_SIZE, dpi);
-    const int maxDrawingSize = DipToPx(IMAGE_SIZE, dpi);
+    // The image is scaled while drawing, so do not draw it larger than its own resolution,
+    // which would only be blurry.
+    const int maxDrawingSize = min(DipToPx(IMAGE_SIZE, dpi), IMAGE_SIZE);
 
     RECT rect = { 0 };
     GetClientRect(hWnd, &rect);
