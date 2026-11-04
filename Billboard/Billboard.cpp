@@ -50,6 +50,7 @@ BOOL WINAPI DllMain(
 const static char* const CONFIG_VERSION = "Version";
 const static char* const CONFIG_ALWAYS_ON_TOP = "AlwaysOnTop";
 const static char* const CONFIG_LAST_RECT = "LastRect";
+const static char* const CONFIG_LAST_RECT_RATIO = "LastRectRatio";
 const static char* const CONFIG_LEFT = "left";
 const static char* const CONFIG_TOP = "top";
 const static char* const CONFIG_RIGHT = "right";
@@ -57,6 +58,15 @@ const static char* const CONFIG_BOTTOM = "bottom";
 const static char* const CONFIG_HIDE_CAPTION = "HideCaption";
 
 using json = nlohmann::json;
+
+// Reads a number member of obj. Returns 0 if it is missing or is not a number.
+static double ReadNumber(const json& obj, const char* key) {
+	const auto it = obj.find(key);
+	if (it == obj.end() || !it->is_number()) {
+		return 0.0;
+	}
+	return it->get<double>();
+}
 
 void ReadConfig() {
 	std::ifstream in(configFilePath);
@@ -70,14 +80,17 @@ void ReadConfig() {
 			configVersion = version->get<decltype(configVersion)>();
 		}
 		alwaysOnTop = config.at(CONFIG_ALWAYS_ON_TOP);
-		const auto lastRect = config.at(CONFIG_LAST_RECT);
-		// The rect is stored as ratios of the virtual screen since version 1, see WriteConfig().
-		// Older versions store physical pixels.
-		lastWindowRect = {
-			lastRect.at(CONFIG_LEFT).get<double>(),
-			lastRect.at(CONFIG_TOP).get<double>(),
-			lastRect.at(CONFIG_RIGHT).get<double>(),
-			lastRect.at(CONFIG_BOTTOM).get<double>() };
+		// Version 1 stores the rect as ratios of the virtual screen (LastRectRatio), so that
+		// a Billboard without support for it ignores the rect and uses the default position.
+		// Versions without a version number store physical pixels (LastRect).
+		const auto rect = config.find(configVersion ? CONFIG_LAST_RECT_RATIO : CONFIG_LAST_RECT);
+		if (rect != config.end() && rect->is_object()) {
+			lastWindowRect = {
+				ReadNumber(*rect, CONFIG_LEFT),
+				ReadNumber(*rect, CONFIG_TOP),
+				ReadNumber(*rect, CONFIG_RIGHT),
+				ReadNumber(*rect, CONFIG_BOTTOM) };
+		}
 		hideCaption = config.value(CONFIG_HIDE_CAPTION, false); // CONFIG_HIDE_CAPTION is added later, so use value() with default.
 	} catch (...) {
 		ShowError(host, state, strRes->Load(IDS_READ_CONFIG_FAILED).c_str());
@@ -90,7 +103,7 @@ void WriteConfig() {
 	json config = { 
 		{CONFIG_VERSION, CURRENT_CONFIG_VERSION},
 		{CONFIG_ALWAYS_ON_TOP, alwaysOnTop},
-		{CONFIG_LAST_RECT, {
+		{CONFIG_LAST_RECT_RATIO, {
 				{CONFIG_LEFT, lastWindowRect.left},
 				{CONFIG_TOP, lastWindowRect.top}, 
 				{CONFIG_RIGHT, lastWindowRect.right},
