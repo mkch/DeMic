@@ -4,6 +4,8 @@
 #include "BillboardWnd.h"
 #include <commctrl.h>
 
+static HWND BillboardWnd = NULL;
+
 static const wchar_t* szWindowClass = L"DeMic-Billboard";
 static const COLORREF WND_BK_COLOR = COLOR_WINDOW;
 
@@ -26,6 +28,31 @@ static const int MIN_DRAWING_SIZE = 100;
 static const UINT TASKBAR_BUTTON_TIMEOUT_MS = 5000;
 
 static UINT_PTR HideTaskbarButtonTimerId = 0;
+
+// Shows or hides the taskbar button of BillboardWnd. The window is owned by the main window,
+// so it has no taskbar button unless WS_EX_APPWINDOW is set.
+static void SetTaskbarButtonVisible(BOOL visible) {
+    const LONG_PTR exStyle = GetWindowLongPtr(BillboardWnd, GWL_EXSTYLE);
+    const LONG_PTR newExStyle = visible ? (exStyle | WS_EX_APPWINDOW) : (exStyle & ~WS_EX_APPWINDOW);
+    if (newExStyle == exStyle) {
+        return;
+    }
+    SetWindowLongPtr(BillboardWnd, GWL_EXSTYLE, newExStyle);
+    SetWindowPos(BillboardWnd, NULL, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void CancelHideTaskbarButtonTimer() {
+    if (HideTaskbarButtonTimerId) {
+        KillTimer(nullptr, HideTaskbarButtonTimerId);
+        HideTaskbarButtonTimerId = 0;
+    }
+}
+
+static void RestoreTaskbarButtonState() {
+    SetTaskbarButtonVisible(FALSE);
+    CancelHideTaskbarButtonTimer();
+}
 
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
@@ -137,6 +164,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_DESTROY:
+        CancelHideTaskbarButtonTimer();
         WriteConfig();
         DeleteObject(hBmpMicrophone);
         DeleteObject(hBmpMuted);
@@ -145,6 +173,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
+        RestoreTaskbarButtonState();
         return 0;
     case WM_LBUTTONDOWN:
         leftButtonDown = true;
@@ -366,8 +395,6 @@ static ATOM MyRegisterClass() {
     return RegisterClassExW(&wcex);
 }
 
-static HWND BillboardWnd = NULL;
-
 BOOL CreateBillboardWnd() {
     if (!MyRegisterClass()) {
         LOG_LAST_ERROR(host, state);
@@ -389,35 +416,14 @@ BOOL CreateBillboardWnd() {
 
 void DestroyBillboardWnd() {
     if (BillboardWnd) {
-        if (HideTaskbarButtonTimerId) {
-            KillTimer(nullptr, HideTaskbarButtonTimerId);
-            HideTaskbarButtonTimerId = 0;
-        }
         DestroyWindow(BillboardWnd);
         UnregisterClassW(szWindowClass, hInstance);
     }
     BillboardWnd = NULL;
 }
 
-// Shows or hides the taskbar button of BillboardWnd. The window is owned by the main window,
-// so it has no taskbar button unless WS_EX_APPWINDOW is set.
-static void SetTaskbarButtonVisible(BOOL visible) {
-    const LONG_PTR exStyle = GetWindowLongPtr(BillboardWnd, GWL_EXSTYLE);
-    const LONG_PTR newExStyle = visible ? (exStyle | WS_EX_APPWINDOW) : (exStyle & ~WS_EX_APPWINDOW);
-    if (newExStyle == exStyle) {
-        return;
-    }
-    SetWindowLongPtr(BillboardWnd, GWL_EXSTYLE, newExStyle);
-    SetWindowPos(BillboardWnd, NULL, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-}
-
 static void CALLBACK HideTaskbarButtonTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    if (HideTaskbarButtonTimerId) {
-        KillTimer(nullptr, HideTaskbarButtonTimerId);
-        HideTaskbarButtonTimerId = 0;
-    }
-    SetTaskbarButtonVisible(FALSE);
+    RestoreTaskbarButtonState();
 }
 
 // MakeProminent position BillboardWnd to a prominent position.
@@ -461,9 +467,7 @@ static void MakeProminent() {
     FlashWindowEx(&flashInfo);
 
     // The exact end of the flashing cannot be detected, so remove the taskbar button later.
-    if (HideTaskbarButtonTimerId) {
-        KillTimer(nullptr, HideTaskbarButtonTimerId);
-    }
+    CancelHideTaskbarButtonTimer();
     HideTaskbarButtonTimerId = SetTimer(nullptr, 0, TASKBAR_BUTTON_TIMEOUT_MS, HideTaskbarButtonTimerProc);
 }
 
