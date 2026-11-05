@@ -181,6 +181,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="resources.h" />
+    <ClInclude Include="..\UiFont.h" />
     <ClInclude Include="SettingsDialog.h" />
   </ItemGroup>
   <ItemGroup>

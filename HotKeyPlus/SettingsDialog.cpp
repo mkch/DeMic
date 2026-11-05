@@ -7,14 +7,75 @@
 #include "MessageWindow.h"
 
 #include "../HotKeyControlInfo.h"
+#include "../UiFont.h"
 
 enum ControlID {
     ID_TYPE_COMBO = 0x8000,
 };
 
+// Fonts of the property sheet and of its pages. Same as the font of message boxes.
+static HFONT propSheetFont = NULL;
+static HFONT togglePageFont = NULL;
+static HFONT pttPageFont = NULL;
+static HFONT ptmPageFont = NULL;
+static HFONT onOffPageFont = NULL;
 
-static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+// The type label and the type combo box created in PropSheetCallback().
+static HWND hTypeLabel = NULL;
+static HWND hTypeCombo = NULL;
+static std::wstring typeLabelText;
+
+
+// Lays out the type label and the type combo box for the current DPI.
+static void LayoutTypeSelector(HWND sheet) {
+    if (!hTypeLabel || !hTypeCombo || !propSheetFont) {
+        return;
+    }
+    const UINT dpi = GetDpiForWindow(sheet);
+    SIZE labelSize = {};
+    HDC dc = GetDC(sheet);
+    HGDIOBJ oldFont = SelectObject(dc, propSheetFont);
+    GetTextExtentPoint32W(dc, typeLabelText.c_str(), (int)typeLabelText.size(), &labelSize);
+    SelectObject(dc, oldFont);
+    ReleaseDC(sheet, dc);
+
+    RECT tabRect = {};
+    HWND hTab = PropSheet_GetTabControl(sheet);
+    GetWindowRect(hTab, &tabRect);
+    ScreenToClient(sheet, (LPPOINT)&tabRect.left);
+    ScreenToClient(sheet, (LPPOINT)&tabRect.right);
+
+    const int labelLeft = MulDiv(10, dpi, 72);
+    SetWindowPos(hTypeCombo, NULL,
+        labelLeft + MulDiv(5, dpi, 72) + labelSize.cx, tabRect.top,
+        MulDiv(110, dpi, 72), MulDiv(300, dpi, 72),
+        SWP_NOZORDER);
+    // Bottom align the label and the combo box.
+    RECT comboRect = {};
+    GetWindowRect(hTypeCombo, &comboRect);
+    ScreenToClient(sheet, (LPPOINT)&comboRect.right);
+    SetWindowPos(hTypeLabel, NULL,
+        labelLeft, comboRect.bottom - labelSize.cy,
+        labelSize.cx + MulDiv(1, dpi, 72), labelSize.cy + MulDiv(1, dpi, 72),
+        SWP_NOZORDER);
+}
+
+static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HFONT& pageFont, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    case WM_INITDIALOG:
+        // Keep our font when the dialog manager updates fonts on DPI changes.
+        ui_font::DisableDpiFontUpdate(hwnd);
+        ui_font::RefreshDialogFont(hwnd, pageFont);
+        break;
+    case WM_DPICHANGED:
+        // The dialog manager re-lays out the controls of the page.
+        // Only the font needs to be re-created for the new DPI.
+        ui_font::RefreshDialogFont(hwnd, pageFont);
+        break;
+    case WM_NCDESTROY:
+        // Child controls are gone, so the font is no longer in use.
+        ui_font::ReleaseDialogFont(pageFont);
+        break;
     case WM_NOTIFY: {
             PSHNOTIFY* notify = (PSHNOTIFY*)lParam;
             switch (notify->hdr.code) {
@@ -59,19 +120,33 @@ static INT_PTR SingleHotkeyPageProc(HOTKEY_TYPE type, HWND hwnd, UINT msg, WPARA
 }
 
 static INT_PTR CALLBACK TogglePageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	return SingleHotkeyPageProc(TYPE_TOGGLE, hwnd, msg, wParam, lParam);
+	return SingleHotkeyPageProc(TYPE_TOGGLE, togglePageFont, hwnd, msg, wParam, lParam);
 }
 
 static INT_PTR CALLBACK PTTPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    return SingleHotkeyPageProc(TYPE_PTT, hwnd, msg, wParam, lParam);
+    return SingleHotkeyPageProc(TYPE_PTT, pttPageFont, hwnd, msg, wParam, lParam);
 }
 
 static INT_PTR CALLBACK PTMPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    return SingleHotkeyPageProc(TYPE_PTM, hwnd, msg, wParam, lParam);
+    return SingleHotkeyPageProc(TYPE_PTM, ptmPageFont, hwnd, msg, wParam, lParam);
 }
 
 static INT_PTR CALLBACK OnOffPageProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    case WM_INITDIALOG:
+        // Keep our font when the dialog manager updates fonts on DPI changes.
+        ui_font::DisableDpiFontUpdate(hwnd);
+        ui_font::RefreshDialogFont(hwnd, onOffPageFont);
+        break;
+    case WM_DPICHANGED:
+        // The dialog manager re-lays out the controls of the page.
+        // Only the font needs to be re-created for the new DPI.
+        ui_font::RefreshDialogFont(hwnd, onOffPageFont);
+        break;
+    case WM_NCDESTROY:
+        // Child controls are gone, so the font is no longer in use.
+        ui_font::ReleaseDialogFont(onOffPageFont);
+        break;
     case WM_NOTIFY: {
             PSHNOTIFY* notify = (PSHNOTIFY*)lParam;
             switch (notify->hdr.code) {
@@ -197,6 +272,16 @@ static LRESULT WINAPI PropSheetWndProc(HWND hwnd, UINT message, WPARAM wParam, L
             LOG_LAST_ERROR(demicHost, demicState);
         }
         return 0;
+    case WM_DPICHANGED:
+        // The property sheet re-lays out itself and its pages. Only the font and the
+        // controls created by PropSheetCallback() need to be updated.
+        ui_font::RefreshDialogFont(hwnd, propSheetFont);
+        LayoutTypeSelector(hwnd);
+        break;
+    case WM_NCDESTROY:
+        ui_font::ReleaseDialogFont(propSheetFont);
+        hTypeLabel = hTypeCombo = NULL;
+        break;
     case WM_DESTROY:
         if (!propSheetGetMsgHook) {
             break;
@@ -231,45 +316,30 @@ static int CALLBACK PropSheetCallback(HWND hwnd, UINT msg, LPARAM lParam) {
         }
 		PostMessage(hwnd, UM_POST_CREATE, 0, 0);
 
-        const auto dpi = GetDpiForWindow(hwnd);
-        const auto dialogFont = (HFONT)SendMessageW(hwnd, WM_GETFONT, 0, 0);
+        // Keep our font when the dialog manager updates fonts on DPI changes.
+        ui_font::DisableDpiFontUpdate(hwnd);
+        ui_font::RefreshDialogFont(hwnd, propSheetFont);
 
         // Hide Tab control
         HWND hTab =  PropSheet_GetTabControl(hwnd);
-		RECT tabRect = {};
-		GetWindowRect(hTab, &tabRect);
-		ScreenToClient(hwnd, (LPPOINT)&tabRect.left);
-        ScreenToClient(hwnd, (LPPOINT)&tabRect.right);
         ShowWindow(hTab, SW_HIDE);
 		// Create a static text
-		auto typeLabel = strRes->Load(IDS_HOTKEY_TYPE);
-        SIZE labelSize = {};
-        HDC dc = GetDC(hwnd);
-        HFONT oldFont = (HFONT)SelectObject(dc, dialogFont);
-		GetTextExtentExPointW(dc, typeLabel.c_str(), (int)typeLabel.size(), 0, NULL, NULL, &labelSize);
-        SelectObject(dc, oldFont);
-        ReleaseDC(hwnd, dc);
-        const auto staticLeft = MulDiv(10, dpi, 72);
-        HWND hStatic = CreateWindowW(WC_STATIC, typeLabel.c_str(),
-            WS_CHILD | WS_VISIBLE,
-            staticLeft, tabRect.top, labelSize.cx + MulDiv(1, dpi, 72), labelSize.cy + MulDiv(1, dpi, 72),
+		typeLabelText = strRes->Load(IDS_HOTKEY_TYPE);
+        hTypeLabel = CreateWindowW(WC_STATIC, typeLabelText.c_str(),
+            WS_CHILD | WS_VISIBLE, 0, 0, 0, 0,
 			hwnd, NULL, hInstance, NULL);
-        SendMessageW(hStatic, WM_SETFONT, (WPARAM)dialogFont, TRUE);
+        SendMessageW(hTypeLabel, WM_SETFONT, (WPARAM)propSheetFont, TRUE);
         // Create a COMBOBOX
-        HWND hCombo = CreateWindowW(WC_COMBOBOX, L"",
+        hTypeCombo = CreateWindowW(WC_COMBOBOX, L"",
             CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
-            staticLeft + MulDiv(5, dpi, 72) + labelSize.cx, tabRect.top, MulDiv(110, dpi, 72), MulDiv(300, dpi, 72),
+            0, 0, 0, 0,
             hwnd, (HMENU)ID_TYPE_COMBO, hInstance, NULL);
-        SendMessageW(hCombo, WM_SETFONT, (WPARAM)dialogFont, TRUE);
-        // Bottom align the the label and combo box
-		RECT comboRect = {};
-		GetWindowRect(hCombo, &comboRect);
-		ScreenToClient(hwnd, (LPPOINT)&comboRect.right);
-		SetWindowPos(hStatic, NULL, staticLeft, comboRect.bottom - labelSize.cy, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+        SendMessageW(hTypeCombo, WM_SETFONT, (WPARAM)propSheetFont, TRUE);
 		// Initialize combo box items
         for (auto str : hotkeyTypeNames) {
-            ComboBox_AddString(hCombo, str.c_str());
+            ComboBox_AddString(hTypeCombo, str.c_str());
         }
+        LayoutTypeSelector(hwnd);
     }
 
     return 0;
