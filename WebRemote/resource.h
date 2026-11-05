@@ -22,7 +22,6 @@
 #define IDS_SHOW_VERIFICATION_CODE      111
 #define IDS_CONFIG_LISTEN_ADDR          112
 #define IDS_ENABLE                      113
-#define IDS_LISTEN_ADDR_CONFIG_TIP      114
 #define IDS_EXPIRE_IN_SEC               115
 #define IDR_SERVER_STRINGS__zh_CN       116
 #define IDS_EXPIRED                     116
@@ -30,27 +29,25 @@
 #define IDR_SERVER_STRINGS__en_US       117
 #define IDS_TITLE_LISTEN_ADDR           118
 #define IDS_EMPTY_CERT_OR_KEY_FILE      119
-#define IDS_CHANGE_SETTING_FAILED       120
 #define IDC_REFRESH_CODE                1003
 #define IDC_LISTEN_HOST_COMBO           1004
 #define IDC_LISTEN_PORT_EDIT            1005
-#define IDC_LISTEN_ADDR_CONFIG_TIP_STATIC 1006
 #define IDC_SELECT_CERT_FILE_BUTTON     1007
 #define IDC_CERT_FILE_PATH_TEXT         1008
 #define IDC_COUNT_DOWN_STATIC           1009
 #define IDC_ENABLE_HTTPS_CHECK          1011
 #define IDC_KEY_FILE_PATH_TEXT          1012
-#define IDC_ON_KEY_FILE_SELECT_BUTTON   1013
 #define IDC_SELECT_KEY_FILE_BUTTON      1013
 #define IDC_VERIFICATION_CODE_STATIC    1013
+#define IDC_LISTEN_ADDR_TIP_STATIC      1014
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        121
+#define _APS_NEXT_RESOURCE_VALUE        120
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1014
+#define _APS_NEXT_CONTROL_VALUE         1015
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

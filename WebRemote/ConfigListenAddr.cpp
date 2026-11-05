@@ -83,8 +83,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			std::wstring title = std::format(L"{} - {}", host->GetMessageCaption(state), strRes->Load(IDS_TITLE_LISTEN_ADDR));
 			SetWindowTextW(hwnd, title.c_str());
 
-			SetDlgItemTextW(hwnd, IDC_LISTEN_ADDR_CONFIG_TIP_STATIC, strRes->Load(IDS_LISTEN_ADDR_CONFIG_TIP).c_str());
-
 			// Keep our fonts when the dialog manager updates fonts on DPI changes.
 			ui_font::DisableDpiFontUpdate(hwnd);
 			ApplyFonts(hwnd);
@@ -195,6 +193,17 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				}
 			}
 			break;
+		case WM_CTLCOLORSTATIC: {
+			if ((HWND)lParam == GetDlgItem(hwnd, IDC_LISTEN_ADDR_TIP_STATIC)) {
+				HDC hdc = (HDC)wParam;
+				SetTextColor(hdc, RGB(0xC0, 0x00, 0x00));
+				// Transparent text background, otherwise the text is drawn on a rectangle
+				// that differs from the background of the dialog.
+				SetBkMode(hdc, TRANSPARENT);
+				return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
+			}
+			break;
+		}
 		case WM_DPICHANGED: {
 			// The dialog manager resizes the dialog and re-lays out its controls.
 			// Only the fonts and the combo box height need to be updated.
