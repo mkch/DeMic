@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <initializer_list>
 
 // Font helpers for dialogs of a Per-Monitor v2 aware process.
 namespace ui_font {
@@ -60,6 +61,19 @@ inline void ApplyChildFonts(HWND hDlg, HFONT font) {
 	}
 }
 
+// Applies font to the given controls of hDlg.
+inline void ApplyFontToControls(HWND hDlg, HFONT font, std::initializer_list<int> ids) {
+	if (!font) {
+		return;
+	}
+	for (const int id : ids) {
+		HWND control = GetDlgItem(hDlg, id);
+		if (control) {
+			SendMessageW(control, WM_SETFONT, (WPARAM)font, TRUE);
+		}
+	}
+}
+
 // Deletes a font owned by a dialog procedure (see RefreshDialogFont) and clears the handle.
 inline void ReleaseDialogFont(HFONT& font) {
 	if (font) {
@@ -77,6 +91,15 @@ inline void RefreshDialogFont(HWND hDlg, HFONT& font) {
 	if (font) {
 		ApplyChildFonts(hDlg, font);
 	}
+}
+
+// Same as RefreshDialogFont, but creates a font scaled by scalePercent and applies it only to
+// the given controls. Use it after RefreshDialogFont, which applies the unscaled font to all
+// children of the dialog.
+inline void RefreshScaledFont(HWND hDlg, HFONT& font, int scalePercent, std::initializer_list<int> ids) {
+	ReleaseDialogFont(font);
+	font = CreateMessageBoxFont(hDlg, scalePercent);
+	ApplyFontToControls(hDlg, font, ids);
 }
 
 } // namespace ui_font

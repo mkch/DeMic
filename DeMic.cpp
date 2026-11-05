@@ -1427,6 +1427,15 @@ void PlayOffSound(const std::wstring& path) {
 }
 
 static HFONT soundSettingsFont = NULL;
+// The select and play buttons use a smaller font than the rest of the dialog.
+static HFONT soundSettingsButtonFont = NULL;
+static const int SOUND_SETTINGS_BUTTON_FONT_SCALE_PERCENT = 90;
+
+// Applies the smaller font to the select and play buttons for the current DPI.
+static void ApplySoundSettingsButtonFont(HWND hDlg) {
+    ui_font::RefreshScaledFont(hDlg, soundSettingsButtonFont, SOUND_SETTINGS_BUTTON_FONT_SCALE_PERCENT,
+        { IDC_ON_SOUND_SELECT, IDC_ON_SOUND_PLAY, IDC_OFF_SOUND_SELECT, IDC_OFF_SOUND_PLAY });
+}
 
 // Message handler for sound settings box.
 INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1435,9 +1444,10 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
     switch (message)
     {
     case WM_INITDIALOG:
-        // Keep our font when the dialog manager updates fonts on DPI changes.
+        // Keep our fonts when the dialog manager updates fonts on DPI changes.
         ui_font::DisableDpiFontUpdate(hDlg);
         ui_font::RefreshDialogFont(hDlg, soundSettingsFont);
+        ApplySoundSettingsButtonFont(hDlg);
         Button_SetCheck(GetDlgItem(hDlg, IDC_ENABLE_ON_SOUND), enableOnSound);
         SetWindowTextW(GetDlgItem(hDlg, IDC_ON_SOUND_PATH), onSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : onSoundPath.c_str());
         SetWindowTextW(GetDlgItem(hDlg, IDC_OFF_SOUND_PATH), offSoundPath.empty() ? strRes->Load(IDS_NAN).c_str() : offSoundPath.c_str());
@@ -1510,12 +1520,14 @@ INT_PTR CALLBACK SoundSettings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lP
         break;
     case WM_DPICHANGED:
         // The dialog manager resizes the dialog and re-lays out its controls.
-        // Only the font needs to be re-created for the new DPI.
+        // Only the fonts need to be re-created for the new DPI.
         ui_font::RefreshDialogFont(hDlg, soundSettingsFont);
+        ApplySoundSettingsButtonFont(hDlg);
         break;
     case WM_NCDESTROY:
-        // Child controls are gone, so the font is no longer in use.
+        // Child controls are gone, so the fonts are no longer in use.
         ui_font::ReleaseDialogFont(soundSettingsFont);
+        ui_font::ReleaseDialogFont(soundSettingsButtonFont);
         break;
     }
     return (INT_PTR)FALSE;

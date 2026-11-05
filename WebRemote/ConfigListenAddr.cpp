@@ -17,6 +17,9 @@
 
 static HWND dialog = NULL;
 static HFONT uiFont = NULL;
+// The select buttons use a smaller font than the rest of the dialog.
+static HFONT selectButtonFont = NULL;
+static const int SELECT_BUTTON_FONT_SCALE_PERCENT = 90;
 
 // Whether the HTTP server is running when launching the dialog.
 // Used to determine whether to start the server when user cancels the dialog.
@@ -34,6 +37,12 @@ static void SetComboHeight(HWND combo, UINT dpi) {
 		SWP_NOMOVE | SWP_NOZORDER);
 }
 
+// Applies the smaller font to the select buttons for the current DPI.
+static void ApplySelectButtonFont(HWND hwnd) {
+	ui_font::RefreshScaledFont(hwnd, selectButtonFont, SELECT_BUTTON_FONT_SCALE_PERCENT,
+		{ IDC_SELECT_CERT_FILE_BUTTON, IDC_SELECT_KEY_FILE_BUTTON });
+}
+
 // Applies the fonts, and the part of the layout that depends on the font size,
 // for the current DPI of the dialog.
 static void ApplyFonts(HWND hwnd) {
@@ -45,6 +54,7 @@ static void ApplyFonts(HWND hwnd) {
 	if (uiFont) {
 		ui_font::ApplyChildFonts(hwnd, uiFont);
 	}
+	ApplySelectButtonFont(hwnd);
 	SetComboHeight(GetDlgItem(hwnd, IDC_LISTEN_HOST_COMBO), ui_font::WindowDpi(hwnd));
 }
 
@@ -211,11 +221,9 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			break;
 		}
 		case WM_NCDESTROY:
-			// Child controls are gone, so the font is no longer in use.
-			if (uiFont) {
-				DeleteObject(uiFont);
-				uiFont = NULL;
-			}
+			// Child controls are gone, so the fonts are no longer in use.
+			ui_font::ReleaseDialogFont(uiFont);
+			ui_font::ReleaseDialogFont(selectButtonFont);
 			dialog = NULL;
 			return TRUE;
 

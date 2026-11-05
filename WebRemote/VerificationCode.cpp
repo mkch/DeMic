@@ -54,8 +54,11 @@ enum {
 	UM_CODE_USED = WM_USER + 1,
 };
 
-static HFONT uiFont = NULL;   // Font of the dialog, same as message boxes.
-static HFONT codeFont = NULL; // Font of the verification code.
+static HFONT uiFont = NULL;          // Font of the dialog, same as message boxes.
+static HFONT codeFont = NULL;        // Font of the verification code.
+static HFONT countDownFont = NULL;   // Font of the count down, 10% smaller than the dialog.
+static const int COUNT_DOWN_FONT_SCALE_PERCENT = 90;
+static const COLORREF COUNT_DOWN_COLOR = RGB(0xC0, 0x00, 0x00);
 
 // Applies the fonts for the current DPI of the dialog.
 static void ApplyFonts(HWND hwnd) {
@@ -74,6 +77,7 @@ static void ApplyFonts(HWND hwnd) {
 	if (uiFont) {
 		ui_font::ApplyChildFonts(hwnd, uiFont);
 	}
+	ui_font::RefreshScaledFont(hwnd, countDownFont, COUNT_DOWN_FONT_SCALE_PERCENT, { IDC_COUNT_DOWN_STATIC });
 
 	// Falls back to the UI font if the monospace font is unavailable.
 	codeFont = ui_font::CreatePointFont(hwnd, CODE_FONT_POINT_SIZE, L"Consolas");
@@ -101,6 +105,17 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 			// The dialog manager resizes the dialog and re-lays out its controls.
 			// Only the fonts need to be re-created for the new DPI.
 			ApplyFonts(hwnd);
+			break;
+		}
+		case WM_CTLCOLORSTATIC: {
+			if ((HWND)lParam == GetDlgItem(hwnd, IDC_COUNT_DOWN_STATIC)) {
+				HDC hdc = (HDC)wParam;
+				SetTextColor(hdc, COUNT_DOWN_COLOR);
+				// Transparent text background, otherwise the text is drawn on a rectangle
+				// that differs from the background of the dialog.
+				SetBkMode(hdc, TRANSPARENT);
+				return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
+			}
 			break;
 		}
 		case WM_COMMAND:
@@ -144,6 +159,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 				DeleteObject(codeFont);
 				codeFont = NULL;
 			}
+			ui_font::ReleaseDialogFont(countDownFont);
 			return TRUE;
 	}
 	return FALSE;
