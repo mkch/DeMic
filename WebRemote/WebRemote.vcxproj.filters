@@ -108,9 +108,6 @@
     <None Include="docs\openssl-unload-note.md" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="MicrophoneMuted.png">
-      <Filter>资源文件</Filter>
-    </Image>
     <Image Include="server_resource\res\Microphone-loading.png">
       <Filter>资源文件</Filter>
     </Image>
