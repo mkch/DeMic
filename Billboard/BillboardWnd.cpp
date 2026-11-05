@@ -28,23 +28,14 @@ static const int MIN_DRAWING_SIZE = 100;
 // Shows or hides the taskbar button of BillboardWnd. The window is owned by the main window,
 // so it has no taskbar button unless WS_EX_APPWINDOW is set.
 static void SetTaskbarButtonVisible(BOOL visible) {
-    const LONG_PTR exStyle = GetWindowLongPtr(BillboardWnd, GWL_EXSTYLE);
-    const LONG_PTR newExStyle = visible ? (exStyle | WS_EX_APPWINDOW) : (exStyle & ~WS_EX_APPWINDOW);
-    if (newExStyle != exStyle) {
-        SetWindowLongPtr(BillboardWnd, GWL_EXSTYLE, newExStyle);;
-    }
-    SetWindowPos(BillboardWnd, NULL, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    if (!visible) {
-        FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_STOP, 0, 0 };
-        FlashWindowEx(&flashInfo);
-    }
+	SetWindowLongPtrW(BillboardWnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(visible ? nullptr : host->GetMainWindow(state)));
 }
 
 void Paint(HWND hWnd, HDC hDC);
 void SyncTopMost(HWND hwnd);
 void SyncHideCaption(HWND hwnd);
 void RestoreLastWindowRect(HWND hwnd);
+static void CancelDelayHideTaskbarButton();
 
 static RECT rcBeforeMinimized = { 0 };
 
@@ -185,14 +176,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         DeleteObject(hBmpMuted);
         DeleteObject(hBmpNoMicrophone);
         DeleteObject(hWndBkBrush);
+        CancelDelayHideTaskbarButton();
         break;
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
+        CancelDelayHideTaskbarButton();
         SetTaskbarButtonVisible(FALSE);
         WriteConfig();
         return 0;
     case WM_LBUTTONDOWN:
         leftButtonDown = true;
+        CancelDelayHideTaskbarButton();
         SetTaskbarButtonVisible(FALSE);
         break;
     case WM_LBUTTONUP:{
@@ -210,6 +204,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_NCLBUTTONDOWN:
+        CancelDelayHideTaskbarButton();
         SetTaskbarButtonVisible(FALSE);
         break;
     case WM_MOUSEMOVE:
@@ -254,6 +249,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			// Just for safety, reset the dragging state when the window loses focus.
             inDragging = leftButtonDown = false;
         }
+        break;
+    case WM_RBUTTONDOWN:
+        CancelDelayHideTaskbarButton();
+        SetTaskbarButtonVisible(FALSE);
         break;
     case WM_RBUTTONUP: {
         const auto hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_CONTEXT_MENU));
@@ -315,6 +314,11 @@ void RestoreLastWindowRect(HWND hwnd) {
         || !std::isfinite(lastWindowRect.right) || !std::isfinite(lastWindowRect.bottom)
         || lastWindowRect.right <= lastWindowRect.left || lastWindowRect.bottom <= lastWindowRect.top) {
         return;
+    } else {
+        // Set default size
+        const auto cx = DipToPx(WND_DEFAULT_WIDTH, WindowDpi(hwnd));
+        const auto cy = DipToPx(WND_DEFAULT_HEIGHT, WindowDpi(hwnd));
+        SetWindowPos(hwnd, nullptr, 0, 0, cx, cy, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
     RECT rc = { 0 };
     if (configVersion) {
@@ -457,12 +461,10 @@ BOOL CreateBillboardWnd() {
         LOG_LAST_ERROR(host, state);
         return FALSE;
     }
-    const HWND owner = host->GetMainWindow(state);
-    const int dpi = owner ? WindowDpi(owner) : (int)GetDpiForSystem();
+
     BillboardWnd = CreateWindowW(szWindowClass, strRes->Load(IDS_BILLBOARD).c_str(), WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        DipToPx(WND_DEFAULT_WIDTH, dpi), DipToPx(WND_DEFAULT_HEIGHT, dpi),
-        owner, nullptr, hInstance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, // The real dimension will be set in RestoreLastWindowRect.
+        host->GetMainWindow(state), nullptr, hInstance, nullptr);
 
     if (!BillboardWnd) {
         LOG_LAST_ERROR(host, state);
@@ -477,6 +479,27 @@ void DestroyBillboardWnd() {
         UnregisterClassW(szWindowClass, hInstance);
     }
     BillboardWnd = NULL;
+}
+
+static UINT_PTR autoHideTaskbarButtonTimerId = 0;
+constexpr UINT autoHideTaskbarButtonDelay = 5000; // 5s
+
+static VOID CALLBACK AutoHideTaskbarButtonTimeProc(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
+    CancelDelayHideTaskbarButton();
+    SetTaskbarButtonVisible(FALSE);
+}
+
+static void DelayHideTaskbarButton() {
+    CancelDelayHideTaskbarButton();
+    autoHideTaskbarButtonTimerId = SetTimer(nullptr, 0, autoHideTaskbarButtonDelay, AutoHideTaskbarButtonTimeProc);
+}
+
+static void CancelDelayHideTaskbarButton() {
+    if (!autoHideTaskbarButtonTimerId) {
+        return;
+    }
+    KillTimer(nullptr, autoHideTaskbarButtonTimerId);
+    autoHideTaskbarButtonTimerId = 0;
 }
 
 // MakeProminent position BillboardWnd to a prominent position.
@@ -518,6 +541,8 @@ static void MakeProminent() {
     SetForegroundWindow(BillboardWnd);
     FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_ALL, 2, 0 };
     FlashWindowEx(&flashInfo);
+    // Hide the taskbar button after some delay.
+    DelayHideTaskbarButton();
 }
 
 void ShowBillboardWnd() {
