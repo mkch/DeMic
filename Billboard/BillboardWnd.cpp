@@ -25,34 +25,20 @@ static const int DRAWING_PADDING = 40;
 static const int DRAWING_MARGIN = 60;
 static const int MIN_DRAWING_SIZE = 100;
 
-// How long the taskbar button stays visible after the window is made prominent.
-static const UINT TASKBAR_BUTTON_TIMEOUT_MS = 5000;
-
-static UINT_PTR HideTaskbarButtonTimerId = 0;
-
 // Shows or hides the taskbar button of BillboardWnd. The window is owned by the main window,
 // so it has no taskbar button unless WS_EX_APPWINDOW is set.
 static void SetTaskbarButtonVisible(BOOL visible) {
     const LONG_PTR exStyle = GetWindowLongPtr(BillboardWnd, GWL_EXSTYLE);
     const LONG_PTR newExStyle = visible ? (exStyle | WS_EX_APPWINDOW) : (exStyle & ~WS_EX_APPWINDOW);
-    if (newExStyle == exStyle) {
-        return;
+    if (newExStyle != exStyle) {
+        SetWindowLongPtr(BillboardWnd, GWL_EXSTYLE, newExStyle);;
     }
-    SetWindowLongPtr(BillboardWnd, GWL_EXSTYLE, newExStyle);
     SetWindowPos(BillboardWnd, NULL, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-}
-
-static void CancelHideTaskbarButtonTimer() {
-    if (HideTaskbarButtonTimerId) {
-        KillTimer(nullptr, HideTaskbarButtonTimerId);
-        HideTaskbarButtonTimerId = 0;
+    if (!visible) {
+        FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_STOP, 0, 0 };
+        FlashWindowEx(&flashInfo);
     }
-}
-
-static void RestoreTaskbarButtonState() {
-    SetTaskbarButtonVisible(FALSE);
-    CancelHideTaskbarButtonTimer();
 }
 
 void Paint(HWND hWnd, HDC hDC);
@@ -194,7 +180,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
     case WM_DESTROY:
-        CancelHideTaskbarButtonTimer();
         WriteConfig();
         DeleteObject(hBmpMicrophone);
         DeleteObject(hBmpMuted);
@@ -203,11 +188,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_CLOSE:
         ShowWindow(hWnd, SW_HIDE);
-        RestoreTaskbarButtonState();
+        SetTaskbarButtonVisible(FALSE);
         WriteConfig();
         return 0;
     case WM_LBUTTONDOWN:
         leftButtonDown = true;
+        SetTaskbarButtonVisible(FALSE);
         break;
     case WM_LBUTTONUP:{
         leftButtonDown = false;
@@ -223,6 +209,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     }
+    case WM_NCLBUTTONDOWN:
+        SetTaskbarButtonVisible(FALSE);
+        break;
     case WM_MOUSEMOVE:
         if(hideCaption && leftButtonDown && !inDragging) {
 			inDragging = true;
@@ -490,10 +479,6 @@ void DestroyBillboardWnd() {
     BillboardWnd = NULL;
 }
 
-static void CALLBACK HideTaskbarButtonTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    RestoreTaskbarButtonState();
-}
-
 // MakeProminent position BillboardWnd to a prominent position.
 static void MakeProminent() {
     if (IsIconic(BillboardWnd)) {
@@ -533,17 +518,13 @@ static void MakeProminent() {
     SetForegroundWindow(BillboardWnd);
     FLASHWINFO flashInfo = { sizeof(flashInfo), BillboardWnd, FLASHW_ALL, 2, 0 };
     FlashWindowEx(&flashInfo);
-
-    // The exact end of the flashing cannot be detected, so remove the taskbar button later.
-    CancelHideTaskbarButtonTimer();
-    HideTaskbarButtonTimerId = SetTimer(nullptr, 0, TASKBAR_BUTTON_TIMEOUT_MS, HideTaskbarButtonTimerProc);
 }
 
 void ShowBillboardWnd() {
     if (IsWindowVisible(BillboardWnd)) {
         MakeProminent();
     }
-    ShowWindow(BillboardWnd, SW_SHOW);
+    ShowWindow(BillboardWnd, IsIconic(BillboardWnd) ? SW_RESTORE : SW_SHOW);
 }
 
 void InvalidateBillboardWnd() {
